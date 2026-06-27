@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from typing import Any, Optional
 
@@ -6,6 +7,8 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from config import settings
@@ -66,6 +69,22 @@ class LogOut(BaseModel):
     agent_id: Optional[str] = None
     notes: Optional[str] = None
     timestamp: int
+
+# ── Static file serving (SPA dashboard) ──────────────────────────────
+
+WEB_DIST = os.path.join(os.path.dirname(__file__), "..", "web", "dist")
+if os.path.isdir(WEB_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(WEB_DIST, "assets")), name="assets")
+else:
+    print(f"⚠ Web dist not found at {WEB_DIST} — dashboard not available")
+    print("  Build it: cd web && npm run build")
+
+@app.get("/")
+async def serve_spa():
+    index = os.path.join(WEB_DIST, "index.html")
+    if os.path.isfile(index):
+        return FileResponse(index)
+    return {"status": "dashboard not built — run 'npm run build' in web/"}
 
 # ── STDB helpers ─────────────────────────────────────────────────────
 
@@ -266,6 +285,16 @@ async def list_agents():
         if val and isinstance(val, str):
             seen.add(val)
     return {"agents": sorted(seen)}
+
+@app.exception_handler(404)
+async def spa_fallback(request, exc):
+    """Catch-all for SPA client-side routing."""
+    if request.url.path.startswith("/api/"):
+        raise exc
+    index = os.path.join(WEB_DIST, "index.html")
+    if os.path.isfile(index):
+        return FileResponse(index)
+    raise exc
 
 # ── Main ─────────────────────────────────────────────────────────────
 

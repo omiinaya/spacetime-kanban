@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
-  Ban, RotateCcw, ChevronDown, ExternalLink
+  Ban, RotateCcw, ChevronDown, RefreshCw
 } from 'lucide-react'
 import { api, Task } from '../api'
 
@@ -46,7 +46,11 @@ export default function BoardPage() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    const interval = setInterval(load, 3000)
+    return () => clearInterval(interval)
+  }, [load])
 
   const handleClaim = async (taskId: string, agentId: string) => {
     setClaiming(taskId)
@@ -176,9 +180,15 @@ export default function BoardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Kanban Board</h1>
+          <h1 className="text-xl font-semibold flex items-center gap-2">
+            Kanban Board
+            <span className="flex items-center gap-1 text-xs text-emerald-400 font-normal">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+              LIVE
+            </span>
+          </h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
-            Multi-agent task coordination
+            Multi-agent task coordination — auto-refreshes every 3s
           </p>
         </div>
         <div className="flex items-center gap-2">
