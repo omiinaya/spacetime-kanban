@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+__pycache__/
+*.pyc
+.env
+*.lock
+*.tsbuildinfo
+.spacetime-version
+*.wasm
+.venv/
+server/.env
