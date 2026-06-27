@@ -32,6 +32,16 @@ export default function BoardPage() {
   const { tasks, connected, error: stdbError } = useRealtimeTasks()
   const [showCreate, setShowCreate] = useState(false)
   const [claiming, setClaiming] = useState<string | null>(null)
+  const [repoFilter, setRepoFilter] = useState<string>('')
+  const [mobileStatusTab, setMobileStatusTab] = useState<TaskStatus>('available')
+
+  // Extract unique repos sorted by frequency
+  const repos = [...new Set(tasks.map(t => t.repo).filter(Boolean))]
+  repos.sort((a, b) => {
+    const ca = tasks.filter(t => t.repo === a).length
+    const cb = tasks.filter(t => t.repo === b).length
+    return cb - ca
+  })
 
   const handleClaim = async (taskId: string, agentId: string) => {
     setClaiming(taskId)
@@ -99,10 +109,14 @@ export default function BoardPage() {
         <p className="text-xs text-[var(--color-muted-foreground)] line-clamp-2">{task.description}</p>
       )}
 
-      <div className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
-        {task.repo && <span className="truncate">{task.repo}</span>}
-        {task.branch && <span className="truncate text-blue-400">:{task.branch}</span>}
-        {task.roadmapItem && <span className="truncate text-purple-400">{task.roadmapItem}</span>}
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        {task.repo && (
+          <span className="px-1.5 py-0.5 rounded bg-white/8 text-[var(--color-muted)] font-medium">
+            {task.repo}
+          </span>
+        )}
+        {task.branch && <span className="text-blue-400 truncate max-w-[120px]">:{task.branch}</span>}
+        {task.roadmapItem && <span className="text-purple-400/70 truncate">{task.roadmapItem}</span>}
       </div>
 
       <div className="flex items-center gap-1 pt-1 border-t border-[var(--color-border)]">
@@ -145,14 +159,15 @@ export default function BoardPage() {
 
   // Sort: priority asc, then createdAt desc
   const sorted = [...tasks].sort((a, b) => a.priority - b.priority || Number(b.createdAt - a.createdAt))
+  const filtered = repoFilter ? sorted.filter(t => t.repo === repoFilter) : sorted
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold flex items-center gap-2">
-            Kanban Board
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
+            Board
             {connected ? (
               <span className="flex items-center gap-1 text-xs text-emerald-400 font-normal">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
@@ -165,32 +180,61 @@ export default function BoardPage() {
               </span>
             )}
           </h1>
-          <p className="text-sm text-[var(--color-muted-foreground)]">
-            {connected
-              ? 'Real-time — updates instantly from SpacetimeDB subscriptions'
-              : 'REST fallback — auto-refreshes every 3s'}
-          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Repo filter */}
+          {repos.length > 0 && (
+            <select
+              value={repoFilter}
+              onChange={(e) => setRepoFilter(e.target.value)}
+              className="text-xs px-2 py-1.5 rounded bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] appearance-none cursor-pointer"
+            >
+              <option value="">All repos</option>
+              {repos.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          )}
           {connected
-            ? <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-            : <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+            ? <Wifi className="w-3.5 h-3.5 text-emerald-400 hidden sm:block" />
+            : <WifiOff className="w-3.5 h-3.5 text-amber-400 hidden sm:block" />
           }
           <button onClick={() => api.tasks.seed()}
-            className="text-xs px-3 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors"
-          >Seed Samples</button>
+            className="text-xs px-2.5 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors hidden sm:inline-block"
+          >Seed</button>
           <button onClick={() => setShowCreate(true)}
             className="flex items-center gap-1 text-sm px-3 py-1.5 rounded bg-[var(--color-primary)] text-white hover:bg-blue-600 transition-colors"
-          ><Plus className="w-4 h-4" /> New Task</button>
+          ><Plus className="w-4 h-4" /> New</button>
         </div>
       </div>
 
-      {(stdbError || !sorted.length) && !stdbError && (
+      {(stdbError || !filtered.length) && !stdbError && (
         <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {stdbError || 'No tasks found. Seed some sample data or create a new task.'}
         </div>
       )}
+
+      {/* Mobile status tabs */}
+      <div className="flex gap-1 overflow-x-auto sm:hidden">
+        {STATUS_COLUMNS.map((status) => {
+          const count = filtered.filter(t => t.status === status).length
+          return (
+            <button
+              key={status}
+              onClick={() => setMobileStatusTab(status)}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                mobileStatusTab === status
+                  ? 'bg-white/10 text-[var(--color-foreground)]'
+                  : 'bg-[var(--color-card)] text-[var(--color-muted)]'
+              }`}
+            >
+              {STATUS_LABELS[status]}
+              <span className="px-1 rounded bg-white/5 text-[var(--color-muted)]">{count}</span>
+            </button>
+          )
+        })}
+      </div>
 
       {/* Create Task Dialog */}
       {showCreate && (
@@ -200,31 +244,42 @@ export default function BoardPage() {
         />
       )}
 
-      {/* Kanban Columns */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Kanban Columns — single for mobile, 2 for tablet, 4 for desktop */}
+      <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {STATUS_COLUMNS.map((status) => {
-          const colTasks = sorted.filter((t) => t.status === status)
+          const colTasks = filtered.filter((t) => t.status === status)
           return (
             <div key={status} className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
                   {STATUS_LABELS[status]}
                 </h2>
                 <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--color-card)] text-[var(--color-muted)]">
                   {colTasks.length}
                 </span>
               </div>
-              <div className="space-y-2 min-h-[200px]">
+              <div className="space-y-2 min-h-[120px]">
                 {colTasks.map(renderTaskCard)}
                 {colTasks.length === 0 && (
-                  <div className="text-center py-8 text-xs text-[var(--color-muted)] border border-dashed border-[var(--color-border)] rounded-lg">
-                    No tasks
+                  <div className="text-center py-6 text-xs text-[var(--color-muted)] border border-dashed border-[var(--color-border)] rounded-lg">
+                    Empty
                   </div>
                 )}
               </div>
             </div>
           )
         })}
+      </div>
+
+      {/* Mobile: single column for selected status */}
+      <div className="sm:hidden space-y-2">
+        {filtered.filter(t => t.status === mobileStatusTab).map(renderTaskCard)}
+        {filtered.filter(t => t.status === mobileStatusTab).length === 0 && (
+          <div className="text-center py-12 text-sm text-[var(--color-muted)]">
+            No {STATUS_LABELS[mobileStatusTab].toLowerCase()} tasks
+            {repoFilter ? ` in ${repoFilter}` : ''}
+          </div>
+        )}
       </div>
     </div>
   )
