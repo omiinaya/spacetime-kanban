@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Branch convention validator for spacetimedb-kanban.
+
+Usage:
+  bin/check-branch <branch-name>
+  bin/check-branch --pre-push    (reads from git pre-push stdin)
+
+Branch format:  feature/kanban-{task_id}-{description}
+                fix/kanban-{task_id}-{description}
+
+Validates that the referenced kanban task exists and is claimed
+by the current agent (or at minimum exists).
+
+Exit codes:
+  0 = branch is valid
+  1 = branch format invalid
+  2 = kanban task not found or not claimed
+"""
+import httpx
+import os
+import re
+import sys
+
+API_BASE = os.environ.get("KANBAN_API_BASE", "http://localhost:8725")
+
+BRANCH_PATTERN = re.compile(
+    r"^(feature|fix|chore|refactor|docs|test)/"
+    r"kanban-([a-zA-Z0-9_]+)--"
+    r"(.+)$"
+)
+
+def get_current_agent() -> str | None:
+    """Try to identify the caller via git config."""
+    try:
+        import subprocess
+        name = subprocess.run(
+            ["git", "config", "user.name"], capture_output=True, text=True
+        ).stdout.strip()
+        if name:
+            return name.lower().replace(" ", "-")
+    except Exception:
+        pass
+    return None
+
+def check_branch(branch_name: str) -> int:
+    branch_name = branch_name.strip()
+    m = BRANCH_PATTERN.match(branch_name)
+    if not m:
+        print(f"✗ Invalid branch format: {branch_name}")
+        print("  Expected: {type}/kanban-{task_id}--{slug}")
+        print("  Examples:")
+        print("    feature/kanban-task_1748397912_abc12345--doh-fallback")
+        print("    fix/kanban-task_1748397912_abc12345--auth-bug")
+        return 1
+
+    prefix = m.group(1)   # feature/fix/etc
+    task_id = m.group(2)  # the kanban task ID
+    slug = m.group(3)     # description slug
+
+    # Check against kanban API
+    try:
+        r = httpx.get(f"{API_BASE}/api/tasks/{task_id}", timeout=10)
+        if r.status_code == 404:
+            print(f"✗ Kanban task not found: {task_id}")
+            print("  Tasks must exist in the kanban before branch creation.")
+            print("  Create one via:  POST /api/tasks  or the web dashboard.")
+            return 2
+        r.raise_for_status()
+        task = r.json()
+    except httpx.RequestError as e:
+        print(f"⚠ Kanban API unreachable ({e}) — skipping validation")
+        return 0
+    except Exception as e:
+        print(f"⚠ Kanban check failed ({e}) — skipping validation")
+        return 0
+
+    status = task.get("status", "?")
+    assigned = task.get("assigned_to")
+
+    if status == "available":
+        print(f"⚠ Task \"{task.get('title', '?')}\" is available (not claimed)")
+        print("  Consider claiming it first:  POST /api/tasks/{id}/claim")
+        # Allow but warn
+        return 0
+
+    if status == "done":
+        print(f"✗ Task \"{task.get('title', '?')}\" is already DONE")
+        return 2
+
+    if status == "blocked":
+        print(f"✗ Task \"{task.get('title', '?')}\" is BLOCKED")
+        return 2
+
+    # in_progress — check assignment
+    agent = get_current_agent()
+    if agent and assigned and assigned != agent:
+        print(f"✗ Task \"{task.get('title', '?')}\" is claimed by {assigned}, not {agent}")
+        return 2
+
+    print(f"✓ Branch references kanban task \"{task.get('title', '?')}\" ({status})")
+    return 0
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        branch = sys.argv[1]
+        sys.exit(check_branch(branch))
+    elif "--pre-push" in sys.argv:
+        # Pre-push hook: read from stdin (format: <local-ref> <local-sha> <remote-ref> <remote-sha>)
+        for line in sys.stdin:
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                local_ref = parts[0]
+                branch = local_ref.replace("refs/heads/", "")
+                if branch and branch != "main":
+                    rc = check_branch(branch)
+                    if rc != 0:
+                        sys.exit(rc)
+        sys.exit(0)
+    else:
+        # Show usage
+        print("Usage:")
+        print("  bin/check-branch feature/kanban-task_abc123_my-slug")
+        print("  bin/check-branch --pre-push   (git hook mode)")
+        sys.exit(1)

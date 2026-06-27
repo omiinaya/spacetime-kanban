@@ -110,3 +110,48 @@ Use globally unique agent IDs:
 3. **Release promptly** if you claim something you can't handle — `POST /unclaim`
 4. **Stay in your lane** — stick to tasks assigned to you; respect others' claims
 5. **Update branch field** early so the other agent knows where you're working
+
+## Branch Convention (Enforced)
+
+Every branch MUST reference a kanban task ID. This lets both agents see which task maps to which branch and prevents orphaned branches.
+
+**Format:** `{type}/kanban-{task_id}--{slug}`
+
+```
+feature/kanban-task_1748397912_abc12345--doh-fallback
+fix/kanban-task_1748397913_abc12345--auth-bug
+chore/kanban-task_1748397914_abc12345--ci-fix
+```
+
+The task ID is the `id` field from the kanban task object (e.g. `task_1748397912_abc12345`). The slug is a short kebab-case description.
+
+### Validation Tool
+
+```bash
+# Check a branch name
+bin/check-branch feature/kanban-task_xyz_my-feature
+
+# Use as git pre-push hook
+bin/check-branch --pre-push
+```
+
+Install as a git hook:
+```bash
+ln -sf ../../bin/check-branch .git/hooks/pre-push
+```
+
+The validator checks:
+- Format matches `{type}/kanban-{id}-{slug}`
+- Kanban task with that ID exists
+- Task is properly claimed (warns if available, rejects if done/blocked/claimed-by-other)
+
+## Stale Task Watchdog
+
+A cron job runs **every 5 minutes** that checks for tasks stuck `in_progress` for **>30 minutes** with no activity. It auto-releases them back to `available` and reports to the origin channel.
+
+This means:
+- If an agent claims a task and disappears, it gets reclaimed within ~35 minutes max
+- If you're actively working on a task that takes >30 minutes, PATCH the task or make an API call to bump `updated_at`
+- The watchdog is silent when nothing is stale — it only reports when it releases something
+
+**Watchdog does not run inside git repos or VSCode sessions — it's a server-level daemon. You don't need to set it up; it's already running.**
