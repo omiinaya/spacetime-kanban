@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import {
   Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
-  Ban, RotateCcw, ChevronDown, RefreshCw
+  Ban, RotateCcw, ChevronDown, Wifi, WifiOff
 } from 'lucide-react'
-import { api, Task } from '../api'
+import { api } from '../api'
+import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
 
 const PRIORITY_LABELS: Record<number, string> = {
   0: 'Urgent',
@@ -19,7 +20,7 @@ const PRIORITY_COLORS: Record<number, string> = {
   3: 'bg-slate-500/20 text-slate-400',
 }
 
-const STATUS_COLUMNS = ['available', 'in_progress', 'blocked', 'done'] as const
+const STATUS_COLUMNS: TaskStatus[] = ['available', 'in_progress', 'blocked', 'done']
 const STATUS_LABELS: Record<string, string> = {
   available: 'Available',
   in_progress: 'In Progress',
@@ -28,35 +29,15 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default function BoardPage() {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { tasks, connected, error: stdbError } = useRealtimeTasks()
   const [showCreate, setShowCreate] = useState(false)
   const [claiming, setClaiming] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    try {
-      setError(null)
-      const data = await api.tasks.list()
-      setTasks(data)
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    load()
-    const interval = setInterval(load, 3000)
-    return () => clearInterval(interval)
-  }, [load])
 
   const handleClaim = async (taskId: string, agentId: string) => {
     setClaiming(taskId)
     try {
       await api.tasks.claim(taskId, agentId)
-      await load()
+      // STDB subscription will push the update — no manual refresh needed
     } catch (e: any) {
       alert(`Claim failed: ${e.message}`)
     } finally {
@@ -67,7 +48,6 @@ export default function BoardPage() {
   const handleUnclaim = async (taskId: string) => {
     try {
       await api.tasks.unclaim(taskId)
-      await load()
     } catch (e: any) {
       alert(`Unclaim failed: ${e.message}`)
     }
@@ -76,7 +56,6 @@ export default function BoardPage() {
   const handleComplete = async (taskId: string) => {
     try {
       await api.tasks.complete(taskId, 'Done via web UI')
-      await load()
     } catch (e: any) {
       alert(`Complete failed: ${e.message}`)
     }
@@ -87,7 +66,6 @@ export default function BoardPage() {
     if (reason === null) return
     try {
       await api.tasks.block(taskId, reason || 'Blocked via web UI')
-      await load()
     } catch (e: any) {
       alert(`Block failed: ${e.message}`)
     }
@@ -97,7 +75,6 @@ export default function BoardPage() {
     if (!confirm('Delete this task?')) return
     try {
       await api.tasks.delete(taskId)
-      await load()
     } catch (e: any) {
       alert(`Delete failed: ${e.message}`)
     }
@@ -109,9 +86,9 @@ export default function BoardPage() {
         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${PRIORITY_COLORS[task.priority] || ''}`}>
           {PRIORITY_LABELS[task.priority] || task.priority}
         </span>
-        {task.assigned_to && (
+        {task.assignedTo && (
           <span className="text-xs text-[var(--color-muted)] truncate max-w-[100px]">
-            {task.assigned_to}
+            {task.assignedTo}
           </span>
         )}
       </div>
@@ -125,10 +102,9 @@ export default function BoardPage() {
       <div className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
         {task.repo && <span className="truncate">{task.repo}</span>}
         {task.branch && <span className="truncate text-blue-400">:{task.branch}</span>}
-        {task.roadmap_item && <span className="truncate text-purple-400">{task.roadmap_item}</span>}
+        {task.roadmapItem && <span className="truncate text-purple-400">{task.roadmapItem}</span>}
       </div>
 
-      {/* Action buttons */}
       <div className="flex items-center gap-1 pt-1 border-t border-[var(--color-border)]">
         {task.status === 'available' && (
           <>
@@ -167,13 +143,8 @@ export default function BoardPage() {
     </div>
   )
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 animate-spin text-[var(--color-muted)]" />
-      </div>
-    )
-  }
+  // Sort: priority asc, then createdAt desc
+  const sorted = [...tasks].sort((a, b) => a.priority - b.priority || Number(b.createdAt - a.createdAt))
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6">
@@ -182,17 +153,30 @@ export default function BoardPage() {
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2">
             Kanban Board
-            <span className="flex items-center gap-1 text-xs text-emerald-400 font-normal">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
-              LIVE
-            </span>
+            {connected ? (
+              <span className="flex items-center gap-1 text-xs text-emerald-400 font-normal">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                LIVE
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-xs text-amber-400 font-normal">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                FALLBACK
+              </span>
+            )}
           </h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
-            Multi-agent task coordination — auto-refreshes every 3s
+            {connected
+              ? 'Real-time — updates instantly from SpacetimeDB subscriptions'
+              : 'REST fallback — auto-refreshes every 3s'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => api.tasks.seed().then(load)}
+          {connected
+            ? <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+            : <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+          }
+          <button onClick={() => api.tasks.seed()}
             className="text-xs px-3 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors"
           >Seed Samples</button>
           <button onClick={() => setShowCreate(true)}
@@ -201,10 +185,10 @@ export default function BoardPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+      {(stdbError || !sorted.length) && !stdbError && (
+        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          {error}
+          {stdbError || 'No tasks found. Seed some sample data or create a new task.'}
         </div>
       )}
 
@@ -212,14 +196,14 @@ export default function BoardPage() {
       {showCreate && (
         <CreateTaskDialog
           onClose={() => setShowCreate(false)}
-          onCreated={() => { setShowCreate(false); load() }}
+          onCreated={() => setShowCreate(false)}
         />
       )}
 
       {/* Kanban Columns */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {STATUS_COLUMNS.map((status) => {
-          const colTasks = tasks.filter((t) => t.status === status)
+          const colTasks = sorted.filter((t) => t.status === status)
           return (
             <div key={status} className="space-y-3">
               <div className="flex items-center justify-between">
