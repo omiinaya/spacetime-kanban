@@ -1,0 +1,442 @@
+#!/usr/bin/env python3
+"""kanban CLI — multi-agent task coordination across any repo.
+
+Zero external dependencies (stdlib only). Works from any directory.
+Install: copy this file to ~/.local/bin/kanban and chmod +x.
+
+Configuration via environment variables:
+  KANBAN_API_BASE   — default: http://localhost:8725
+  KANBAN_AGENT_ID   — default: auto-detect (whoami or git user.name)
+
+Usage:
+  kanban list [--status=<s>] [--repo=<r>] [--json]
+  kanban claim <task-id> [--agent=<a>] [--json]
+  kanban complete <task-id> [--notes=<n>] [--json]
+  kanban block <task-id> [--reason=<r>] [--json]
+  kanban unclaim <task-id> [--json]
+  kanban create --title=<t> [--desc=<d>] [--priority=<p>] [--repo=<r>] [--roadmap=<m>] [--json]
+  kanban check-branch [<branch-name>]
+  kanban install-hooks
+  kanban uninstall-hooks
+  kanban info [--json]
+  kanban --help
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+from urllib.parse import urljoin
+
+API_BASE = os.environ.get("KANBAN_API_BASE", "http://localhost:8725")
+BRANCH_PATTERN = re.compile(
+    r"^(feature|fix|chore|refactor|docs|test)/"
+    r"kanban-([a-zA-Z0-9_]+)--"
+    r"(.+)$"
+)
+PRE_PUSH_HOOK = """#!/bin/sh
+# kanban pre-push hook — validates branch references a claimed kanban task
+command -v kanban >/dev/null 2>&1 || exit 0
+while read local_ref local_sha remote_ref remote_sha; do
+  branch="${local_ref#refs/heads/}"
+  [ -z "$branch" ] || [ "$branch" = "main" ] || [ "$branch" = "master" ] && continue
+  kanban check-branch "$branch"
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    echo "kanban: branch check failed (exit $rc)"
+    echo "kanban: use 'kanban list' to find and claim available tasks"
+    exit $rc
+  fi
+done
+exit 0
+"""
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+
+def detect_agent_id() -> str:
+    """Auto-detect the agent identity."""
+    env = os.environ.get("KANBAN_AGENT_ID")
+    if env:
+        return env
+    try:
+        result = subprocess.run(["whoami"], capture_output=True, text=True, timeout=3)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+    try:
+        result = subprocess.run(
+            ["git", "config", "user.name"],
+            capture_output=True, text=True, timeout=3,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().lower().replace(" ", "-")
+    except Exception:
+        pass
+    return "unknown-agent"
+
+
+def api_get(path: str) -> dict | list:
+    url = urljoin(API_BASE, path)
+    try:
+        resp = urllib.request.urlopen(url, timeout=15)
+        return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:200]
+        eprint(f"HTTP {e.code}: {body}")
+        sys.exit(1)
+    except Exception as e:
+        eprint(f"Request failed: {e}")
+        sys.exit(1)
+
+
+def api_post(path: str, body: dict | None = None) -> dict | list:
+    url = urljoin(API_BASE, path)
+    data = json.dumps(body or {}).encode() if body else None
+    req = urllib.request.Request(url, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        resp = urllib.request.urlopen(req, timeout=15)
+        return json.loads(resp.read().decode()) if resp.readable() else {"status": "ok"}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:200]
+        eprint(f"HTTP {e.code}: {body}")
+        sys.exit(1)
+    except Exception as e:
+        eprint(f"Request failed: {e}")
+        sys.exit(1)
+
+
+def api_patch(path: str, body: dict) -> dict:
+    url = urljoin(API_BASE, path)
+    data = json.dumps(body).encode()
+    req = urllib.request.Request(url, data=data, method="PATCH")
+    req.add_header("Content-Type", "application/json")
+    try:
+        resp = urllib.request.urlopen(req, timeout=15)
+        return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:200]
+        eprint(f"HTTP {e.code}: {body}")
+        sys.exit(1)
+    except Exception as e:
+        eprint(f"Request failed: {e}")
+        sys.exit(1)
+
+
+def api_delete(path: str) -> dict:
+    url = urljoin(API_BASE, path)
+    req = urllib.request.Request(url, method="DELETE")
+    try:
+        resp = urllib.request.urlopen(req, timeout=15)
+        return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:200]
+        eprint(f"HTTP {e.code}: {body}")
+        sys.exit(1)
+    except Exception as e:
+        eprint(f"Request failed: {e}")
+        sys.exit(1)
+
+
+def cmd_list(args: list[str]):
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban list")
+    p.add_argument("--status", default=None)
+    p.add_argument("--repo", default=None)
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    params = {}
+    if opts.status:
+        params["status"] = opts.status
+    if opts.repo:
+        params["repo"] = opts.repo
+    qs = "&".join(f"{k}={v}" for k, v in params.items())
+    path = f"/api/tasks{'?' + qs if qs else ''}"
+    tasks = api_get(path)
+    if opts.json:
+        print(json.dumps(tasks, indent=2))
+        return
+    if not tasks:
+        print("No tasks found.")
+        return
+    for t in tasks:
+        assigned = f" [{t.get('assigned_to', '')}]" if t.get("assigned_to") else ""
+        print(f"  {t['id'][:24]:24s}  {t['status']:15s}  P{t.get('priority', 2)}  {t.get('title', '?')[:55]}{assigned}")
+
+
+def cmd_claim(args: list[str]):
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban claim")
+    p.add_argument("task_id")
+    p.add_argument("--agent", default=None)
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    agent = opts.agent or detect_agent_id()
+    result = api_post(f"/api/tasks/{opts.task_id}/claim", {"agent_id": agent})
+    if opts.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"✅ Claimed {opts.task_id[:24]} as {agent}")
+
+
+def cmd_complete(args: list[str]):
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban complete")
+    p.add_argument("task_id")
+    p.add_argument("--notes", default="")
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    if not opts.notes:
+        opts.notes = "Completed via kanban CLI"
+    result = api_post(f"/api/tasks/{opts.task_id}/complete", {"result_notes": opts.notes})
+    if opts.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"✅ Completed {opts.task_id[:24]}")
+
+
+def cmd_block(args: list[str]):
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban block")
+    p.add_argument("task_id")
+    p.add_argument("--reason", default="Blocked")
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    result = api_post(f"/api/tasks/{opts.task_id}/block", {"reason": opts.reason})
+    if opts.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"✅ Blocked {opts.task_id[:24]}: {opts.reason}")
+
+
+def cmd_unclaim(args: list[str]):
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban unclaim")
+    p.add_argument("task_id")
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    result = api_post(f"/api/tasks/{opts.task_id}/unclaim")
+    if opts.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"✅ Released {opts.task_id[:24]} back to available")
+
+
+def cmd_create(args: list[str]):
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban create")
+    p.add_argument("--title", required=True)
+    p.add_argument("--desc", default="")
+    p.add_argument("--priority", type=int, default=2)
+    p.add_argument("--repo", default="")
+    p.add_argument("--roadmap", default="")
+    p.add_argument("--agent", default=None)
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    agent = opts.agent or detect_agent_id()
+    result = api_post("/api/tasks", {
+        "title": opts.title,
+        "description": opts.desc,
+        "priority": opts.priority,
+        "repo": opts.repo,
+        "roadmap_item": opts.roadmap,
+        "created_by": agent,
+    })
+    if opts.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"✅ Created task: {opts.title}")
+
+
+def cmd_check_branch(args: list[str]):
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban check-branch")
+    p.add_argument("branch", nargs="?", default=None)
+    opts = p.parse_args(args)
+    branch = opts.branch
+    if not branch:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True, text=True, timeout=3,
+            )
+            if result.returncode != 0:
+                eprint("Not in a git repository")
+                sys.exit(1)
+            branch = result.stdout.strip()
+        except Exception as e:
+            eprint(f"Could not detect branch: {e}")
+            sys.exit(1)
+    if branch in ("main", "master", "HEAD"):
+        print(f"✓ Branch '{branch}' — no kanban check needed")
+        return
+    m = BRANCH_PATTERN.match(branch)
+    if not m:
+        eprint(f"✗ Invalid branch format: {branch}")
+        eprint("  Expected: {type}/kanban-{task_id}--{slug}")
+        eprint("  Examples:")
+        eprint("    feature/kanban-task_1748397912_abc12345--my-feature")
+        eprint("    fix/kanban-task_1748397913_abc12345--bug-fix")
+        sys.exit(1)
+    task_id = m.group(2)
+    try:
+        task = api_get(f"/api/tasks/{task_id}")
+    except SystemExit:
+        eprint(f"✗ Kanban task not found: {task_id}")
+        eprint("  Tasks must exist in the kanban before branch creation.")
+        eprint("  Create one via:  kanban create --title=... --repo=...")
+        sys.exit(2)
+    status = task.get("status", "?")
+    title = task.get("title", "?")
+    assigned = task.get("assigned_to")
+    if status == "available":
+        print(f"⚠ Task \"{title}\" is available (not claimed)")
+        print("  Claim it:  kanban claim {task_id}")
+        sys.exit(0)
+    if status == "done":
+        eprint(f"✗ Task \"{title}\" is already DONE")
+        sys.exit(2)
+    if status == "blocked":
+        eprint(f"✗ Task \"{title}\" is BLOCKED")
+        sys.exit(2)
+    agent = detect_agent_id()
+    if assigned and assigned != agent:
+        eprint(f"✗ Task \"{title}\" is claimed by {assigned}, not {agent}")
+        sys.exit(2)
+    print(f"✓ Branch '{branch}' references kanban task \"{title}\" ({status})")
+
+
+def cmd_install_hooks(args: list[str]):
+    git_dir = _get_git_dir()
+    hooks_dir = os.path.join(git_dir, "hooks")
+    hook_path = os.path.join(hooks_dir, "pre-push")
+    if os.path.exists(hook_path):
+        with open(hook_path) as f:
+            if "kanban" in f.read():
+                print(f"✓ pre-push hook already installed at {hook_path}")
+                return
+        print(f"⚠ {hook_path} already exists but doesn't contain kanban check.")
+        print("  Append manually or remove the existing hook first.")
+        sys.exit(1)
+    os.makedirs(hooks_dir, exist_ok=True)
+    with open(hook_path, "w") as f:
+        f.write(PRE_PUSH_HOOK)
+    os.chmod(hook_path, 0o755)
+    print(f"✅ kanban pre-push hook installed at {hook_path}")
+    print("   Branch names will be validated on every git push.")
+
+
+def cmd_uninstall_hooks(args: list[str]):
+    git_dir = _get_git_dir()
+    hook_path = os.path.join(git_dir, "hooks", "pre-push")
+    if not os.path.exists(hook_path):
+        print("No pre-push hook found.")
+        return
+    with open(hook_path) as f:
+        content = f.read()
+    if "kanban" not in content:
+        print(f"⚠ {hook_path} doesn't appear to be a kanban hook — skipping")
+        return
+    os.remove(hook_path)
+    print(f"✅ Removed kanban pre-push hook from {hook_path}")
+
+
+def cmd_info(args: list[str]):
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban info")
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    repo_name = _detect_repo()
+    tasks = api_get(f"/api/tasks?status=in_progress")
+    my_tasks = [t for t in tasks if t.get("assigned_to") == detect_agent_id()]
+    repo_tasks = [t for t in tasks if t.get("repo") == repo_name]
+    if opts.json:
+        print(json.dumps({
+            "agent": detect_agent_id(),
+            "repo": repo_name,
+            "my_in_progress": my_tasks,
+            "repo_in_progress": repo_tasks,
+            "all_in_progress": tasks,
+        }, indent=2))
+        return
+    if repo_name:
+        print(f"Repo: {repo_name}")
+    print(f"Agent: {detect_agent_id()}")
+    print()
+    if my_tasks:
+        print(f"You have {len(my_tasks)} task(s) in progress:")
+        for t in my_tasks:
+            print(f"  {t['id'][:24]}  {t.get('title', '?')}")
+    else:
+        print("You have no tasks in progress.")
+        print("Run:  kanban list --status=available")
+    if repo_tasks:
+        print(f"\n{len(repo_tasks)} in-progress task(s) in this repo:")
+        for t in repo_tasks:
+            a = f" [{t.get('assigned_to', '?')}]" if t.get("assigned_to") else ""
+            print(f"  {t['id'][:24]}  {t.get('title', '?')[:50]}{a}")
+
+
+def _get_git_dir() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            capture_output=True, text=True, timeout=3,
+        )
+        if result.returncode != 0:
+            eprint("Not inside a git repository")
+            sys.exit(1)
+        return os.path.abspath(result.stdout.strip())
+    except Exception as e:
+        eprint(f"Could not find git directory: {e}")
+        sys.exit(1)
+
+
+def _detect_repo() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=3,
+        )
+        if result.returncode != 0:
+            return None
+        return os.path.basename(result.stdout.strip())
+    except Exception:
+        return None
+
+
+COMMANDS = {
+    "list": cmd_list,
+    "claim": cmd_claim,
+    "complete": cmd_complete,
+    "block": cmd_block,
+    "unclaim": cmd_unclaim,
+    "create": cmd_create,
+    "check-branch": cmd_check_branch,
+    "install-hooks": cmd_install_hooks,
+    "uninstall-hooks": cmd_uninstall_hooks,
+    "info": cmd_info,
+}
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ("--help", "-h"):
+        print(__doc__)
+        sys.exit(0)
+    cmd = sys.argv[1]
+    if cmd not in COMMANDS:
+        eprint(f"Unknown command: {cmd}")
+        eprint(f"Available: {', '.join(sorted(COMMANDS))}")
+        sys.exit(1)
+    COMMANDS[cmd](sys.argv[2:])
+
+
+if __name__ == "__main__":
+    main()
