@@ -12,6 +12,8 @@ export interface Task {
   created_at: number
   updated_at: number
   depends_on: string | null
+  required_skills: string | null
+  score: number
 }
 
 export interface LogEntry {
@@ -21,6 +23,23 @@ export interface LogEntry {
   agent_id: string | null
   notes: string | null
   timestamp: number
+}
+
+export interface Agent {
+  id: string
+  host: string
+  capabilities: string | null
+  repo_focus: string | null
+  current_task_id: string | null
+  status: string
+  last_heartbeat: number
+  first_seen: number
+}
+
+export interface SuggestResult {
+  task: Task
+  score: number
+  reason: string
 }
 
 const BASE = '/api'
@@ -93,6 +112,8 @@ export const api = {
       apiPost<{ status: string; task_id: string }>(`/tasks/${id}/block`, { reason }),
     setDependency: (id: string, depends_on: string) =>
       apiPost<{ status: string; task_id: string; depends_on: string | null }>(`/tasks/${id}/dependency`, { depends_on }),
+    setSkills: (id: string, skills: string) =>
+      apiPost<{ status: string; task_id: string; skills: string | null }>(`/tasks/${id}/skills`, { skills }),
     delete: (id: string) =>
       apiDelete<{ status: string }>(`/tasks/${id}`),
     seed: () => apiPost<{ status: string }>('/tasks/seed'),
@@ -107,6 +128,22 @@ export const api = {
     },
   },
   agents: {
-    list: () => apiGet<{ agents: string[] }>('/agents'),
+    list: () => apiGet<Agent[]>('/agents'),
+    get: (id: string) => apiGet<Agent>(`/agents/${id}`),
+    register: (body: { agent_id: string; host?: string; capabilities?: string; repo_focus?: string }) =>
+      apiPost<{ status: string }>('/agents/register', body),
+    heartbeat: (agent_id: string, body: { status?: string; current_task_id?: string }) =>
+      apiPost<{ status: string }>(`/agents/${agent_id}/heartbeat`, body),
+    setCapabilities: (agent_id: string, body: { capabilities?: string; repo_focus?: string }) =>
+      apiPost<{ status: string }>(`/agents/${agent_id}/capabilities`, body),
+  },
+  suggest: {
+    list: (params?: { agent_id?: string; limit?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.agent_id) qs.set('agent_id', params.agent_id)
+      if (params?.limit) qs.set('limit', String(params.limit))
+      const q = qs.toString()
+      return apiGet<SuggestResult[]>(`/tasks/suggest${q ? `?${q}` : ''}`)
+    },
   },
 }

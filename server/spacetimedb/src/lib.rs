@@ -17,6 +17,8 @@ pub struct Task {
     pub created_at: u64,
     pub updated_at: u64,
     pub depends_on: Option<String>,
+    pub required_skills: Option<String>,
+    pub score: u32,
 }
 
 #[spacetimedb::table(accessor = task_logs, public)]
@@ -114,6 +116,8 @@ pub fn add_task(
         created_at: now,
         updated_at: now,
         depends_on: None,
+        required_skills: None,
+        score: 0,
     });
 
     log_action(ctx, &id, "created", None, None);
@@ -302,6 +306,8 @@ pub fn seed_sample_tasks(ctx: &ReducerContext) -> Result<(), String> {
             created_at: now,
             updated_at: now,
             depends_on: None,
+            required_skills: None,
+            score: 0,
         });
 
         ctx.db.task_logs().insert(TaskLog {
@@ -314,5 +320,152 @@ pub fn seed_sample_tasks(ctx: &ReducerContext) -> Result<(), String> {
         });
     }
 
+    Ok(())
+}
+
+// ── Agent Registry (Swarm Mode) ──────────────────────────────────────
+
+#[spacetimedb::table(accessor = swarm_agents, public)]
+#[derive(Debug, Clone)]
+pub struct SwarmAgent {
+    #[primary_key]
+    pub id: String,                  // agent name (globally unique)
+    pub host: String,                // machine hostname
+    pub capabilities: Option<String>, // comma-separated skill tags
+    pub repo_focus: Option<String>,  // repo they're focused on
+    pub current_task_id: Option<String>,
+    pub status: String,              // "online", "busy", "offline"
+    pub last_heartbeat: u64,
+    pub first_seen: u64,
+}
+
+fn find_agent(ctx: &ReducerContext, agent_id: &str) -> Option<SwarmAgent> {
+    ctx.db.swarm_agents().iter()
+        .find(|a| a.id == agent_id)
+        .map(|a| a.clone())
+}
+
+fn update_agent_in_db(ctx: &ReducerContext, agent: &SwarmAgent) {
+    let old: Vec<SwarmAgent> = ctx.db.swarm_agents().iter()
+        .filter(|a| a.id == agent.id)
+        .map(|a| a.clone())
+        .collect();
+    for a in old {
+        ctx.db.swarm_agents().delete(a);
+    }
+    ctx.db.swarm_agents().insert(agent.clone());
+}
+
+#[reducer]
+pub fn register_agent(
+    ctx: &ReducerContext,
+    agent_id: String,
+    host: String,
+    capabilities: String,
+    repo_focus: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let cap_opt = if capabilities.is_empty() { None } else { Some(capabilities) };
+    let repo_opt = if repo_focus.is_empty() { None } else { Some(repo_focus) };
+
+    if let Some(mut existing) = find_agent(ctx, &agent_id) {
+        // Update heartbeat and capabilities
+        existing.host = host;
+        existing.capabilities = cap_opt;
+        existing.repo_focus = repo_opt;
+        existing.status = "online".to_string();
+        existing.last_heartbeat = now;
+        update_agent_in_db(ctx, &existing);
+        log_action(ctx, &agent_id, "agent_reconnected", Some(&agent_id), None);
+    } else {
+        ctx.db.swarm_agents().insert(SwarmAgent {
+            id: agent_id.clone(),
+            host,
+            capabilities: cap_opt,
+            repo_focus: repo_opt,
+            current_task_id: None,
+            status: "online".to_string(),
+            last_heartbeat: now,
+            first_seen: now,
+        });
+        log_action(ctx, &agent_id, "agent_registered", Some(&agent_id), None);
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn agent_heartbeat(
+    ctx: &ReducerContext,
+    agent_id: String,
+    status: String,
+    current_task_id: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut agent = find_agent(ctx, &agent_id)
+        .ok_or_else(|| "Agent not registered".to_string())?;
+
+    let task_opt = if current_task_id.is_empty() { None } else { Some(current_task_id) };
+    let new_status = if status == "busy" || task_opt.is_some() {
+        "busy".to_string()
+    } else {
+        "online".to_string()
+    };
+
+    agent.current_task_id = task_opt;
+    agent.status = new_status;
+    agent.last_heartbeat = now;
+    update_agent_in_db(ctx, &agent);
+    Ok(())
+}
+
+#[reducer]
+pub fn set_agent_capabilities(
+    ctx: &ReducerContext,
+    agent_id: String,
+    capabilities: String,
+    repo_focus: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut agent = find_agent(ctx, &agent_id)
+        .ok_or_else(|| "Agent not registered".to_string())?;
+    agent.capabilities = if capabilities.is_empty() { None } else { Some(capabilities) };
+    agent.repo_focus = if repo_focus.is_empty() { None } else { Some(repo_focus) };
+    agent.last_heartbeat = now;
+    update_agent_in_db(ctx, &agent);
+    Ok(())
+}
+
+// ── Task Skills (Capability Tags) ────────────────────────────────────
+
+#[reducer]
+pub fn set_task_skills(
+    ctx: &ReducerContext,
+    task_id: String,
+    skills: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id)
+        .ok_or_else(|| "Task not found".to_string())?;
+    task.required_skills = if skills.is_empty() { None } else { Some(skills.clone()) };
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
+    log_action(ctx, &task_id, "skills_set", task.assigned_to.as_deref(), Some(&skills));
+    Ok(())
+}
+
+// ── Priority Scoring ─────────────────────────────────────────────────
+
+#[reducer]
+pub fn set_task_score(
+    ctx: &ReducerContext,
+    task_id: String,
+    score: u32,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id)
+        .ok_or_else(|| "Task not found".to_string())?;
+    task.score = score;
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
     Ok(())
 }

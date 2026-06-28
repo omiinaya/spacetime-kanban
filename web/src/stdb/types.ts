@@ -24,6 +24,8 @@ export const Task = __t.object("Task", {
   createdAt: __t.u64(),
   updatedAt: __t.u64(),
   dependsOn: __t.option(__t.string()),
+  requiredSkills: __t.option(__t.string()),
+  score: __t.u32(),
 });
 export type Task = __Infer<typeof Task>;
 
@@ -36,4 +38,16 @@ export const TaskLog = __t.object("TaskLog", {
   timestamp: __t.u64(),
 });
 export type TaskLog = __Infer<typeof TaskLog>;
+
+export const SwarmAgent = __t.object("SwarmAgent", {
+  id: __t.string(),
+  host: __t.string(),
+  capabilities: __t.option(__t.string()),
+  repoFocus: __t.option(__t.string()),
+  currentTaskId: __t.option(__t.string()),
+  status: __t.string(),
+  lastHeartbeat: __t.u64(),
+  firstSeen: __t.u64(),
+});
+export type SwarmAgent = __Infer<typeof SwarmAgent>;
 

@@ -19,6 +19,10 @@ Usage:
   kanban install-hooks
   kanban uninstall-hooks
   kanban roadmap-import [--repo=<r>] [--file=<path>]
+  kanban suggest [--agent=<a>] [--limit=<n>] [--json]
+  kanban register [--capabilities=<c1,c2>] [--repo=<r>] [--json]
+  kanban heartbeat [--status=<s>] [--task=<id>] [--json]
+  kanban skills <task-id> [--skills=<s>] [--json]
   kanban info [--json]
   kanban --help
 """
@@ -450,6 +454,129 @@ def cmd_roadmap_import(args: list[str]):
         sys.exit(1)
 
 
+def cmd_suggest(args: list[str]):
+    """Show recommended tasks based on priority scoring."""
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban suggest")
+    p.add_argument("--agent", default=None, help="Agent ID for skill matching")
+    p.add_argument("--limit", type=int, default=5, help="Number of suggestions (default: 5)")
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    params = {}
+    if opts.agent:
+        params["agent_id"] = opts.agent
+    if opts.limit:
+        params["limit"] = str(opts.limit)
+    qs = "&".join(f"{k}={v}" for k, v in params.items())
+    results = api_get(f"/api/tasks/suggest{'?' + qs if qs else ''}")
+    if opts.json:
+        print(json.dumps(results, indent=2))
+        return
+    if not results:
+        print("No suggestions available.")
+        return
+    print(f"🏆 Top {len(results)} Recommended Task{'s' if len(results) != 1 else ''}:")
+    print()
+    for i, r in enumerate(results):
+        t = r.get("task", {})
+        score = r.get("score", 0)
+        reason = r.get("reason", "")
+        title = t.get("title", "?")
+        pid = t.get("priority", 2)
+        prio = {0: "Urgent", 1: "High", 2: "Medium", 3: "Low"}.get(pid, str(pid))
+        repo = t.get("repo", "")
+        skills = t.get("required_skills") or ""
+        skill_tag = f" [{skills}]" if skills else ""
+        print(f"  {i+1}. [{prio}] {title}{skill_tag}")
+        print(f"     Score: {score}  |  {reason}")
+        if repo:
+            print(f"     Repo: {repo}")
+        print()
+
+
+def cmd_register(args: list[str]):
+    """Register this agent in the swarm."""
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban register")
+    p.add_argument("--capabilities", default="", help="Comma-separated skills (e.g. rust,python,typescript)")
+    p.add_argument("--repo", default="", help="Primary repo focus")
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    agent_id = detect_agent_id()
+    hostname = os.uname().nodename if hasattr(os, "uname") else "unknown"
+    result = api_post("/api/agents/register", {
+        "agent_id": agent_id,
+        "host": hostname,
+        "capabilities": opts.capabilities,
+        "repo_focus": opts.repo,
+    })
+    if opts.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"✅ Registered {agent_id} in the swarm")
+        if opts.repo:
+            print(f"   Focus: {opts.repo}")
+        if opts.capabilities:
+            print(f"   Capabilities: {opts.capabilities}")
+
+
+def cmd_heartbeat(args: list[str]):
+    """Send a heartbeat to the swarm."""
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban heartbeat")
+    p.add_argument("--status", default="online", choices=["online", "busy"])
+    p.add_argument("--task", default="", help="Current task ID (if busy)")
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    agent_id = detect_agent_id()
+    result = api_post(f"/api/agents/{agent_id}/heartbeat", {
+        "agent_id": agent_id,
+        "status": opts.status,
+        "current_task_id": opts.task,
+    })
+    if opts.json:
+        print(json.dumps(result, indent=2))
+    else:
+        status_icon = "🟢" if opts.status == "online" else "🟡"
+        task_note = f" on task {opts.task}" if opts.task else ""
+        print(f"{status_icon} Heartbeat sent for {agent_id}{task_note}")
+
+
+def cmd_skills(args: list[str]):
+    """Set required skills for a task."""
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban skills")
+    p.add_argument("task_id", help="Task ID")
+    p.add_argument("--skills", default="", help="Comma-separated required skills (e.g. rust,typescript)")
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+    result = api_post(f"/api/tasks/{opts.task_id}/skills", {"skills": opts.skills})
+    if opts.json:
+        print(json.dumps(result, indent=2))
+    else:
+        if opts.skills:
+            print(f"✅ Set skills '{opts.skills}' on task {opts.task_id[:24]}")
+        else:
+            print(f"✅ Cleared skills on task {opts.task_id[:24]}")
+
+
+def api_put(path: str, body: dict) -> dict:
+    url = urljoin(API_BASE, path)
+    data = json.dumps(body).encode()
+    req = urllib.request.Request(url, data=data, method="PUT")
+    req.add_header("Content-Type", "application/json")
+    try:
+        resp = urllib.request.urlopen(req, timeout=15)
+        return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:200]
+        eprint(f"HTTP {e.code}: {body}")
+        sys.exit(1)
+    except Exception as e:
+        eprint(f"Request failed: {e}")
+        sys.exit(1)
+
+
 COMMANDS = {
     "list": cmd_list,
     "claim": cmd_claim,
@@ -462,6 +589,10 @@ COMMANDS = {
     "uninstall-hooks": cmd_uninstall_hooks,
     "info": cmd_info,
     "roadmap-import": cmd_roadmap_import,
+    "suggest": cmd_suggest,
+    "register": cmd_register,
+    "heartbeat": cmd_heartbeat,
+    "skills": cmd_skills,
 }
 
 

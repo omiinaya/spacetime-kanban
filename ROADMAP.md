@@ -20,7 +20,7 @@
 - [x] Roadmap import — bulk-create tasks from a repo's ROADMAP.md (`kanban roadmap-import`)
 - [x] GitHub PR linking — auto-update tasks on PR creation/merge (webhook receiver)
 
-## Phase 4 — Intelligence
-- [ ] Priority scoring — auto-suggest highest-value task based on agent capabilities
-- [ ] Swarm mode — auto-discover agents on the network
-- [ ] Agent capability tags — tasks tagged by required skill, agents self-select
+## Phase 4 — Intelligence ✅
+- [x] Priority scoring — auto-suggest highest-value task based on agent capabilities
+- [x] Swarm mode — auto-discover agents on the network
+- [x] Agent capability tags — tasks tagged by required skill, agents self-select

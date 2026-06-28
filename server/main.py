@@ -42,6 +42,8 @@ class TaskOut(BaseModel):
     created_at: int
     updated_at: int
     depends_on: Optional[str] = None
+    required_skills: Optional[str] = None
+    score: int = 0
 
 class TaskCreate(BaseModel):
     title: str
@@ -50,12 +52,14 @@ class TaskCreate(BaseModel):
     repo: str = ""
     roadmap_item: str = ""
     created_by: str = "web-ui"
+    required_skills: str = ""
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     priority: Optional[int] = None
     branch: Optional[str] = None
+    required_skills: Optional[str] = None
 
 class ClaimRequest(BaseModel):
     agent_id: str
@@ -65,6 +69,24 @@ class BlockRequest(BaseModel):
 
 class SetDependencyRequest(BaseModel):
     depends_on: str = ""  # empty string to clear
+
+class SetSkillsRequest(BaseModel):
+    skills: str = ""
+
+class AgentRegisterRequest(BaseModel):
+    agent_id: str
+    host: str = ""
+    capabilities: str = ""
+    repo_focus: str = ""
+
+class AgentHeartbeatRequest(BaseModel):
+    agent_id: str
+    status: str = "online"
+    current_task_id: str = ""
+
+class AgentCapabilitiesRequest(BaseModel):
+    capabilities: str = ""
+    repo_focus: str = ""
 
 class CompleteRequest(BaseModel):
     result_notes: str = ""
@@ -81,6 +103,21 @@ class LogOut(BaseModel):
     agent_id: Optional[str] = None
     notes: Optional[str] = None
     timestamp: int
+
+class AgentOut(BaseModel):
+    id: str
+    host: str = ""
+    capabilities: Optional[str] = None
+    repo_focus: Optional[str] = None
+    current_task_id: Optional[str] = None
+    status: str = "offline"
+    last_heartbeat: int = 0
+    first_seen: int = 0
+
+class SuggestResult(BaseModel):
+    task: TaskOut
+    score: int
+    reason: str = ""
 
 # ── Static file serving (SPA dashboard) ──────────────────────────────
 
@@ -166,6 +203,8 @@ def _row_to_task(r: dict) -> TaskOut:
         created_at=r.get("created_at", 0),
         updated_at=r.get("updated_at", 0),
         depends_on=r.get("depends_on"),
+        required_skills=r.get("required_skills"),
+        score=r.get("score", 0),
     )
 
 
@@ -245,6 +284,69 @@ async def startup():
 async def health():
     return {"status": "ok"}
 
+async def _compute_score(task: dict, agent_capabilities: str | None = None) -> tuple[int, str]:
+    """Compute a priority score for a task. Higher = more recommended."""
+    base = (4 - task.get("priority", 2)) * 20  # Urgent=80, High=60, Med=40, Low=20
+    reasons = []
+
+    # Time bonus: +5 per hour available, capped at +30
+    now_ms = int(datetime.utcnow().timestamp() * 1000)
+    age_hours = (now_ms - task.get("created_at", now_ms)) / 3_600_000
+    time_bonus = min(int(age_hours * 5), 30)
+    if time_bonus > 0:
+        reasons.append(f"+{time_bonus} stale ({(age_hours):.1f}h old)")
+
+    # Dependency bonus: +10 per task that depends on this one (unblock value)
+    try:
+        all_tasks = await _sql("SELECT id, depends_on FROM tasks WHERE depends_on IS NOT NULL")
+        blocker_count = sum(1 for t in all_tasks if t.get("depends_on") == task["id"])
+        blocker_bonus = min(blocker_count * 10, 30)
+        if blocker_bonus > 0:
+            reasons.append(f"+{blocker_bonus} unblocks {blocker_count} task(s)")
+    except Exception:
+        blocker_bonus = 0
+
+    # Skill match bonus: +15 per matching skill tag, capped at +30
+    skill_bonus = 0
+    task_skills = task.get("required_skills") or ""
+    if agent_capabilities and task_skills:
+        agent_tags = {t.strip().lower() for t in agent_capabilities.split(",") if t.strip()}
+        task_tags = {t.strip().lower() for t in task_skills.split(",") if t.strip()}
+        matched = agent_tags & task_tags
+        skill_bonus = min(len(matched) * 15, 30)
+        if skill_bonus > 0:
+            reasons.append(f"+{skill_bonus} skill match ({', '.join(matched)})")
+
+    total = base + time_bonus + blocker_bonus + skill_bonus
+    reason_str = "; ".join(reasons) if reasons else "base score"
+    return total, reason_str
+
+
+# Priority scoring route must be BEFORE /api/tasks/{task_id} to avoid shadowing
+@app.get("/api/tasks/suggest", response_model=list[SuggestResult])
+async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
+    """Return top-N recommended tasks based on priority scoring."""
+    rows = await _sql("SELECT * FROM tasks WHERE status = 'available'")
+
+    # Get agent capabilities if agent_id provided
+    agent_caps = None
+    if agent_id:
+        try:
+            agent_rows = await _sql(f"SELECT capabilities FROM swarm_agents WHERE id = '{agent_id}'")
+            if agent_rows:
+                agent_caps = agent_rows[0].get("capabilities")
+        except Exception:
+            pass
+
+    results = []
+    for r in rows:
+        score, reason = await _compute_score(r, agent_caps)
+        task_out = _row_to_task(r)
+        results.append(SuggestResult(task=task_out, score=score, reason=reason))
+
+    results.sort(key=lambda x: -x.score)
+    return results[:limit]
+
 @app.get("/api/tasks", response_model=list[TaskOut])
 async def list_tasks(status: Optional[str] = None, repo: Optional[str] = None):
     sql = "SELECT * FROM tasks"
@@ -277,6 +379,11 @@ async def create_task(body: TaskCreate):
         body.roadmap_item,
         body.created_by,
     ])
+    # Set skills if provided
+    if body.required_skills:
+        rows = await _sql(f"SELECT id FROM tasks ORDER BY created_at DESC LIMIT 1")
+        if rows:
+            await _call("set_task_skills", [rows[0]["id"], body.required_skills])
     asyncio.ensure_future(_notify_discord("created", {
         "title": body.title,
         "id": "pending",
@@ -339,10 +446,82 @@ async def delete_task(task_id: str):
     await _call("delete_task", [task_id])
     return {"status": "deleted"}
 
-@app.post("/api/tasks/seed")
-async def seed_tasks():
-    await _call("seed_sample_tasks", [])
-    return {"status": "seeded"}
+# ── Task Skills (Capability Tags) ──────────────────────────────────
+
+@app.post("/api/tasks/{task_id}/skills")
+async def set_task_skills(task_id: str, body: SetSkillsRequest):
+    await _call("set_task_skills", [task_id, body.skills])
+    return {"status": "updated", "task_id": task_id, "skills": body.skills or None}
+
+# ── Priority Scoring / Suggestions ──────────────────────────────────
+
+async def _row_to_agent(r: dict) -> AgentOut:
+    return AgentOut(
+        id=r["id"],
+        host=r.get("host", ""),
+        capabilities=r.get("capabilities"),
+        repo_focus=r.get("repo_focus"),
+        current_task_id=r.get("current_task_id"),
+        status=r.get("status", "offline"),
+        last_heartbeat=r.get("last_heartbeat", 0),
+        first_seen=r.get("first_seen", 0),
+    )
+
+
+@app.post("/api/agents/register")
+async def register_agent(body: AgentRegisterRequest):
+    """Register or re-connect an agent in the swarm."""
+    await _call("register_agent", [body.agent_id, body.host, body.capabilities, body.repo_focus])
+    return {"status": "registered", "agent_id": body.agent_id}
+
+
+@app.post("/api/agents/{agent_id}/heartbeat")
+async def agent_heartbeat(agent_id: str, body: AgentHeartbeatRequest):
+    """Send a heartbeat to the swarm."""
+    await _call("agent_heartbeat", [agent_id, body.status, body.current_task_id])
+    return {"status": "ok", "agent_id": agent_id}
+
+
+@app.put("/api/agents/{agent_id}/capabilities")
+async def set_agent_capabilities(agent_id: str, body: AgentCapabilitiesRequest):
+    """Update an agent's capabilities and repo focus."""
+    await _call("set_agent_capabilities", [agent_id, body.capabilities, body.repo_focus])
+    return {"status": "updated", "agent_id": agent_id}
+
+
+@app.get("/api/agents", response_model=list[AgentOut])
+async def list_agents():
+    """List all registered swarm agents."""
+    rows = await _sql("SELECT * FROM swarm_agents")
+    agents = []
+    for r in rows:
+        a = await _row_to_agent(r)
+        agents.append(a)
+    agents.sort(key=lambda a: -a.last_heartbeat)
+    return agents
+
+
+@app.get("/api/agents/{agent_id}", response_model=AgentOut)
+async def get_agent(agent_id: str):
+    """Get a specific swarm agent's details."""
+    rows = await _sql(f"SELECT * FROM swarm_agents WHERE id = '{agent_id}'")
+    if not rows:
+        raise HTTPException(404, "Agent not found")
+    return await _row_to_agent(rows[0])
+
+
+@app.exception_handler(404)
+async def spa_fallback(request, exc):
+    """Catch-all for SPA client-side routing."""
+    if request.url.path.startswith("/api/"):
+        raise exc
+    index = os.path.join(WEB_DIST, "index.html")
+    if os.path.isfile(index):
+        return FileResponse(index)
+    raise exc
+
+
+# ── Roadmap Import ─────────────────────────────────────────────────
 
 @app.post("/api/roadmap/import")
 async def import_roadmap(body: RoadmapImportRequest):
@@ -474,26 +653,6 @@ async def list_logs(task_id: Optional[str] = None, limit: int = 50):
     logs.sort(key=lambda l: -l.timestamp)
     return logs[:limit]
 
-@app.get("/api/agents")
-async def list_agents():
-    """List currently active agents (assigned to in_progress tasks)."""
-    rows = await _sql("SELECT assigned_to FROM tasks WHERE status = 'in_progress'")
-    seen: set[str] = set()
-    for r in rows:
-        val = r.get("assigned_to")
-        if val and isinstance(val, str):
-            seen.add(val)
-    return {"agents": sorted(seen)}
-
-@app.exception_handler(404)
-async def spa_fallback(request, exc):
-    """Catch-all for SPA client-side routing."""
-    if request.url.path.startswith("/api/"):
-        raise exc
-    index = os.path.join(WEB_DIST, "index.html")
-    if os.path.isfile(index):
-        return FileResponse(index)
-    raise exc
 
 # ── Main ─────────────────────────────────────────────────────────────
 

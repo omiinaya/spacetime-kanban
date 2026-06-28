@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
-  Ban, RotateCcw, ChevronDown, Wifi, WifiOff, Link
+  Ban, RotateCcw, ChevronDown, Wifi, WifiOff, Link, Lightbulb,
+  Users, Cpu
 } from 'lucide-react'
-import { api } from '../api'
+import { api, type SuggestResult, type Agent, type Task as ApiTask } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
 
 const PRIORITY_LABELS: Record<number, string> = {
@@ -34,6 +35,9 @@ export default function BoardPage() {
   const [claiming, setClaiming] = useState<string | null>(null)
   const [repoFilter, setRepoFilter] = useState<string>('')
   const [mobileStatusTab, setMobileStatusTab] = useState<TaskStatus>('available')
+  const [suggestions, setSuggestions] = useState<SuggestResult[]>([])
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [showPanel, setShowPanel] = useState<'none' | 'suggestions' | 'agents'>('none')
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -103,6 +107,33 @@ export default function BoardPage() {
     }
   }
 
+  const handleSetSkills = async (taskId: string) => {
+    const skills = prompt('Enter required skills (comma-separated, e.g. rust,typescript,react):')
+    if (skills === null) return
+    try {
+      await api.tasks.setSkills(taskId, skills.trim())
+    } catch (e: any) {
+      alert(`Set skills failed: ${e.message}`)
+    }
+  }
+
+  // Load suggestions and agents periodically
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [s, a] = await Promise.all([
+          api.suggest.list({ limit: 3 }),
+          api.agents.list(),
+        ])
+        setSuggestions(s)
+        setAgents(a)
+      } catch {}
+    }
+    load()
+    const interval = setInterval(load, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
   const renderDependencyBadge = (depId: string | null | undefined) => {
     if (!depId) return null
     const depTitle = taskTitleMap.get(depId)
@@ -141,6 +172,11 @@ export default function BoardPage() {
         {task.branch && <span className="text-blue-400 truncate max-w-[120px]">:{task.branch}</span>}
         {task.roadmapItem && <span className="text-purple-400/70 truncate">{task.roadmapItem}</span>}
         {renderDependencyBadge(task.dependsOn)}
+        {task.requiredSkills && (
+          <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400/80 font-medium truncate max-w-[140px]" title={`Skills: ${task.requiredSkills}`}>
+            <Cpu className="w-3 h-3 inline mr-0.5" />{task.requiredSkills}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-1 pt-1 border-t border-[var(--color-border)]">
@@ -152,6 +188,9 @@ export default function BoardPage() {
             <button onClick={() => handleSetDependency(task.id)}
               className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-amber-500/15 text-amber-400 hover:bg-amber-500/30 transition-colors"
             ><Link className="w-3 h-3" /> Dep</button>
+            <button onClick={() => handleSetSkills(task.id)}
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+            ><Cpu className="w-3 h-3" /> Skills</button>
             <button onClick={() => handleDelete(task.id)}
               className="text-xs px-2 py-1 rounded text-red-400 hover:bg-red-500/20 transition-colors ml-auto"
             ><Trash2 className="w-3 h-3" /></button>
@@ -226,6 +265,16 @@ export default function BoardPage() {
             ? <Wifi className="w-3.5 h-3.5 text-emerald-400 hidden sm:block" />
             : <WifiOff className="w-3.5 h-3.5 text-amber-400 hidden sm:block" />
           }
+          <button onClick={() => setShowPanel(showPanel === 'suggestions' ? 'none' : 'suggestions')}
+            className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded transition-colors ${
+              showPanel === 'suggestions' ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
+            }`}
+          ><Lightbulb className="w-3 h-3" /> Suggest</button>
+          <button onClick={() => setShowPanel(showPanel === 'agents' ? 'none' : 'agents')}
+            className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded transition-colors ${
+              showPanel === 'agents' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
+            }`}
+          ><Users className="w-3 h-3" /> Agents</button>
           <button onClick={() => api.tasks.seed()}
             className="text-xs px-2.5 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors hidden sm:inline-block"
           >Seed</button>
@@ -239,6 +288,86 @@ export default function BoardPage() {
         <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {stdbError || 'No tasks found. Seed some sample data or create a new task.'}
+        </div>
+      )}
+
+      {/* Smart Suggestions Panel */}
+      {showPanel === 'suggestions' && (
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] flex items-center gap-1">
+              <Lightbulb className="w-3 h-3 text-amber-400" /> Smart Suggestions
+            </h3>
+            <span className="text-[10px] text-[var(--color-muted)]">Refreshes every 30s</span>
+          </div>
+          {suggestions.length === 0 ? (
+            <p className="text-xs text-[var(--color-muted)]">No suggestions available. All tasks may be claimed or blocked.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {suggestions.map((s, i) => (
+                <div key={i} className="flex items-start gap-2 p-2 rounded bg-white/[0.03] hover:bg-white/[0.06] transition-colors cursor-pointer" onClick={() => handleClaim(s.task.id, 'web-user')}>
+                  <span className="text-lg mt-0.5">{['🥇', '🥈', '🥉'][i] || '📋'}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">{s.task.title}</span>
+                      <span className="text-xs px-1 py-0.5 rounded bg-white/10 text-[var(--color-muted-foreground)] font-mono">{s.score}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-[var(--color-muted)] mt-0.5">
+                      <span className={`px-1 py-0.25 rounded text-[10px] ${PRIORITY_COLORS[s.task.priority] || ''}`}>
+                        {PRIORITY_LABELS[s.task.priority] || s.task.priority}
+                      </span>
+                      <span>{s.reason}</span>
+                      {s.task.required_skills && <span className="text-cyan-400">Skills: {s.task.required_skills}</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Agent Panel */}
+      {showPanel === 'agents' && (
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] flex items-center gap-1">
+              <Users className="w-3 h-3 text-cyan-400" /> Swarm Agents
+            </h3>
+            <span className="text-[10px] text-[var(--color-muted)]">{agents.length} agent(s)</span>
+          </div>
+          {agents.length === 0 ? (
+            <p className="text-xs text-[var(--color-muted)]">No agents registered. Run <code className="px-1 py-0.5 rounded bg-white/10">kanban register --capabilities=...</code> to join the swarm.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {agents.map((a) => {
+                const isOnline = a.status === 'online' || a.status === 'busy'
+                const agentAge = Math.floor((Date.now() - a.last_heartbeat) / 1000)
+                const isStale = agentAge > 60
+                return (
+                  <div key={a.id} className="flex items-start gap-2 p-2 rounded bg-white/[0.03] border border-[var(--color-border)]">
+                    <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${isStale ? 'bg-red-500' : isOnline ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium truncate">{a.id}</span>
+                        {a.repo_focus && <span className="text-[10px] px-1 py-0.5 rounded bg-white/10 text-[var(--color-muted)]">{a.repo_focus}</span>}
+                      </div>
+                      {a.capabilities && (
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {a.capabilities.split(',').map((c, j) => (
+                            <span key={j} className="text-[10px] px-1 py-0.25 rounded bg-cyan-500/10 text-cyan-400/80">{c.trim()}</span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="text-[10px] text-[var(--color-muted)] mt-0.5">
+                        {a.host} · {isStale ? 'stale' : a.status} · {Math.floor(agentAge / 60)}m ago
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

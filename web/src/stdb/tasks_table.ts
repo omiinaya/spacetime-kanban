@@ -24,4 +24,6 @@ export default __t.row({
   createdAt: __t.u64().name("created_at"),
   updatedAt: __t.u64().name("updated_at"),
   dependsOn: __t.option(__t.string()).name("depends_on"),
+  requiredSkills: __t.option(__t.string()).name("required_skills"),
+  score: __t.u32(),
 });

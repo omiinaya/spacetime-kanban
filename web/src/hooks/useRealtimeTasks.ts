@@ -75,7 +75,7 @@ export function useRealtimeTasks() {
 
     function syncFromCache(conn: DbConnection) {
       try {
-        const all: Task[] = Array.from(conn.db.tasks.iter())
+        const all = Array.from(conn.db.tasks.iter()) as Task[]
         setTasks(all)
       } catch (e: any) {
         console.warn('Failed to sync from STDB cache:', e.message)
