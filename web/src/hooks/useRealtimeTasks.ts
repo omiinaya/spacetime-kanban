@@ -25,7 +25,7 @@ export function useRealtimeTasks() {
     function connect() {
       try {
         const conn = DbConnection.builder()
-          .withUri('ws://localhost:3001')
+          .withUri(`ws://${window.location.hostname}:3001`)
           .withDatabaseName('spacetimedb-kanban')
           .onConnect(() => {
             if (cancelled) return

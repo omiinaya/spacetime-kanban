@@ -5,7 +5,7 @@ This document tells any AI agent (or human) how to install and configure the kan
 ## Prerequisites
 
 - Python 3.10+
-- Access to the kanban server at `localhost:8725` (the API server must be running)
+- Access to the kanban server at `localhost:8727` (the API server must be running)
 - Git (for hook installation)
 
 ## Step 1: Install the CLI
@@ -64,7 +64,7 @@ You have no tasks in progress.
 Run:  kanban list --status=available
 ```
 
-If you see connection errors, the API server at `localhost:8725` may not be running.
+If you see connection errors, the API server at `localhost:8727` may not be running.
 
 ## Step 4: Opt in a repo for branch validation (per-repo)
 

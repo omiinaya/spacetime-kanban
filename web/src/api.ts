@@ -11,6 +11,7 @@ export interface Task {
   created_by: string
   created_at: number
   updated_at: number
+  depends_on: string | null
 }
 
 export interface LogEntry {
@@ -90,6 +91,8 @@ export const api = {
       apiPost<{ status: string; task_id: string }>(`/tasks/${id}/complete`, { result_notes }),
     block: (id: string, reason?: string) =>
       apiPost<{ status: string; task_id: string }>(`/tasks/${id}/block`, { reason }),
+    setDependency: (id: string, depends_on: string) =>
+      apiPost<{ status: string; task_id: string; depends_on: string | null }>(`/tasks/${id}/dependency`, { depends_on }),
     delete: (id: string) =>
       apiDelete<{ status: string }>(`/tasks/${id}`),
     seed: () => apiPost<{ status: string }>('/tasks/seed'),

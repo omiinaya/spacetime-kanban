@@ -23,6 +23,7 @@ export const Task = __t.object("Task", {
   createdBy: __t.string(),
   createdAt: __t.u64(),
   updatedAt: __t.u64(),
+  dependsOn: __t.option(__t.string()),
 });
 export type Task = __Infer<typeof Task>;
 

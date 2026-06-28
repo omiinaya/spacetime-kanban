@@ -12,7 +12,7 @@ import time
 import sys
 import os
 
-API_BASE = os.environ.get("KANBAN_API_BASE", "http://localhost:8725")
+API_BASE = os.environ.get("KANBAN_API_BASE", "http://localhost:8727")
 STALE_THRESHOLD_MINUTES = int(os.environ.get("STALE_THRESHOLD_MINUTES", "30"))
 SILENT_IF_EMPTY = os.environ.get("SILENT_IF_EMPTY", "1") == "1"
 

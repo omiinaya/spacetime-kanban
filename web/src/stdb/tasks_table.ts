@@ -23,4 +23,5 @@ export default __t.row({
   createdBy: __t.string().name("created_by"),
   createdAt: __t.u64().name("created_at"),
   updatedAt: __t.u64().name("updated_at"),
+  dependsOn: __t.option(__t.string()).name("depends_on"),
 });

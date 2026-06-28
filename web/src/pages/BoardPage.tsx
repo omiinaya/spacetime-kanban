@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import {
   Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
-  Ban, RotateCcw, ChevronDown, Wifi, WifiOff
+  Ban, RotateCcw, ChevronDown, Wifi, WifiOff, Link
 } from 'lucide-react'
 import { api } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
@@ -34,6 +34,9 @@ export default function BoardPage() {
   const [claiming, setClaiming] = useState<string | null>(null)
   const [repoFilter, setRepoFilter] = useState<string>('')
   const [mobileStatusTab, setMobileStatusTab] = useState<TaskStatus>('available')
+
+  // Build a lookup map: taskId -> task title
+  const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
 
   // Extract unique repos sorted by frequency
   const repos = [...new Set(tasks.map(t => t.repo).filter(Boolean))]
@@ -90,6 +93,26 @@ export default function BoardPage() {
     }
   }
 
+  const handleSetDependency = async (taskId: string) => {
+    const depId = prompt('Enter the ID of the task this task depends on (leave empty to clear):')
+    if (depId === null) return
+    try {
+      await api.tasks.setDependency(taskId, depId.trim())
+    } catch (e: any) {
+      alert(`Set dependency failed: ${e.message}`)
+    }
+  }
+
+  const renderDependencyBadge = (depId: string | null | undefined) => {
+    if (!depId) return null
+    const depTitle = taskTitleMap.get(depId)
+    return (
+      <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400/80 font-medium truncate max-w-[180px]" title={depId}>
+        ⬆ {depTitle || depId}
+      </span>
+    )
+  }
+
   const renderTaskCard = (task: Task) => (
     <div key={task.id} className="bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] p-3 space-y-2">
       <div className="flex items-start justify-between gap-2">
@@ -117,6 +140,7 @@ export default function BoardPage() {
         )}
         {task.branch && <span className="text-blue-400 truncate max-w-[120px]">:{task.branch}</span>}
         {task.roadmapItem && <span className="text-purple-400/70 truncate">{task.roadmapItem}</span>}
+        {renderDependencyBadge(task.dependsOn)}
       </div>
 
       <div className="flex items-center gap-1 pt-1 border-t border-[var(--color-border)]">
@@ -125,6 +149,9 @@ export default function BoardPage() {
             <button onClick={() => handleClaim(task.id, 'web-user')}
               className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
             ><Play className="w-3 h-3" /> Claim</button>
+            <button onClick={() => handleSetDependency(task.id)}
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-amber-500/15 text-amber-400 hover:bg-amber-500/30 transition-colors"
+            ><Link className="w-3 h-3" /> Dep</button>
             <button onClick={() => handleDelete(task.id)}
               className="text-xs px-2 py-1 rounded text-red-400 hover:bg-red-500/20 transition-colors ml-auto"
             ><Trash2 className="w-3 h-3" /></button>

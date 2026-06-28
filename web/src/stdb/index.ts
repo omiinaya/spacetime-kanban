@@ -40,6 +40,7 @@ import ClaimTaskReducer from "./claim_task_reducer";
 import CompleteTaskReducer from "./complete_task_reducer";
 import DeleteTaskReducer from "./delete_task_reducer";
 import SeedSampleTasksReducer from "./seed_sample_tasks_reducer";
+import SetDependencyReducer from "./set_dependency_reducer";
 import UnclaimTaskReducer from "./unclaim_task_reducer";
 import UpdateTaskReducer from "./update_task_reducer";
 
@@ -85,6 +86,7 @@ const reducersSchema = __reducers(
   __reducerSchema("complete_task", CompleteTaskReducer),
   __reducerSchema("delete_task", DeleteTaskReducer),
   __reducerSchema("seed_sample_tasks", SeedSampleTasksReducer),
+  __reducerSchema("set_dependency", SetDependencyReducer),
   __reducerSchema("unclaim_task", UnclaimTaskReducer),
   __reducerSchema("update_task", UpdateTaskReducer),
 );

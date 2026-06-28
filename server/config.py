@@ -1,11 +1,13 @@
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 class Settings(BaseSettings):
     stdb_host: str = "localhost"
     stdb_port: int = 3001
     stdb_db: str = "spacetimedb-kanban"
-    server_port: int = 8725
+    server_port: int = 8727
     cors_origin: str = "http://localhost:5189"
+    discord_webhook_url: Optional[str] = None
 
     @property
     def stdb_base_url(self) -> str:

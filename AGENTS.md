@@ -6,7 +6,7 @@ This kanban coordinates **multiple AI agents** working on the same repo's roadma
 
 ### 1. Get Available Tasks
 ```http
-GET http://localhost:8725/api/tasks?status=available&repo=sample-repo-p
+GET http://localhost:8727/api/tasks?status=available&repo=sample-repo-p
 ```
 
 Response:
@@ -27,7 +27,7 @@ Response:
 
 ### 2. Claim a Task (Atomic — fails if taken)
 ```http
-POST http://localhost:8725/api/tasks/{task_id}/claim
+POST http://localhost:8727/api/tasks/{task_id}/claim
 Content-Type: application/json
 
 {"agent_id": "claude-vscode"}
@@ -49,30 +49,30 @@ If you get 409, pick the next available task.
 - DO NOT modify the task until done (keeps the state machine clean).
 - The `branch` field is optional — set it if you created a branch for this work:
   ```http
-  PATCH http://localhost:8725/api/tasks/{task_id}
+  PATCH http://localhost:8727/api/tasks/{task_id}
   Content-Type: application/json
   {"branch": "feature/doh-fallback"}
   ```
 
 ### 4. Complete / Block
 ```http
-POST http://localhost:8725/api/tasks/{task_id}/complete
+POST http://localhost:8727/api/tasks/{task_id}/complete
 Content-Type: application/json
 {"result_notes": "Implemented DoH fallback + tests passed"}
 
-POST http://localhost:8725/api/tasks/{task_id}/block
+POST http://localhost:8727/api/tasks/{task_id}/block
 Content-Type: application/json
 {"result_notes": "Blocked on upstream API rate limits"}
 ```
 
 Or release the task back to available:
 ```http
-POST http://localhost:8725/api/tasks/{task_id}/unclaim
+POST http://localhost:8727/api/tasks/{task_id}/unclaim
 ```
 
 ### 5. Create New Tasks
 ```http
-POST http://localhost:8725/api/tasks
+POST http://localhost:8727/api/tasks
 Content-Type: application/json
 {
   "title": "Add DNS-over-HTTPS fallback",
@@ -81,6 +81,43 @@ Content-Type: application/json
   "repo": "sample-repo-p",
   "roadmap_item": "Phase 3 — DNS Resilience"
 }
+```
+
+### 6. Set / Clear Task Dependencies
+```http
+POST http://localhost:8727/api/tasks/{task_id}/dependency
+Content-Type: application/json
+
+{"depends_on": "task_1748397912_abc12345"}
+```
+
+**Success** (200):
+```json
+{"status": "updated", "task_id": "...", "depends_on": "task_1748397912_abc12345"}
+```
+
+Pass an empty string to clear the dependency:
+```http
+POST http://localhost:8727/api/tasks/{task_id}/dependency
+Content-Type: application/json
+
+{"depends_on": ""}
+```
+
+**Dependency enforcement:** A task with a non-done dependency **cannot be claimed**. The claim call returns a 409 with a descriptive error:
+```json
+{"detail": "Reducer failed: Cannot claim — dependency 'task_abc' (Prerequisite task) is not done (status: available)"}
+```
+
+## Dependency Rule
+
+```
+task_B ──[depends_on]──→ task_A
+
+task_B can only be claimed AFTER task_A is done (status == 'done')
+- If task_A doesn't exist → claim fails with "dependency not found"
+- If task_A is available/in_progress/blocked → claim fails with descriptive error
+- If task_B has no dependency → can be claimed freely (same behavior as before)
 ```
 
 ## State Machine
@@ -155,3 +192,45 @@ This means:
 - The watchdog is silent when nothing is stale — it only reports when it releases something
 
 **Watchdog does not run inside git repos or VSCode sessions — it's a server-level daemon. You don't need to set it up; it's already running.**
+
+## GitHub PR Linking
+
+When a GitHub repository's branch follows the kanban naming convention, the kanban automatically links PRs to tasks via a webhook.
+
+### Setup
+
+1. Go to your GitHub repo → Settings → Webhooks → Add webhook
+2. **Payload URL:** `http://your-server:8727/api/webhook/github`
+3. **Content type:** `application/json`
+4. **Events:** Select "Pull requests"
+5. **Secret:** (optional — leave blank for now)
+
+### Behavior
+
+| Event | Action |
+|-------|--------|
+| PR **opened** with matching branch | Task gets `branch` + PR URL set |
+| PR **reopened** | Same as opened |
+| PR **merged** (closed+merged) | Task auto-claimed as `github-actions` and marked done |
+
+The branch must match the kanban convention:
+```
+feature/kanban-task_1748397912_abc12345--my-feature
+```
+
+## Roadmap Import
+
+Bulk-import pending tasks from a project's `ROADMAP.md` file into the kanban.
+
+```bash
+# From any directory with a ROADMAP.md:
+kanban roadmap-import --repo=my-project
+
+# Or specify a custom file path:
+kanban roadmap-import --repo=my-project --file=/path/to/ROADMAP.md
+```
+
+The importer parses:
+- `## Phase N — Name` headers → maps to `roadmap_item` field
+- `- [ ] Task description` → pending tasks (skips `- [x]` done items)
+- Priority is auto-derived from phase number (Phase 1 = urgent, Phase 4 = low)

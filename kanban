@@ -18,6 +18,7 @@ Usage:
   kanban check-branch [<branch-name>]
   kanban install-hooks
   kanban uninstall-hooks
+  kanban roadmap-import [--repo=<r>] [--file=<path>]
   kanban info [--json]
   kanban --help
 """
@@ -31,7 +32,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urljoin
 
-API_BASE = os.environ.get("KANBAN_API_BASE", "http://localhost:8725")
+API_BASE = os.environ.get("KANBAN_API_BASE", "http://localhost:8727")
 BRANCH_PATTERN = re.compile(
     r"^(feature|fix|chore|refactor|docs|test)/"
     r"kanban-([a-zA-Z0-9_]+)--"
@@ -412,6 +413,43 @@ def _detect_repo() -> str | None:
         return None
 
 
+def cmd_roadmap_import(args: list[str]):
+    """Import pending tasks from a ROADMAP.md file into the kanban."""
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban roadmap-import")
+    p.add_argument("--repo", default="", help="Repo slug for imported tasks")
+    p.add_argument("--file", default=None, help="Path to ROADMAP.md (default: ROADMAP.md in cwd)")
+    opts = p.parse_args(args)
+
+    path = opts.file or "ROADMAP.md"
+    if not os.path.isfile(path):
+        eprint(f"✗ File not found: {path}")
+        sys.exit(1)
+
+    with open(path) as f:
+        content = f.read()
+
+    payload = json.dumps({
+        "content": content,
+        "repo": opts.repo,
+        "created_by": detect_agent_id(),
+    }).encode("utf-8")
+
+    url = urljoin(API_BASE, "/api/roadmap/import")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        resp = urllib.request.urlopen(req, timeout=30)
+        result = json.loads(resp.read())
+        count = result.get("task_count", 0)
+        print(f"✔ Imported {count} pending task{'s' if count != 1 else ''} from {path}")
+    except urllib.error.HTTPError as e:
+        eprint(f"✗ Import failed: HTTP {e.code}: {e.read().decode()[:200]}")
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        eprint(f"✗ Connection failed: {e.reason}")
+        sys.exit(1)
+
+
 COMMANDS = {
     "list": cmd_list,
     "claim": cmd_claim,
@@ -423,6 +461,7 @@ COMMANDS = {
     "install-hooks": cmd_install_hooks,
     "uninstall-hooks": cmd_uninstall_hooks,
     "info": cmd_info,
+    "roadmap-import": cmd_roadmap_import,
 }
 
 

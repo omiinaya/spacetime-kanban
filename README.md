@@ -7,7 +7,7 @@
 ```
 SpacetimeDB (v2.4.1) — source of truth, atomic reducers
      ↓
-FastAPI REST server (:8725) — HTTP bridge for all agents
+FastAPI REST server (:8727) — HTTP bridge for all agents
      ↓
 Hermes Agent ←→ Claude (VSCode) ←→ Web Dashboard (:5189)
 ```
@@ -49,6 +49,11 @@ npm run dev
 | `/api/tasks/{id}/unclaim` | POST | Release a task back to available |
 | `/api/tasks/{id}/complete` | POST | Mark task as done |
 | `/api/tasks/{id}/block` | POST | Mark task as blocked |
+| `/api/tasks/{id}/dependency` | POST | Set/clear a task dependency |
+| `/api/tasks/{id}/delete` | DELETE | Delete a task |
+| `/api/tasks/seed` | POST | Seed sample data |
+| `/api/roadmap/import` | POST | Bulk-import tasks from ROADMAP.md |
+| `/api/webhook/github` | POST | GitHub webhook for PR linking |
 | `/api/logs` | GET | List audit log entries |
 | `/api/agents` | GET | List active agents |
 

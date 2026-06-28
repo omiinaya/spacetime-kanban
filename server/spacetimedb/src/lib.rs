@@ -16,6 +16,7 @@ pub struct Task {
     pub created_by: String,
     pub created_at: u64,
     pub updated_at: u64,
+    pub depends_on: Option<String>,
 }
 
 #[spacetimedb::table(accessor = task_logs, public)]
@@ -112,6 +113,7 @@ pub fn add_task(
         created_by,
         created_at: now,
         updated_at: now,
+        depends_on: None,
     });
 
     log_action(ctx, &id, "created", None, None);
@@ -126,6 +128,18 @@ pub fn claim_task(ctx: &ReducerContext, task_id: String, agent_id: String) -> Re
 
     if task.status != "available" {
         return Err(format!("Task is not available (current status: {})", task.status));
+    }
+
+    // Check dependency: if task depends on another task, that dependency must be done
+    if let Some(ref dep_id) = task.depends_on {
+        let dep = find_task(ctx, dep_id)
+            .ok_or_else(|| format!("Dependency task '{}' not found", dep_id))?;
+        if dep.status != "done" {
+            return Err(format!(
+                "Cannot claim — dependency '{}' ({}) is not done (status: {})",
+                dep_id, dep.title, dep.status
+            ));
+        }
     }
 
     task.status = "in_progress".to_string();
@@ -221,6 +235,34 @@ pub fn update_task(
 }
 
 #[reducer]
+pub fn set_dependency(
+    ctx: &ReducerContext,
+    task_id: String,
+    depends_on: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id)
+        .ok_or_else(|| "Task not found".to_string())?;
+
+    // If depends_on is empty, clear the dependency
+    let dep = if depends_on.is_empty() {
+        None
+    } else {
+        // Verify the dependency task exists
+        let _dep_task = find_task(ctx, &depends_on)
+            .ok_or_else(|| format!("Dependency task '{}' not found", depends_on))?;
+        Some(depends_on.clone())
+    };
+
+    task.depends_on = dep;
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
+
+    log_action(ctx, &task_id, "dependency_set", task.assigned_to.as_deref(), Some(&depends_on));
+    Ok(())
+}
+
+#[reducer]
 pub fn delete_task(ctx: &ReducerContext, task_id: String) -> Result<(), String> {
     let task = find_task(ctx, &task_id)
         .ok_or_else(|| "Task not found".to_string())?;
@@ -259,6 +301,7 @@ pub fn seed_sample_tasks(ctx: &ReducerContext) -> Result<(), String> {
             created_by: sender.clone(),
             created_at: now,
             updated_at: now,
+            depends_on: None,
         });
 
         ctx.db.task_logs().insert(TaskLog {

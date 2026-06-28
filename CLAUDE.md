@@ -1,6 +1,6 @@
 # Claude — Kanban Workflow
 
-This project uses a **shared kanban board** at `localhost:8725` to coordinate agents working on the same roadmap. Before starting any work, **always check the kanban first**.
+This project uses a **shared kanban board** at `localhost:8727` to coordinate agents working on the same roadmap. Before starting any work, **always check the kanban first**.
 
 The `kanban` CLI tool handles all interactions. Install it from the `spacetimedb-kanban` repo:
 
