@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
 import {
   Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
-  Ban, RotateCcw, ChevronDown, Wifi, WifiOff, Link, Lightbulb,
-  Users, Cpu
+  Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
+  Users, Cpu, Info, History, GitBranch, ExternalLink, X
 } from 'lucide-react'
 import { api, type SuggestResult, type Agent, type Task as ApiTask } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
@@ -38,6 +38,7 @@ export default function BoardPage() {
   const [suggestions, setSuggestions] = useState<SuggestResult[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [showPanel, setShowPanel] = useState<'none' | 'suggestions' | 'agents'>('none')
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -145,7 +146,10 @@ export default function BoardPage() {
   }
 
   const renderTaskCard = (task: Task) => (
-    <div key={task.id} className="bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] p-3 space-y-2">
+    <div key={task.id}
+      onClick={() => setDetailTaskId(task.id)}
+      className="bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] p-3 space-y-2 cursor-pointer hover:border-[var(--color-ring)] transition-colors"
+    >
       <div className="flex items-start justify-between gap-2">
         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${PRIORITY_COLORS[task.priority] || ''}`}>
           {PRIORITY_LABELS[task.priority] || task.priority}
@@ -400,6 +404,23 @@ export default function BoardPage() {
         />
       )}
 
+      {/* Task Detail Dialog */}
+      {detailTaskId && (
+        <TaskDetailDialog
+          taskId={detailTaskId}
+          tasks={tasks}
+          taskTitleMap={taskTitleMap}
+          onClose={() => setDetailTaskId(null)}
+          onClaim={(id) => { handleClaim(id, 'web-user'); setDetailTaskId(null); }}
+          onUnclaim={(id) => { handleUnclaim(id); setDetailTaskId(null); }}
+          onComplete={(id) => { handleComplete(id); setDetailTaskId(null); }}
+          onBlock={(id) => { handleBlock(id); setDetailTaskId(null); }}
+          onDelete={(id) => { handleDelete(id); setDetailTaskId(null); }}
+          onSetDependency={(id) => { handleSetDependency(id); }}
+          onSetSkills={(id) => { handleSetSkills(id); }}
+        />
+      )}
+
       {/* Kanban Columns — single for mobile, 2 for tablet, 4 for desktop */}
       <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {STATUS_COLUMNS.map((status) => {
@@ -447,6 +468,7 @@ function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreat
   const [priority, setPriority] = useState(2)
   const [repo, setRepo] = useState('')
   const [roadmap, setRoadmap] = useState('')
+  const [skills, setSkills] = useState('')
   const [saving, setSaving] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -460,6 +482,7 @@ function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreat
         priority,
         repo,
         roadmap_item: roadmap,
+        required_skills: skills,
       })
       onCreated()
     } catch (e: any) {
@@ -493,7 +516,7 @@ function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreat
             rows={3}
             className="w-full px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
           />
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <select
               value={priority}
               onChange={(e) => setPriority(Number(e.target.value))}
@@ -516,6 +539,12 @@ function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreat
               placeholder="Roadmap item"
               className="px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
             />
+            <input
+              value={skills}
+              onChange={(e) => setSkills(e.target.value)}
+              placeholder="Skills (e.g. rust,python)"
+              className="px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+            />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose}
@@ -526,6 +555,254 @@ function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreat
             >{saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />} Create</button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+function TaskDetailDialog({
+  taskId, tasks, taskTitleMap, onClose,
+  onClaim, onUnclaim, onComplete, onBlock, onDelete,
+  onSetDependency, onSetSkills,
+}: {
+  taskId: string
+  tasks: Task[]
+  taskTitleMap: Map<string, string>
+  onClose: () => void
+  onClaim: (id: string) => void
+  onUnclaim: (id: string) => void
+  onComplete: (id: string) => void
+  onBlock: (id: string) => void
+  onDelete: (id: string) => void
+  onSetDependency: (id: string) => void
+  onSetSkills: (id: string) => void
+}) {
+  const [logs, setLogs] = useState<any[]>([])
+  const [loadingLogs, setLoadingLogs] = useState(true)
+
+  const task = tasks.find(t => t.id === taskId)
+  const downstream = tasks.filter(t => t.dependsOn === taskId)
+  const upstream = task?.dependsOn ? tasks.find(t => t.id === task.dependsOn) : null
+  const blockedByDep = task?.dependsOn && tasks.find(t => t.id === task.dependsOn)?.status !== 'done'
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingLogs(true)
+    api.logs.list(taskId, 20).then(l => {
+      if (!cancelled) { setLogs(l); setLoadingLogs(false) }
+    }).catch(() => { if (!cancelled) setLoadingLogs(false) })
+    return () => { cancelled = true }
+  }, [taskId])
+
+  const actionIcons: Record<string, string> = {
+    created: '🆕', claimed: '👤', unclaimed: '↩️', completed: '✅',
+    blocked: '🚧', dependency_set: '🔗', skills_set: '🛠️',
+    agent_registered: '🤖', agent_reconnected: '🔄',
+  }
+
+  if (!task) return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-6" onClick={e => e.stopPropagation()}>
+        <p className="text-sm text-[var(--color-muted)]">Task not found. It may have been deleted.</p>
+        <button onClick={onClose} className="mt-3 text-sm px-3 py-1.5 rounded bg-[var(--color-primary)] text-white">Close</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 sm:pt-16 pb-8 overflow-y-auto bg-black/50" onClick={onClose}>
+      <div className="w-full max-w-2xl bg-[var(--color-card)] rounded-xl border border-[var(--color-border)]" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 p-4 sm:p-6 border-b border-[var(--color-border)]">
+          <div className="min-w-0 space-y-2 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${PRIORITY_COLORS[task.priority] || ''}`}>
+                {PRIORITY_LABELS[task.priority] || task.priority}
+              </span>
+              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                task.status === 'done' ? 'bg-emerald-500/20 text-emerald-400' :
+                task.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                task.status === 'blocked' ? 'bg-red-500/20 text-red-400' :
+                'bg-slate-500/20 text-slate-400'
+              }`}>{STATUS_LABELS[task.status]}</span>
+              {task.repo && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-white/8 text-[var(--color-muted)]">{task.repo}</span>
+              )}
+              {task.score > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono">Score: {task.score}</span>
+              )}
+            </div>
+            <h2 className="text-base sm:text-lg font-semibold leading-snug">{task.title}</h2>
+          </div>
+          <button onClick={onClose} className="flex-shrink-0 p-1 rounded hover:bg-white/10 transition-colors">
+            <X className="w-4 h-4 text-[var(--color-muted)]" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-4 sm:p-6 space-y-4">
+          {/* Description */}
+          {task.description && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-1">Description</p>
+              <p className="text-sm text-[var(--color-muted-foreground)]">{task.description}</p>
+            </div>
+          )}
+
+          {/* Metadata grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">ID</p>
+              <p className="text-xs font-mono text-[var(--color-muted-foreground)] truncate" title={task.id}>{task.id.slice(0, 28)}...</p>
+            </div>
+            {task.assignedTo && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Agent</p>
+                <p className="text-xs text-[var(--color-foreground)]">{task.assignedTo}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Roadmap</p>
+              <p className="text-xs text-[var(--color-muted-foreground)] truncate">{task.roadmapItem || '—'}</p>
+            </div>
+            {task.branch && (
+              <div className="col-span-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Branch</p>
+                <p className="text-xs font-mono text-blue-400 truncate"><GitBranch className="w-3 h-3 inline mr-0.5" />{task.branch}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Created</p>
+              <p className="text-xs text-[var(--color-muted-foreground)]">{new Date(Number(task.createdAt)).toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Updated</p>
+              <p className="text-xs text-[var(--color-muted-foreground)]">{new Date(Number(task.updatedAt)).toLocaleString()}</p>
+            </div>
+            {task.requiredSkills && (
+              <div className="col-span-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Required Skills</p>
+                <div className="flex flex-wrap gap-1 mt-0.5">
+                  {task.requiredSkills.split(',').map((s: string, i: number) => (
+                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400"><Cpu className="w-2.5 h-2.5 inline mr-0.5" />{s.trim()}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Dependency Chain */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-2 flex items-center gap-1">
+              <Link className="w-3 h-3" /> Dependency Chain
+            </p>
+            <div className="space-y-1.5">
+              {upstream && (
+                <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                  <span className="text-xs text-amber-400 font-medium shrink-0">Depends on:</span>
+                  <span className="text-sm truncate">{upstream.title}</span>
+                  <span className={`text-[10px] px-1 py-0.5 rounded ml-auto ${
+                    upstream.status === 'done' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                  }`}>{upstream.status}</span>
+                </div>
+              )}
+              {!upstream && (
+                <p className="text-xs text-[var(--color-muted)]">No dependencies — can be claimed freely</p>
+              )}
+              {downstream.length > 0 && (
+                <div className="space-y-1 mt-2">
+                  <p className="text-xs text-[var(--color-muted)]">Blocks {downstream.length} task(s):</p>
+                  {downstream.slice(0, 5).map(dt => (
+                    <div key={dt.id} className="flex items-center gap-2 p-1.5 rounded bg-white/[0.03]">
+                      <span className="text-sm truncate">{dt.title}</span>
+                      <span className={`text-[10px] px-1 py-0.5 rounded ml-auto ${
+                        dt.status === 'blocked' ? 'bg-red-500/20 text-red-400' :
+                        dt.status === 'available' ? 'bg-blue-500/20 text-blue-400' :
+                        'bg-emerald-500/20 text-emerald-400'
+                      }`}>{dt.status}</span>
+                    </div>
+                  ))}
+                  {downstream.length > 5 && (
+                    <p className="text-[10px] text-[var(--color-muted)]">...and {downstream.length - 5} more</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Activity Log */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-2 flex items-center gap-1">
+              <History className="w-3 h-3" /> Activity Log
+            </p>
+            {loadingLogs ? (
+              <div className="flex items-center gap-2 text-xs text-[var(--color-muted)] py-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> Loading...
+              </div>
+            ) : logs.length === 0 ? (
+              <p className="text-xs text-[var(--color-muted)] py-2">No activity recorded.</p>
+            ) : (
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {logs.map((log: any) => (
+                  <div key={log.id} className="flex items-start gap-2 py-1.5 border-b border-[var(--color-border)] last:border-0">
+                    <span className="text-sm shrink-0">{actionIcons[log.action] || '📋'}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium capitalize">{log.action.replace(/_/g, ' ')}</span>
+                        {log.agent_id && <span className="text-[10px] text-[var(--color-muted)]">by {log.agent_id}</span>}
+                      </div>
+                      {log.notes && <p className="text-[11px] text-[var(--color-muted-foreground)] truncate">{log.notes}</p>}
+                    </div>
+                    <span className="text-[10px] text-[var(--color-muted)] shrink-0">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Action Footer */}
+        <div className="flex items-center gap-2 p-4 sm:p-6 border-t border-[var(--color-border)]">
+          {task.status === 'available' && (
+            <>
+              <button onClick={() => onClaim(task.id)}
+                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
+              ><Play className="w-3 h-3" /> Claim</button>
+              <button onClick={() => onSetDependency(task.id)}
+                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-amber-500/15 text-amber-400 hover:bg-amber-500/30 transition-colors"
+              ><Link className="w-3 h-3" /> Set Dep</button>
+              <button onClick={() => onSetSkills(task.id)}
+                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+              ><Cpu className="w-3 h-3" /> Set Skills</button>
+              <button onClick={() => { if (confirm('Delete this task?')) onDelete(task.id) }}
+                className="text-xs px-3 py-1.5 rounded text-red-400 hover:bg-red-500/20 transition-colors ml-auto"
+              ><Trash2 className="w-3 h-3" /> Delete</button>
+            </>
+          )}
+          {task.status === 'in_progress' && (
+            <>
+              <button onClick={() => onComplete(task.id)}
+                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+              ><CheckCircle2 className="w-3 h-3" /> Complete</button>
+              <button onClick={() => onBlock(task.id)}
+                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors"
+              ><Ban className="w-3 h-3" /> Block</button>
+              <button onClick={() => onUnclaim(task.id)}
+                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors ml-auto"
+              ><RotateCcw className="w-3 h-3" /> Release</button>
+            </>
+          )}
+          {task.status === 'blocked' && (
+            <button onClick={() => onUnclaim(task.id)}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors"
+            ><RotateCcw className="w-3 h-3" /> Release back to available</button>
+          )}
+          {task.status === 'done' && (
+            <button onClick={() => { if (confirm('Delete this task?')) onDelete(task.id) }}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded text-red-400 hover:bg-red-500/20 transition-colors ml-auto"
+            ><Trash2 className="w-3 h-3" /> Delete</button>
+          )}
+        </div>
       </div>
     </div>
   )

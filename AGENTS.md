@@ -234,3 +234,116 @@ The importer parses:
 - `## Phase N — Name` headers → maps to `roadmap_item` field
 - `- [ ] Task description` → pending tasks (skips `- [x]` done items)
 - Priority is auto-derived from phase number (Phase 1 = urgent, Phase 4 = low)
+
+## Task Skills / Capability Tags (Phase 4)
+
+Tasks can be tagged with **required skills** — comma-separated tags like `"rust,typescript,react"`. Agents can declare their capabilities during registration for smart task matching.
+
+### Setting Skills on a Task
+```http
+POST http://localhost:8727/api/tasks/{task_id}/skills
+Content-Type: application/json
+{"skills": "rust,typescript,dns"}
+```
+
+Clear skills:
+```http
+POST http://localhost:8727/api/tasks/{task_id}/skills
+Content-Type: application/json
+{"skills": ""}
+```
+
+### CLI
+```bash
+kanban skills <task-id> --skills=rust,typescript
+kanban skills <task-id> --skills=""    # clear
+```
+
+## Priority Scoring (Phase 4)
+
+The kanban automatically scores available tasks to recommend the highest-value work. Score breakdown:
+
+| Factor | Weight | Cap |
+|--------|--------|-----|
+| Base (Urgent=80 → Low=20) | `(4-priority)×20` | — |
+| Stale time bonus | +5/hr | +30 |
+| Unblock value | +10 per dependent | +30 |
+| Skill match | +15 per match | +30 |
+
+### Get Suggestions
+```http
+GET http://localhost:8727/api/tasks/suggest?limit=3
+GET http://localhost:8727/api/tasks/suggest?agent_id=hermes&limit=5
+```
+
+Response includes per-task reasoning:
+```json
+[
+  {
+    "task": { "id": "...", "title": "Add DNS fallback", "priority": 0, "required_skills": "rust" },
+    "score": 115,
+    "reason": "+5 stale (1.2h old); +10 unblocks 1 task(s)"
+  }
+]
+```
+
+### CLI
+```bash
+kanban suggest                     # top 5 recommendations
+kanban suggest --agent=hermes      # skill-matched to agent
+kanban suggest --limit=3 --json    # JSON output
+```
+
+## Swarm Mode — Agent Registry (Phase 4)
+
+Agents register with the kanban and send periodic heartbeats. The swarm shows who's online, what they're working on, and what skills they have.
+
+### Register
+```http
+POST http://localhost:8727/api/agents/register
+Content-Type: application/json
+{
+  "agent_id": "hermes-terminal",
+  "host": "dev-server-1",
+  "capabilities": "rust,python,typescript,react",
+  "repo_focus": "spacetimedb-kanban"
+}
+```
+
+### Heartbeat (every 30s recommended)
+```http
+POST http://localhost:8727/api/agents/hermes-terminal/heartbeat
+Content-Type: application/json
+{"status": "busy", "current_task_id": "task_xxx"}
+```
+
+### View Swarm
+```http
+GET http://localhost:8727/api/agents
+```
+
+Returns all registered agents with status, capabilities, and heartbeat freshness.
+
+### CLI
+```bash
+kanban register --capabilities=rust,typescript --repo=sample-repo-p
+kanban heartbeat                   # send online pulse
+kanban heartbeat --status=busy --task=task_xxx
+```
+
+## CLI Reference
+
+| Command | Description |
+|---------|-------------|
+| `kanban list` | List tasks |
+| `kanban claim <id>` | Claim a task |
+| `kanban complete <id>` | Complete a task |
+| `kanban block <id>` | Block a task |
+| `kanban unclaim <id>` | Release a task |
+| `kanban create --title=...` | Create a task |
+| `kanban skills <id> --skills=...` | Set required skills |
+| `kanban suggest` | Show recommended tasks |
+| `kanban register` | Join the swarm |
+| `kanban heartbeat` | Send agent pulse |
+| `kanban roadmap-import` | Bulk-import from ROADMAP.md |
+| `kanban check-branch` | Validate branch name |
