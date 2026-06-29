@@ -92,6 +92,7 @@ fn delete_logs_for_task(ctx: &ReducerContext, task_id: &str) {
 #[reducer]
 pub fn add_task(
     ctx: &ReducerContext,
+    id: String,
     title: String,
     description: String,
     priority: u8,
@@ -100,10 +101,10 @@ pub fn add_task(
     created_by: String,
 ) -> Result<(), String> {
     let now = now_ms(ctx);
-    let id = make_id("task", ctx);
+    let task_id = if id.is_empty() { make_id("task", ctx) } else { id };
 
     ctx.db.tasks().insert(Task {
-        id: id.clone(),
+        id: task_id.clone(),
         title,
         description,
         priority,
@@ -120,7 +121,7 @@ pub fn add_task(
         score: 0,
     });
 
-    log_action(ctx, &id, "created", None, None);
+    log_action(ctx, &task_id, "created", None, None);
     Ok(())
 }
 
