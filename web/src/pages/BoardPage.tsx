@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
   Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
-  CheckSquare, Square
+  CheckSquare, Square, LayoutGrid, List
 } from 'lucide-react'
 import { api, type SuggestResult, type Agent, type Task as ApiTask } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
@@ -50,6 +50,7 @@ export default function BoardPage() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchProcessing, setBatchProcessing] = useState(false)
+  const [compactMode, setCompactMode] = useState(false)
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -292,7 +293,72 @@ export default function BoardPage() {
     )
   }
 
-  const renderTaskCard = (task: Task) => (
+  const renderTaskCard = (task: Task) => {
+    const priorityColor = ({0: 'border-l-red-500', 1: 'border-l-orange-400', 2: 'border-l-blue-400', 3: 'border-l-slate-400'} as Record<number, string>)[task.priority] || 'border-l-slate-400'
+
+    if (compactMode) {
+      // Compact card: minimal info, colored left border, title only
+      return (
+        <div key={task.id}
+          draggable
+          onDragStart={() => handleDragStart(task.id)}
+          onDragEnd={handleDragEnd}
+          onClick={() => setDetailTaskId(task.id)}
+          className={`bg-[var(--color-card)] rounded border-l-4 border border-[var(--color-border)] py-1.5 px-2 cursor-pointer hover:border-[var(--color-ring)] transition-colors flex items-center gap-2 ${
+            priorityColor
+          } ${
+            draggedTaskId === task.id ? 'opacity-50' : ''
+          }`}
+        >
+          {selectMode && (
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleSelect(task.id) }}
+              className="flex-shrink-0 text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+            >
+              {selectedIds.has(task.id)
+                ? <CheckSquare className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+                : <Square className="w-3.5 h-3.5" />
+              }
+            </button>
+          )}
+          <div className="min-w-0 flex-1 flex items-center gap-2">
+            <span className="text-sm font-medium truncate">{task.title}</span>
+            {task.assignedTo && (
+              <span className="text-[10px] text-[var(--color-muted)] flex-shrink-0">@{task.assignedTo}</span>
+            )}
+            {task.repo && (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-white/8 text-[var(--color-muted)] font-medium flex-shrink-0">{task.repo}</span>
+            )}
+            {renderDependencyBadge(task.dependsOn)}
+          </div>
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            {task.status === 'available' && (
+              <button onClick={(e) => { e.stopPropagation(); handleClaim(task.id, 'web-user') }}
+                className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors">Claim</button>
+            )}
+            {task.status === 'in_progress' && (
+              <>
+                <button onClick={(e) => { e.stopPropagation(); handleComplete(task.id) }}
+                  className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors">Done</button>
+                <button onClick={(e) => { e.stopPropagation(); handleBlock(task.id) }}
+                  className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors">Block</button>
+              </>
+            )}
+            {task.status === 'blocked' && (
+              <button onClick={(e) => { e.stopPropagation(); handleUnclaim(task.id) }}
+                className="text-xs px-1.5 py-0.5 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors">Release</button>
+            )}
+            {task.status === 'done' && (
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id) }}
+                className="text-xs px-1.5 py-0.5 rounded text-red-400 hover:bg-red-500/20 transition-colors">Del</button>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    // Detailed card (default)
+    return (
     <div key={task.id}
       draggable
       onDragStart={() => handleDragStart(task.id)}
@@ -390,7 +456,8 @@ export default function BoardPage() {
         )}
       </div>
     </div>
-  )
+    )
+  }
 
   // Sort: priority asc, then createdAt desc
   const sorted = [...tasks].sort((a, b) => a.priority - b.priority || Number(b.createdAt - a.createdAt))
@@ -413,6 +480,7 @@ export default function BoardPage() {
         <div className="min-w-0">
           <h1 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
             Board
+            <span className="text-xs px-1.5 py-0.5 rounded-full bg-white/5 text-[var(--color-muted)] font-normal">{tasks.length}</span>
             {connected ? (
               <span className="flex items-center gap-1 text-xs text-emerald-400 font-normal">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
@@ -470,6 +538,12 @@ export default function BoardPage() {
               selectMode ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
             }`}
           ><CheckSquare className="w-3 h-3" /> Select</button>
+          <button onClick={() => setCompactMode(!compactMode)}
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors hidden sm:inline-flex"
+            title={compactMode ? 'Detailed view' : 'Compact view'}
+          >
+            {compactMode ? <LayoutGrid className="w-3 h-3" /> : <List className="w-3 h-3" />}
+          </button>
           <button onClick={() => setShowGraph(true)}
             className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-violet-500/15 text-violet-400 hover:bg-violet-500/30 transition-colors"
           ><span className="text-sm">🗺️</span> Graph</button>

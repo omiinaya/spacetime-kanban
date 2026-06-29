@@ -124,6 +124,12 @@
 - [x] Sequential batch processing with progress feedback
 - [x] Select/deselect all, smart toggle per card
 
+## Phase 19 — Compact Card View ✅
+- [x] View toggle button (LayoutGrid/List icons) in board header
+- [x] Compact cards: colored priority left border, condensed layout, inline action buttons
+- [x] Detailed cards preserved as default view
+- [x] Total task count badge next to Board title
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
