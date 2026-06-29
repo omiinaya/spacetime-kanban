@@ -102,6 +102,13 @@
 - [x] Auto-refresh every 15 seconds, manual refresh button
 - [x] AgentHealth nav item between Webhooks and Activity Log
 
+## Phase 16 — Drag & Drop Kanban Board ✅
+- [x] Task cards are draggable between columns (Available, In Progress, Blocked, Done)
+- [x] Drop zones with visual feedback: highlighted border + background on drag over
+- [x] Smart transitions: drop on Available = unclaim, In Progress = claim, Blocked = block, Done = complete
+- [x] Opacity dimming on dragged card, primary ring on drop zone
+- [x] "Drag cards between columns" hint in board header
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
