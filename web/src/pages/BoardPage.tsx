@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
-  Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github
+  Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download
 } from 'lucide-react'
 import { api, type SuggestResult, type Agent, type Task as ApiTask } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
@@ -143,6 +143,11 @@ export default function BoardPage() {
     } catch (e: any) {
       alert(`Drop failed: ${e.message}`)
     }
+  }
+
+  const handleExport = (format: 'csv' | 'json') => {
+    const url = api.tasks.export(format, repoFilter || undefined)
+    window.open(url, '_blank')
   }
 
   const handleDelete = async (taskId: string) => {
@@ -405,6 +410,15 @@ export default function BoardPage() {
           <button onClick={() => api.tasks.seed()}
             className="text-xs px-2.5 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors hidden sm:inline-block"
           >Seed</button>
+          <div className="relative group hidden sm:inline-block">
+            <button className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors">
+              <Download className="w-3 h-3" /> Export
+            </button>
+            <div className="absolute right-0 top-full mt-1 w-24 bg-[var(--color-card)] border border-[var(--color-border)] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              <button onClick={() => handleExport('csv')} className="w-full text-left text-xs px-3 py-2 hover:bg-white/5 transition-colors rounded-t-lg">CSV</button>
+              <button onClick={() => handleExport('json')} className="w-full text-left text-xs px-3 py-2 hover:bg-white/5 transition-colors rounded-b-lg">JSON</button>
+            </div>
+          </div>
           <button onClick={() => setShowCreate(true)}
             className="flex items-center gap-1 text-sm px-3 py-1.5 rounded bg-[var(--color-primary)] text-white hover:bg-blue-600 transition-colors"
           ><Plus className="w-4 h-4" /> New</button>

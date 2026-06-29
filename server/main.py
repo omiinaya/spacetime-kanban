@@ -10,7 +10,7 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -331,6 +331,55 @@ async def seed_tasks():
     """Seed sample tasks into the database."""
     await _call("seed_sample_tasks", [])
     return {"status": "seeded"}
+
+
+import csv
+import io
+
+
+@app.get("/api/tasks/export")
+async def export_tasks(format: str = "json", status: str = "", repo: str = ""):
+    """Export tasks as CSV or JSON with optional filters."""
+    sql = "SELECT * FROM tasks"
+    filters = []
+    if status:
+        filters.append(f"status = '{status}'")
+    if repo:
+        filters.append(f"repo = '{repo}'")
+    if filters:
+        sql += " WHERE " + " AND ".join(filters)
+    rows = await _sql(sql)
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["id", "title", "description", "priority", "status",
+                         "assigned_to", "repo", "branch", "roadmap_item",
+                         "created_by", "created_at", "updated_at",
+                         "depends_on", "required_skills", "score"])
+        for r in rows:
+            writer.writerow([
+                r.get("id", ""), r.get("title", ""), r.get("description", ""),
+                r.get("priority", 2), r.get("status", ""), r.get("assigned_to", ""),
+                r.get("repo", ""), r.get("branch", ""), r.get("roadmap_item", ""),
+                r.get("created_by", ""), r.get("created_at", 0), r.get("updated_at", 0),
+                r.get("depends_on", ""), r.get("required_skills", ""), r.get("score", 0),
+            ])
+        csv_content = output.getvalue()
+        return Response(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=kanban-tasks.csv"},
+        )
+    else:
+        tasks = []
+        for r in rows:
+            tasks.append(_row_to_task(r).model_dump())
+        return JSONResponse(
+            content=tasks,
+            headers={"Content-Disposition": "attachment; filename=kanban-tasks.json"},
+        )
+
 
 @app.get("/api/tasks/{task_id}", response_model=TaskOut)
 async def get_task(task_id: str):
