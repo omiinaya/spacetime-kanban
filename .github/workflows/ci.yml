@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  NODE_VERSION: "20"
+
+jobs:
+  lint:
+    name: Lint & Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check Python syntax
+        run: |
+          python3 -m py_compile server/main.py
+          python3 -m py_compile server/webhooks.py
+          python3 -m py_compile server/issue_sync.py
+          python3 -m py_compile test_e2e.py
+
+      - name: Set up Rust (wasm target)
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-unknown-unknown
+
+      - name: Build STDB module
+        working-directory: server/spacetimedb
+        run: cargo build --release --target wasm32-unknown-unknown
+        timeout-minutes: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build web frontend
+        working-directory: web
+        run: npm run build
+        timeout-minutes: 5
+
+      - name: Check git status clean
+        run: git diff --stat --exit-code
