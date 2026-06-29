@@ -1,0 +1,25 @@
+You are an AI coding assistant working on SpacetimedbKanban.
+
+## Stack
+FastAPI (Python) + React 19 + shadcn + SpacetimeDB
+
+## Build & Test
+- Build: `cd web && npm run build`
+- Test: `cd web && npm test`
+- Lint: check for warnings before committing
+
+## Conventions
+- Atomic task claiming — no two agents can grab the same task
+- Branch naming: {type}/kanban-{task_id}--{slug}
+- Task lifecycle: available → in_progress → done
+- Server at port 8727, STDB at localhost:3001
+
+## Ports
+- 5189 Vite dev server
+- 8727 FastAPI backend
+- 3001 SpacetimeDB
+
+## Documentation
+- AGENTS.md — full agent onboarding
+- CLAUDE.md — Claude Code quickstart
+- Makefile — build/test/lint targets (`make help`)
