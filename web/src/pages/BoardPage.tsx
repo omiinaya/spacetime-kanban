@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
-  Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search
+  Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github
 } from 'lucide-react'
 import { api, type SuggestResult, type Agent, type Task as ApiTask } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
@@ -615,6 +615,8 @@ function TaskDetailDialog({
 }) {
   const [logs, setLogs] = useState<any[]>([])
   const [loadingLogs, setLoadingLogs] = useState(true)
+  const [issueLink, setIssueLink] = useState<{ html_url: string; issue_number: number; repo: string; status?: string } | null>(null)
+  const [loadingIssue, setLoadingIssue] = useState(true)
 
   const task = tasks.find(t => t.id === taskId)
   const downstream = tasks.filter(t => t.dependsOn === taskId)
@@ -627,6 +629,15 @@ function TaskDetailDialog({
     api.logs.list(taskId, 20).then(l => {
       if (!cancelled) { setLogs(l); setLoadingLogs(false) }
     }).catch(() => { if (!cancelled) setLoadingLogs(false) })
+    return () => { cancelled = true }
+  }, [taskId])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingIssue(true)
+    api.issues.get(taskId).then(link => {
+      if (!cancelled) { setIssueLink(link); setLoadingIssue(false) }
+    }).catch(() => { if (!cancelled) setLoadingIssue(false) })
     return () => { cancelled = true }
   }, [taskId])
 
@@ -723,6 +734,56 @@ function TaskDetailDialog({
                     <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400"><Cpu className="w-2.5 h-2.5 inline mr-0.5" />{s.trim()}</span>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* GitHub Issue */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-2 flex items-center gap-1">
+              <Github className="w-3 h-3" /> GitHub Issue
+            </p>
+            {loadingIssue ? (
+              <div className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
+                <Loader2 className="w-3 h-3 animate-spin" /> Checking...
+              </div>
+            ) : issueLink ? (
+              <div className="flex items-center gap-2 p-2 rounded bg-[var(--color-background)] border border-[var(--color-border)]">
+                <Github className="w-4 h-4 text-[var(--color-muted)] shrink-0" />
+                <span className="text-sm text-[var(--color-foreground)]">
+                  <a href={issueLink.html_url} target="_blank" rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
+                    {issueLink.repo}#{issueLink.issue_number}
+                  </a>
+                </span>
+                <span className={`text-[10px] px-1 py-0.5 rounded ml-auto ${
+                  issueLink.html_url.includes('closed') || issueLink.status === 'closed'
+                    ? 'bg-red-500/20 text-red-400'
+                    : 'bg-emerald-500/20 text-emerald-400'
+                }`}>{issueLink.status}</span>
+                <a href={issueLink.html_url} target="_blank" rel="noopener noreferrer"
+                  className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-[var(--color-muted)]">No GitHub issue linked</p>
+                <button onClick={async () => {
+                  const repo = task.repo || prompt('GitHub repo (owner/repo):')
+                  if (!repo) return
+                  const labels = prompt('Labels (optional, comma-separated):') || ''
+                  try {
+                    const result = await api.issues.create(task.id, repo, labels)
+                    setIssueLink({ html_url: result.html_url, issue_number: result.issue_number, repo })
+                  } catch (e: any) {
+                    alert(`Failed to create issue: ${e.message}`)
+                  }
+                }}
+                  className="text-xs px-2 py-1 rounded bg-[var(--color-primary)] text-white hover:bg-blue-600 transition-colors ml-auto"
+                >
+                  <Plus className="w-3 h-3 inline mr-0.5" /> Create Issue
+                </button>
               </div>
             )}
           </div>

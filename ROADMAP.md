@@ -66,3 +66,11 @@
 - [x] Webhook CLI — `kanban webhook list/add/remove` with event filtering
 - [x] Backward-compatible: legacy `discord_webhook_url` still fires alongside new webhooks
 - [x] GitHub issue sync — two-way sync between kanban tasks and GitHub issues
+
+## Phase 11 — Web UI for GitHub Integration ✅
+- [x] GitHub issue section in task detail modal — shows linked issue with status + link
+- [x] "Create Issue" button in detail modal — creates GH issue from kanban task
+- [x] Issues page — dedicated page listing all linked issues with repo filter, search, status
+- [x] GitHub Issues nav item in sidebar
+- [x] MCP issue tools — kanban_issue_link, kanban_issue_create, kanban_issue_status, kanban_issue_list
+- [x] API client methods for issue operations in web frontend

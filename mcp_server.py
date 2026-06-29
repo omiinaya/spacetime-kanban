@@ -315,6 +315,54 @@ async def list_tools() -> list[Tool]:
                 "required": ["task_id"],
             },
         ),
+        Tool(
+            name="kanban_issue_link",
+            description="Link a kanban task to an existing GitHub issue.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Kanban task ID"},
+                    "repo": {"type": "string", "description": "GitHub repo (owner/repo)"},
+                    "issue_number": {"type": "integer", "description": "GitHub issue number"},
+                },
+                "required": ["task_id", "repo", "issue_number"],
+            },
+        ),
+        Tool(
+            name="kanban_issue_create",
+            description="Create a GitHub issue from a kanban task and auto-link them.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Kanban task ID"},
+                    "repo": {"type": "string", "description": "GitHub repo (default: from config)", "default": ""},
+                    "labels": {"type": "string", "description": "Comma-separated labels", "default": ""},
+                    "assignee": {"type": "string", "description": "GitHub username to assign", "default": ""},
+                },
+                "required": ["task_id"],
+            },
+        ),
+        Tool(
+            name="kanban_issue_status",
+            description="Get the GitHub issue link status for a kanban task.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Kanban task ID"},
+                },
+                "required": ["task_id"],
+            },
+        ),
+        Tool(
+            name="kanban_issue_list",
+            description="List all kanban-task ⟷ GitHub-issue links.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "repo": {"type": "string", "description": "Filter by repo (owner/repo)", "default": ""},
+                },
+            },
+        ),
     ]
 
 
@@ -348,6 +396,10 @@ def _route(name: str, args: dict) -> dict:
         "kanban_set_capabilities": _handle_set_capabilities,
         "kanban_add_log": _handle_add_log,
         "kanban_get_logs": _handle_get_logs,
+        "kanban_issue_link": _handle_issue_link,
+        "kanban_issue_create": _handle_issue_create,
+        "kanban_issue_status": _handle_issue_status,
+        "kanban_issue_list": _handle_issue_list,
     }
     handler = handlers.get(name)
     if not handler:
@@ -543,6 +595,41 @@ def _handle_get_logs(args: dict) -> dict:
         "task_id": task_id,
         "logs": logs if isinstance(logs, list) else [],
         "count": len(logs) if isinstance(logs, list) else 0,
+    }
+
+
+def _handle_issue_link(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    repo = _get_str(args, "repo")
+    issue_number = _get_int(args, "issue_number")
+    return api_post("/api/issues/link", {
+        "task_id": task_id,
+        "repo": repo,
+        "issue_number": issue_number,
+    })
+
+
+def _handle_issue_create(args: dict) -> dict:
+    return api_post("/api/issues/create", {
+        "task_id": _get_str(args, "task_id"),
+        "repo": _get_str(args, "repo"),
+        "labels": _get_str(args, "labels"),
+        "assignee": _get_str(args, "assignee"),
+    })
+
+
+def _handle_issue_status(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    return api_get(f"/api/issues/{task_id}")
+
+
+def _handle_issue_list(args: dict) -> dict:
+    repo = _get_str(args, "repo")
+    qs = f"?repo={repo}" if repo else ""
+    links = api_get(f"/api/issues{qs}")
+    return {
+        "links": links if isinstance(links, list) else [],
+        "count": len(links) if isinstance(links, list) else 0,
     }
 
 

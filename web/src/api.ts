@@ -88,6 +88,16 @@ async function apiDelete<T>(path: string): Promise<T> {
   return res.json()
 }
 
+export interface IssueLink {
+  kanban_task_id: string
+  issue_number: number
+  repo: string
+  issue_url: string
+  html_url: string
+  status: string
+  linked_at: number
+}
+
 export const api = {
   tasks: {
     list: (params?: { status?: string; repo?: string }) => {
@@ -159,5 +169,20 @@ export const api = {
     throughput: (days?: number) => apiGet<{ date: string; completed: number }[]>(`/analytics/throughput${days ? `?days=${days}` : ''}`),
     cycleTimes: () => apiGet<{ repo: string; count: number; avg_hours: number; min_hours: number; max_hours: number }[]>('/analytics/cycle-times'),
     agents: () => apiGet<{ id: string; status: string; completed: number; blocked: number; capabilities: string | null; repo_focus: string | null; last_heartbeat: number }[]>('/analytics/agents'),
+  },
+  issues: {
+    list: (repo?: string) => {
+      const qs = repo ? `?repo=${encodeURIComponent(repo)}` : ''
+      return apiGet<IssueLink[]>(`/issues${qs}`)
+    },
+    get: (taskId: string) => apiGet<IssueLink>(`/issues/${taskId}`),
+    link: (taskId: string, repo: string, issueNumber: number) =>
+      apiPost<IssueLink>('/issues/link', { task_id: taskId, repo, issue_number: issueNumber }),
+    unlink: (taskId: string) =>
+      apiPost<{ status: string }>(`/issues/unlink?task_id=${taskId}`),
+    create: (taskId: string, repo?: string, labels?: string, assignee?: string) =>
+      apiPost<{ status: string; task_id: string; issue_number: number; html_url: string }>('/issues/create', {
+        task_id: taskId, repo: repo || '', labels: labels || '', assignee: assignee || '',
+      }),
   },
 }
