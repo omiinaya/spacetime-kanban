@@ -51,6 +51,8 @@ export default function AnalyticsPage() {
       }
     }
     load()
+    const interval = setInterval(load, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   if (loading) return (
@@ -156,7 +158,7 @@ export default function AnalyticsPage() {
                   title={`${p.date}: ${p.completed} completed`}
                 />
                 <span className="text-[9px] text-[var(--color-muted)] -rotate-45 origin-left whitespace-nowrap">
-                  {p.date === 'today' ? 'now' : p.date.replace('d ago', 'd')}
+                  {p.date}
                 </span>
               </div>
             ))}
