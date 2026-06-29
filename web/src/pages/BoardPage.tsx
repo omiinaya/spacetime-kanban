@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
-  Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download
+  Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
+  CheckSquare, Square
 } from 'lucide-react'
 import { api, type SuggestResult, type Agent, type Task as ApiTask } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
@@ -46,6 +47,9 @@ export default function BoardPage() {
   const toastIdCounter = useRef(0)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchProcessing, setBatchProcessing] = useState(false)
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -148,6 +152,50 @@ export default function BoardPage() {
   const handleExport = (format: 'csv' | 'json') => {
     const url = api.tasks.export(format, repoFilter || undefined)
     window.open(url, '_blank')
+  }
+
+  const toggleSelect = (taskId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(taskId)) next.delete(taskId)
+      else next.add(taskId)
+      return next
+    })
+  }
+
+  const selectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filtered.map(t => t.id)))
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+    setSelectMode(false)
+  }
+
+  const handleBatch = async (action: 'claim' | 'complete' | 'block' | 'unclaim' | 'delete') => {
+    if (selectedIds.size === 0) return
+    const label = action === 'delete' ? 'Delete' : action === 'block' ? 'Block' : action === 'unclaim' ? 'Release' : action.charAt(0).toUpperCase() + action.slice(1)
+    if (!confirm(`${label} ${selectedIds.size} selected task(s)?`)) return
+    setBatchProcessing(true)
+    let done = 0
+    const total = selectedIds.size
+    for (const id of selectedIds) {
+      try {
+        if (action === 'claim') await api.tasks.claim(id, 'web-user')
+        else if (action === 'complete') await api.tasks.complete(id)
+        else if (action === 'block') await api.tasks.block(id, 'Batch blocked')
+        else if (action === 'unclaim') await api.tasks.unclaim(id)
+        else if (action === 'delete') await api.tasks.delete(id)
+        done++
+      } catch { /* skip failures */ }
+    }
+    setBatchProcessing(false)
+    setSelectedIds(new Set())
+    alert(`${label}d ${done}/${total} tasks`)
   }
 
   const handleDelete = async (taskId: string) => {
@@ -255,9 +303,22 @@ export default function BoardPage() {
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${PRIORITY_COLORS[task.priority] || ''}`}>
-          {PRIORITY_LABELS[task.priority] || task.priority}
-        </span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {selectMode && (
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleSelect(task.id) }}
+              className="flex-shrink-0 text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+            >
+              {selectedIds.has(task.id)
+                ? <CheckSquare className="w-4 h-4 text-[var(--color-primary)]" />
+                : <Square className="w-4 h-4" />
+              }
+            </button>
+          )}
+          <span className={`text-xs px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${PRIORITY_COLORS[task.priority] || ''}`}>
+            {PRIORITY_LABELS[task.priority] || task.priority}
+          </span>
+        </div>
         {task.assignedTo && (
           <span className="text-xs text-[var(--color-muted)] truncate max-w-[100px]">
             {task.assignedTo}
@@ -404,6 +465,11 @@ export default function BoardPage() {
               showPanel === 'agents' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
             }`}
           ><Users className="w-3 h-3" /> Agents</button>
+          <button onClick={() => setSelectMode(!selectMode)}
+            className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded transition-colors ${
+              selectMode ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
+            }`}
+          ><CheckSquare className="w-3 h-3" /> Select</button>
           <button onClick={() => setShowGraph(true)}
             className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-violet-500/15 text-violet-400 hover:bg-violet-500/30 transition-colors"
           ><span className="text-sm">🗺️</span> Graph</button>
@@ -632,6 +698,45 @@ export default function BoardPage() {
           onSelectTask={(id) => { setDetailTaskId(id); setShowGraph(false) }}
           onClose={() => setShowGraph(false)}
         />
+      )}
+
+      {/* Bulk Action Bar */}
+      {(selectMode || selectedIds.size > 0) && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 backdrop-blur-sm px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button onClick={selectAll} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors">
+              {selectedIds.size === filtered.length ? 'Deselect all' : 'Select all'}
+            </button>
+            <span className="text-xs text-[var(--color-muted)]">
+              {selectedIds.size} of {filtered.length} selected
+            </span>
+            <button onClick={clearSelection} className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-white/5 text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors">
+              <X className="w-3 h-3" /> Clear
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => handleBatch('claim')}
+              disabled={batchProcessing}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors disabled:opacity-40"
+            ><Play className="w-3 h-3" /> Claim</button>
+            <button onClick={() => handleBatch('complete')}
+              disabled={batchProcessing}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors disabled:opacity-40"
+            ><CheckCircle2 className="w-3 h-3" /> Complete</button>
+            <button onClick={() => handleBatch('block')}
+              disabled={batchProcessing}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors disabled:opacity-40"
+            ><Ban className="w-3 h-3" /> Block</button>
+            <button onClick={() => handleBatch('unclaim')}
+              disabled={batchProcessing}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors disabled:opacity-40"
+            ><RotateCcw className="w-3 h-3" /> Release</button>
+            <button onClick={() => handleBatch('delete')}
+              disabled={batchProcessing}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-40"
+            ><Trash2 className="w-3 h-3" /> Delete</button>
+          </div>
+        </div>
       )}
     </div>
   )

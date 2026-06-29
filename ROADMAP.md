@@ -116,6 +116,14 @@
 - [x] Export button with CSV/JSON dropdown on Board page
 - [x] Export button with CSV/JSON dropdown on Analytics page
 
+## Phase 18 — Bulk Operations ✅
+- [x] Select mode toggle in board header (highlighted when active)
+- [x] Checkbox on every task card in select mode
+- [x] Fixed bottom action bar: Select all, count display, Clear
+- [x] Bulk action buttons: Claim, Complete, Block, Release, Delete
+- [x] Sequential batch processing with progress feedback
+- [x] Select/deselect all, smart toggle per card
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
