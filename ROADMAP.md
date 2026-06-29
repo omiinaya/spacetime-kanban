@@ -130,6 +130,12 @@
 - [x] Detailed cards preserved as default view
 - [x] Total task count badge next to Board title
 
+## Phase 20 — Advanced Filters ✅
+- [x] Collapsible filter bar with Priority multi-select (Urgent/High/Medium/Low)
+- [x] Assignee filter with Unassigned option, extracted from task data
+- [x] Filters button highlights when active, clear-all button when filters applied
+- [x] Compound filtering: search + repo + priority + assignee all stack
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race

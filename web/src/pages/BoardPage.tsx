@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
   Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
-  CheckSquare, Square, LayoutGrid, List
+  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal
 } from 'lucide-react'
 import { api, type SuggestResult, type Agent, type Task as ApiTask } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
@@ -51,6 +51,9 @@ export default function BoardPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchProcessing, setBatchProcessing] = useState(false)
   const [compactMode, setCompactMode] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [filterPriorities, setFilterPriorities] = useState<Set<number>>(new Set())
+  const [filterAssignees, setFilterAssignees] = useState<Set<string>>(new Set())
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -461,9 +464,10 @@ export default function BoardPage() {
 
   // Sort: priority asc, then createdAt desc
   const sorted = [...tasks].sort((a, b) => a.priority - b.priority || Number(b.createdAt - a.createdAt))
-  // Filter: repo + search
+  // Filter: repo
   const repoFiltered = repoFilter ? sorted.filter(t => t.repo === repoFilter) : sorted
-  const filtered = searchQuery
+  // Filter: search text
+  const searchFiltered = searchQuery
     ? repoFiltered.filter(t =>
         t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -472,6 +476,15 @@ export default function BoardPage() {
         t.id.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : repoFiltered
+  // Filter: priority + assignee
+  const filtered = searchFiltered.filter(t => {
+    if (filterPriorities.size > 0 && !filterPriorities.has(t.priority)) return false
+    if (filterAssignees.size > 0) {
+      const taskAssignee = t.assignedTo || 'unassigned'
+      if (!filterAssignees.has(taskAssignee)) return false
+    }
+    return true
+  })
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
@@ -528,6 +541,13 @@ export default function BoardPage() {
               showPanel === 'suggestions' ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
             }`}
           ><Lightbulb className="w-3 h-3" /> Suggest</button>
+          <button onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded transition-colors ${
+              showFilters || filterPriorities.size > 0 || filterAssignees.size > 0
+                ? 'bg-[var(--color-primary)]/15 text-[var(--color-primary)]'
+                : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
+            }`}
+          ><SlidersHorizontal className="w-3 h-3" /> Filters</button>
           <button onClick={() => setShowPanel(showPanel === 'agents' ? 'none' : 'agents')}
             className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded transition-colors ${
               showPanel === 'agents' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
@@ -564,6 +584,76 @@ export default function BoardPage() {
           ><Plus className="w-4 h-4" /> New</button>
         </div>
       </div>
+
+      {/* Advanced Filters Bar */}
+      {showFilters && (
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Priority filter */}
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Priority</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[0, 1, 2, 3].map(p => {
+                  const active = filterPriorities.has(p)
+                  return (
+                    <button key={p}
+                      onClick={() => setFilterPriorities(prev => {
+                        const next = new Set(prev)
+                        next.has(p) ? next.delete(p) : next.add(p)
+                        return next
+                      })}
+                      className={`text-xs px-2 py-1 rounded-md border transition-colors ${
+                        active
+                          ? 'bg-[var(--color-primary)]/15 border-[var(--color-primary)]/30 text-white'
+                          : 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--color-muted)]'
+                      }`}
+                    >
+                      {active ? '✓ ' : ''}{PRIORITY_LABELS[p] || p}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Assignee filter */}
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Assignee</p>
+              <div className="flex flex-wrap gap-1.5">
+                {['unassigned', ...new Set(tasks.map(t => t.assignedTo).filter(Boolean) as string[]) ].map(a => {
+                  const active = filterAssignees.has(a)
+                  return (
+                    <button key={a}
+                      onClick={() => setFilterAssignees(prev => {
+                        const next = new Set(prev)
+                        next.has(a) ? next.delete(a) : next.add(a)
+                        return next
+                      })}
+                      className={`text-xs px-2 py-1 rounded-md border transition-colors ${
+                        active
+                          ? 'bg-[var(--color-primary)]/15 border-[var(--color-primary)]/30 text-white'
+                          : 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--color-muted)]'
+                      }`}
+                    >
+                      {active ? '✓ ' : ''}{a === 'unassigned' ? 'Unassigned' : a}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Clear filters */}
+          {(filterPriorities.size > 0 || filterAssignees.size > 0) && (
+            <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border)]">
+              <span className="text-xs text-[var(--color-muted)]">Active filters</span>
+              <button
+                onClick={() => { setFilterPriorities(new Set()); setFilterAssignees(new Set()) }}
+                className="text-xs px-2 py-1 rounded bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors"
+              >Clear all filters</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Live Toast Notifications */}
       {toasts.length > 0 && (
