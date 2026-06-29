@@ -1,0 +1,26 @@
+{
+  "name": "SpacetimedbKanban",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  },
+  "postCreateCommand": "cd server && pip install -r requirements.txt && cd ../web && npm install",
+  "forwardPorts": [
+    5189,
+    8727,
+    3001
+  ],
+  "remoteUser": "vscode"
+}

@@ -1,0 +1,29 @@
+#!/bin/sh
+# Pre-commit hook — run lint checks before every commit
+# Installed via: make setup-git-hooks
+
+echo "🔍 Running pre-commit checks..."
+
+# Check for unformatted code
+if [ -f Makefile ]; then
+  if grep -q '^fmt:' Makefile; then
+    echo "  Running fmt check..."
+    make fmt-check 2>/dev/null || make fmt 2>/dev/null
+  fi
+  if grep -q '^lint:' Makefile; then
+    echo "  Running lint check..."
+    make lint 2>/dev/null || true
+  fi
+fi
+
+# Check that AGENTS.md exists
+if [ ! -f AGENTS.md ]; then
+  echo "⚠️  WARNING: AGENTS.md is missing — consider adding it"
+fi
+
+# Check for debug artifacts
+if git diff --cached --name-only | grep -q '\.only\|console\.log\|dbg!'; then
+  echo "⚠️  WARNING: Found possible debug artifacts (.only, console.log, dbg!)"
+fi
+
+echo "✅ Pre-commit checks complete"

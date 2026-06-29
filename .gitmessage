@@ -1,0 +1,16 @@
+# Conventional Commit Format
+# <type>: <concise description>
+#
+# Types: feat, fix, docs, refactor, test, chore, perf, style, ci
+#
+# Examples:
+#   feat: add DNS-over-HTTPS fallback
+#   fix: resolve EPG channel icon parsing for self-closing tags
+#   docs: update AGENTS.md with new task-to-file mapping
+#   refactor: extract cache logic to separate module
+#   test: add integration tests for streaming endpoints
+#
+# Keep subject under 72 chars. Use body for details.
+#
+# If this commit is for a kanban task, reference it:
+#   docs(task_1748397912_abc12345): ...
