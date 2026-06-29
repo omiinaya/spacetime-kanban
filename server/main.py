@@ -122,6 +122,27 @@ class SuggestResult(BaseModel):
     score: int
     reason: str = ""
 
+class LabelOut(BaseModel):
+    id: str
+    name: str
+    color: str
+    description: str = ""
+    created_at: int = 0
+
+class LabelCreate(BaseModel):
+    id: str = ""
+    name: str
+    color: str = "#0ea5e9"
+    description: str = ""
+
+class LabelUpdate(BaseModel):
+    name: str = ""
+    color: str = ""
+    description: str = ""
+
+class TaskLabelAssign(BaseModel):
+    label_ids: list[str] = []
+
 # ── Static file serving (SPA dashboard) ──────────────────────────────
 
 WEB_DIST = os.path.join(os.path.dirname(__file__), "..", "web", "dist")
@@ -312,7 +333,13 @@ async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
     return results[:limit]
 
 @app.get("/api/tasks", response_model=list[TaskOut])
-async def list_tasks(status: Optional[str] = None, repo: Optional[str] = None):
+async def list_tasks(status: Optional[str] = None, repo: Optional[str] = None, label: Optional[str] = None):
+    # If label filter provided, first get task IDs with that label
+    label_task_ids: set[str] | None = None
+    if label:
+        rows = await _sql(f"SELECT task_id FROM task_label_assignments WHERE label_id = '{label}'")
+        label_task_ids = {r["task_id"] for r in rows}
+
     sql = "SELECT * FROM tasks"
     filters = []
     if status:
@@ -323,6 +350,8 @@ async def list_tasks(status: Optional[str] = None, repo: Optional[str] = None):
         sql += " WHERE " + " AND ".join(filters)
     rows = await _sql(sql)
     tasks = [_row_to_task(r) for r in rows]
+    if label_task_ids is not None:
+        tasks = [t for t in tasks if t.id in label_task_ids]
     tasks.sort(key=lambda t: (t.priority, -t.created_at))
     return tasks
 
@@ -1053,6 +1082,90 @@ async def list_logs(task_id: Optional[str] = None, limit: int = 50):
     logs = [_row_to_log(r) for r in rows]
     logs.sort(key=lambda l: -l.timestamp)
     return logs[:limit]
+
+
+# ── Labels ────────────────────────────────────────────────────────────
+
+
+@app.get("/api/labels", response_model=list[LabelOut])
+async def list_labels():
+    """List all labels."""
+    rows = await _sql("SELECT * FROM kanban_labels")
+    return [LabelOut(id=r["id"], name=r["name"], color=r.get("color", "#0ea5e9"),
+                     description=r.get("description", ""), created_at=r.get("created_at", 0))
+            for r in rows]
+
+
+@app.post("/api/labels", status_code=201)
+async def create_label(body: LabelCreate):
+    """Create a new label."""
+    result = await _call("add_label", [body.id, body.name, body.color, body.description])
+    # Find the label we just created to return it
+    rows = await _sql(f"SELECT * FROM kanban_labels WHERE name = '{body.name}'")
+    if rows:
+        r = rows[0]
+        return LabelOut(id=r["id"], name=r["name"], color=r.get("color", "#0ea5e9"),
+                        description=r.get("description", ""), created_at=r.get("created_at", 0))
+    return {"status": "created"}
+
+
+@app.patch("/api/labels/{label_id}")
+async def update_label(label_id: str, body: LabelUpdate):
+    """Update a label's name, color, or description."""
+    await _call("update_label", [label_id, body.name, body.color, body.description])
+    rows = await _sql(f"SELECT * FROM kanban_labels WHERE id = '{label_id}'")
+    if rows:
+        r = rows[0]
+        return LabelOut(id=r["id"], name=r["name"], color=r.get("color", "#0ea5e9"),
+                        description=r.get("description", ""), created_at=r.get("created_at", 0))
+    return {"status": "updated"}
+
+
+@app.delete("/api/labels/{label_id}")
+async def delete_label(label_id: str):
+    """Delete a label and remove it from all tasks."""
+    await _call("remove_label", [label_id])
+    return {"status": "deleted"}
+
+
+@app.get("/api/tasks/{task_id}/labels", response_model=list[LabelOut])
+async def get_task_labels(task_id: str):
+    """Get all labels assigned to a task."""
+    rows = await _sql(f"""
+        SELECT l.* FROM kanban_labels l
+        INNER JOIN task_label_assignments a ON l.id = a.label_id
+        WHERE a.task_id = '{task_id}'
+        ORDER BY l.name
+    """)
+    return [LabelOut(id=r["id"], name=r["name"], color=r.get("color", "#0ea5e9"),
+                     description=r.get("description", ""), created_at=r.get("created_at", 0))
+            for r in rows]
+
+
+@app.post("/api/tasks/{task_id}/labels")
+async def set_task_labels(task_id: str, body: TaskLabelAssign):
+    """Set labels for a task by replacing all current assignments."""
+    existing = await _sql(f"SELECT label_id FROM task_label_assignments WHERE task_id = '{task_id}'")
+    current_ids = {r["label_id"] for r in existing}
+    new_ids = set(body.label_ids)
+
+    # Remove any labels not in the new set
+    to_remove = current_ids - new_ids
+    for lid in to_remove:
+        try:
+            await _call("unassign_label_from_task", [task_id, lid])
+        except Exception:
+            pass
+
+    # Add any labels not already assigned
+    to_add = new_ids - current_ids
+    for lid in to_add:
+        try:
+            await _call("assign_label_to_task", [task_id, lid])
+        except Exception:
+            pass
+
+    return {"status": "updated", "assigned": list(new_ids)}
 
 
 # ── Analytics ────────────────────────────────────────────────────────

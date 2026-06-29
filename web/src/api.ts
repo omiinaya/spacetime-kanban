@@ -126,12 +126,25 @@ export interface Webhook {
   created_at: number
 }
 
+export interface KanbanLabel {
+  id: string
+  name: string
+  color: string
+  description: string
+  created_at: number
+}
+
+export interface TaskLabelAssign {
+  label_ids: string[]
+}
+
 export const api = {
   tasks: {
-    list: (params?: { status?: string; repo?: string }) => {
+    list: (params?: { status?: string; repo?: string; label?: string }) => {
       const qs = new URLSearchParams()
       if (params?.status) qs.set('status', params.status)
       if (params?.repo) qs.set('repo', params.repo)
+      if (params?.label) qs.set('label', params.label)
       const q = qs.toString()
       return apiGet<Task[]>(`/tasks${q ? `?${q}` : ''}`)
     },
@@ -232,5 +245,18 @@ export const api = {
       apiDelete<{ status: string }>(`/webhooks/${id}`),
     test: (id: string) =>
       apiPost<{ status: string; webhook_id: string; response_code: number }>(`/webhooks/${id}/test`),
+  },
+  labels: {
+    list: () => apiGet<KanbanLabel[]>('/labels'),
+    create: (body: { name: string; color?: string; description?: string }) =>
+      apiPost<KanbanLabel>('/labels', body),
+    update: (id: string, body: { name?: string; color?: string; description?: string }) =>
+      apiPatch<KanbanLabel>(`/labels/${id}`, body),
+    delete: (id: string) =>
+      apiDelete<{ status: string }>(`/labels/${id}`),
+    getForTask: (taskId: string) =>
+      apiGet<KanbanLabel[]>(`/tasks/${taskId}/labels`),
+    setForTask: (taskId: string, body: TaskLabelAssign) =>
+      apiPost<{ status: string; assigned: string[] }>(`/tasks/${taskId}/labels`, body),
   },
 }
