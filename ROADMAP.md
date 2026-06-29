@@ -65,4 +65,4 @@
 - [x] Webhook CRUD API — `GET/POST/PATCH/DELETE /api/webhooks`
 - [x] Webhook CLI — `kanban webhook list/add/remove` with event filtering
 - [x] Backward-compatible: legacy `discord_webhook_url` still fires alongside new webhooks
-- [ ] GitHub issue sync — two-way sync between kanban tasks and GitHub issues
+- [x] GitHub issue sync — two-way sync between kanban tasks and GitHub issues

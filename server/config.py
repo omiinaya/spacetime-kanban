@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     server_port: int = 8727
     cors_origin: str = "http://localhost:5189"
     discord_webhook_url: Optional[str] = None
+    github_token: str = ""
+    github_default_repo: str = ""
 
     @property
     def stdb_base_url(self) -> str:
