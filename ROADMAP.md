@@ -82,3 +82,8 @@
 - [x] STDB reducers: `link_issue`, `unlink_issue`, `update_issue_link_status`
 - [x] SQL queries for reads, reducers for writes — consistent with existing architecture
 - [x] No ad-hoc JSON files — all persistence in STDB
+
+## Phase 13 — CI & Test Infrastructure ✅
+- [x] GitHub Actions CI: Python syntax check, Rust wasm build, Vite frontend build
+- [x] E2E test fixes: correct port (8725→8727), proper agents endpoint response format
+- [x] All 9 E2E tests passing: health, tasks, atomic claim, claim→complete, block→unclaim, logs, agents, delete
