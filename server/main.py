@@ -326,6 +326,12 @@ async def list_tasks(status: Optional[str] = None, repo: Optional[str] = None):
     tasks.sort(key=lambda t: (t.priority, -t.created_at))
     return tasks
 
+@app.post("/api/tasks/seed")
+async def seed_tasks():
+    """Seed sample tasks into the database."""
+    await _call("seed_sample_tasks", [])
+    return {"status": "seeded"}
+
 @app.get("/api/tasks/{task_id}", response_model=TaskOut)
 async def get_task(task_id: str):
     rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
