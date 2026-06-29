@@ -361,4 +361,31 @@ stdb: true
 349|| `kanban heartbeat` | Send agent pulse |
 350|| `kanban roadmap-import` | Bulk-import from ROADMAP.md |
 351|| `kanban check-branch` | Validate branch name |
+
+---
+
+## Fragile Interface Registry
+
+These string-name contracts break silently if renamed. Check both `server/` and `web/` before changing.
+
+| Contract | Location | Type |
+|----------|----------|------|
+| `GET /api/tasks` | `server/main.py` | API route |
+| `POST /api/tasks` | `server/main.py` | API route |
+| `GET /api/tasks/{task_id}` | `server/main.py` | API route |
+| `PATCH /api/tasks/{task_id}` | `server/main.py` | API route |
+| `POST /api/tasks/{task_id}/claim` | `server/main.py` | API route |
+| `POST /api/tasks/{task_id}/complete` | `server/main.py` | API route |
+| `POST /api/tasks/{task_id}/block` | `server/main.py` | API route |
+| `POST /api/tasks/{task_id}/unclaim` | `server/main.py` | API route |
+| `POST /api/tasks/{task_id}/dependency` | `server/main.py` | API route |
+| `POST /api/webhook/github` | `server/main.py` | GitHub webhook |
+| `status=available\|claimed\|blocked\|done` | `server/main.py` | Task state machine values |
+| `repo` query param | `GET /api/tasks` | Filter parameter |
+| `agent_id` | Claim/complete operations | Identity string |
+| `hermes`, `claude-vscode`, `ciel` | Convention | Reserved agent IDs |
+| `task_*` ID format | Task creation | ID prefix convention |
+
+**Note:** All task-state strings (`available`, `claimed`, `blocked`, `done`) appear in both server code and frontend UI components. Renaming them breaks the state machine.
+
 352|
