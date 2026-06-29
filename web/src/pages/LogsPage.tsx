@@ -27,7 +27,11 @@ export default function LogsPage() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    const interval = setInterval(load, 30000)
+    return () => clearInterval(interval)
+  }, [load])
 
   if (loading) {
     return (
@@ -74,6 +78,9 @@ export default function LogsPage() {
                 {log.notes}
               </span>
             )}
+            <span className="text-[10px] text-[var(--color-muted)] flex-shrink-0 w-14 text-right font-mono">
+              {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
           </div>
         ))}
         {logs.length === 0 && (
