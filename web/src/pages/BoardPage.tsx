@@ -1123,7 +1123,7 @@ function TaskDetailDialog({
   useEffect(() => {
     let cancelled = false
     setLoadingLogs(true)
-    api.logs.list(taskId, 20).then(l => {
+    api.logs.list({ task_id: taskId, limit: 20 }).then(l => {
       if (!cancelled) { setLogs(l); setLoadingLogs(false) }
     }).catch(() => { if (!cancelled) setLoadingLogs(false) })
     return () => { cancelled = true }
