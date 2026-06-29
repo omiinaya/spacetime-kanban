@@ -469,3 +469,19 @@ pub fn set_task_score(
     update_task_in_db(ctx, &task);
     Ok(())
 }
+
+#[reducer]
+pub fn add_log(
+    ctx: &ReducerContext,
+    task_id: String,
+    action: String,
+    agent_id: String,
+    notes: String,
+) -> Result<(), String> {
+    let _task = find_task(ctx, &task_id)
+        .ok_or_else(|| "Task not found".to_string())?;
+    let agent_opt = if agent_id.is_empty() { None } else { Some(agent_id.as_str()) };
+    let notes_opt = if notes.is_empty() { None } else { Some(notes.as_str()) };
+    log_action(ctx, &task_id, &action, agent_opt, notes_opt);
+    Ok(())
+}

@@ -391,6 +391,24 @@ async def create_task(body: TaskCreate):
     }, body.created_by))
     return {"status": "created"}
 
+
+# ── Task Logs ────────────────────────────────────────────────────────
+
+
+class AddLogRequest(BaseModel):
+    task_id: str
+    action: str
+    agent_id: str = ""
+    notes: str = ""
+
+
+@app.post("/api/tasks/{task_id}/log")
+async def add_task_log(task_id: str, body: AddLogRequest):
+    """Add an activity log entry to a task."""
+    await _call("add_log", [body.task_id, body.action, body.agent_id, body.notes])
+    return {"status": "logged", "task_id": task_id}
+
+
 @app.patch("/api/tasks/{task_id}")
 async def patch_task(task_id: str, body: TaskUpdate):
     rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
