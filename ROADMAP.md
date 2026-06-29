@@ -136,6 +136,18 @@
 - [x] Filters button highlights when active, clear-all button when filters applied
 - [x] Compound filtering: search + repo + priority + assignee all stack
 
+## Phase 21 — Labels/Tag System ✅
+- [x] STDB-native: `kanban_labels` + `task_label_assignments` tables with full reducers
+- [x] Color-coded label management — create, edit, delete with preset color palette
+- [x] Label badges on detailed task cards (color pills with name)
+- [x] Label dot indicators on compact cards
+- [x] Label assignment in task detail modal — click labels to toggle on/off
+- [x] Label filter in advanced filters bar — color-highlighted toggle buttons
+- [x] Labels management page at /labels with inline editing
+- [x] Cascade cleanup — label assignments cleaned on task/label deletion
+- [x] Nav item between Board and GitHub Issues
+- [x] API: CRUD + task assignment + filter via `label=` query param
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
