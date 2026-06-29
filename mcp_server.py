@@ -11,7 +11,7 @@ import json
 import sys
 import urllib.request
 import urllib.error
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 from mcp.server import Server
 from mcp.types import Tool, TextContent
@@ -22,7 +22,7 @@ app = Server("spacetimedb-kanban")
 
 def api_get(path: str) -> list | dict:
     """GET from the kanban API."""
-    url = urljoin(API_BASE, path)
+    url = urljoin(API_BASE, quote(path, safe='/:?=&'))
     try:
         resp = urllib.request.urlopen(url, timeout=15)
         return json.loads(resp.read().decode())
@@ -34,7 +34,7 @@ def api_get(path: str) -> list | dict:
 
 def api_post(path: str, body: dict | None = None) -> dict:
     """POST to the kanban API."""
-    url = urljoin(API_BASE, path)
+    url = urljoin(API_BASE, quote(path, safe='/:?=&'))
     data = json.dumps(body or {}).encode() if body else None
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
@@ -50,7 +50,7 @@ def api_post(path: str, body: dict | None = None) -> dict:
 
 def api_patch(path: str, body: dict) -> dict:
     """PATCH the kanban API."""
-    url = urljoin(API_BASE, path)
+    url = urljoin(API_BASE, quote(path, safe='/:?=&'))
     data = json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, method="PATCH")
     req.add_header("Content-Type", "application/json")
@@ -65,7 +65,7 @@ def api_patch(path: str, body: dict) -> dict:
 
 def api_put(path: str, body: dict) -> dict:
     """PUT to the kanban API."""
-    url = urljoin(API_BASE, path)
+    url = urljoin(API_BASE, quote(path, safe='/:?=&'))
     data = json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, method="PUT")
     req.add_header("Content-Type", "application/json")
@@ -80,7 +80,7 @@ def api_put(path: str, body: dict) -> dict:
 
 def api_delete(path: str) -> dict:
     """DELETE from the kanban API."""
-    url = urljoin(API_BASE, path)
+    url = urljoin(API_BASE, quote(path, safe='/:?=&'))
     req = urllib.request.Request(url, method="DELETE")
     try:
         resp = urllib.request.urlopen(req, timeout=15)

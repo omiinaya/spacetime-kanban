@@ -616,7 +616,7 @@ async def create_webhook(body: WebhookCreateRequest):
     """Register a new webhook subscription."""
     return webhooks.add_webhook(
         url=body.url,
-        type=body.type,
+        wh_type=body.type,
         events=body.events,
         label=body.label,
     )
