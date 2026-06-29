@@ -26,6 +26,9 @@ Usage:
   kanban info [--json]
   kanban watch [--capabilities=<c>] [--repo=<r>] [--daemon] [--heartbeat-interval=<s>] [--suggest-interval=<s>]
   kanban dispatch [--capabilities=<c>] [--repo=<r>] [--limit=<n>] [--auto] [--json]
+  kanban webhook list [--json]
+  kanban webhook add <url> [--type=<t>] [--events=<e1,e2>] [--label=<l>] [--json]
+  kanban webhook remove <id> [--json]
   kanban --help
 """
 import json
@@ -841,6 +844,55 @@ def cmd_dispatch(args: list[str]):
     elif opts.auto and opts.json:
         print(json.dumps({"status": "dispatched", "agent": agent_id, "results": results}))
 
+def cmd_webhook(args: list[str]):
+    import argparse
+    p = argparse.ArgumentParser(prog='kanban webhook')
+    sub = p.add_subparsers(dest='subcommand', required=True)
+    p_list = sub.add_parser('list', help='List webhook subscriptions')
+    p_list.add_argument('--json', action='store_true')
+    p_add = sub.add_parser('add', help='Register a new webhook')
+    p_add.add_argument('url', help='Webhook URL')
+    p_add.add_argument('--type', default='generic', choices=['discord', 'slack', 'telegram', 'generic'])
+    p_add.add_argument('--events', default='created,claimed,unclaimed,completed,blocked', help='Comma-separated events')
+    p_add.add_argument('--label', default='', help='Human-readable label')
+    p_add.add_argument('--json', action='store_true')
+    p_remove = sub.add_parser('remove', help='Remove a webhook')
+    p_remove.add_argument('id', help='Webhook ID')
+    p_remove.add_argument('--json', action='store_true')
+    opts = p.parse_args(args)
+    if opts.subcommand == 'list':
+        result = api_get('/api/webhooks')
+        if opts.json:
+            print(json.dumps(result, indent=2))
+        else:
+            if not result:
+                print('No webhooks configured.')
+                print('  Add one: kanban webhook add <url> --type=slack --events=completed,blocked')
+                return
+            for wh in result:
+                ev = ', '.join(wh.get('events', []))
+                print(f'  {wh["id"][:20]:20s} {wh["type"]:12s} {wh.get("label","")[:35]:35s}')
+                print(f'  {"":20s} Events: {ev}')
+                print(f'  {"":20s} URL: {wh["url"][:70]}')
+                print()
+    elif opts.subcommand == 'add':
+        events = [e.strip() for e in opts.events.split(',') if e.strip()]
+        result = api_post('/api/webhooks', {
+            'url': opts.url, 'type': opts.type, 'events': events,
+            'label': opts.label or f'{opts.type}:{opts.url[:40]}',
+        })
+        if opts.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f'Registered {result.get("id","?")[:20]}')
+            print(f'  Type: {result.get("type","?")} | Events: {",".join(result.get("events",[]))}')
+    elif opts.subcommand == 'remove':
+        result = api_delete(f'/api/webhooks/{opts.id}')
+        if opts.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f'Removed webhook {opts.id[:20]}')
+
 COMMANDS = {
     "list": cmd_list,
     "claim": cmd_claim,
@@ -859,6 +911,7 @@ COMMANDS = {
     "skills": cmd_skills,
     "watch": cmd_watch,
     "dispatch": cmd_dispatch,
+    "webhook": cmd_webhook,
 }
 
 

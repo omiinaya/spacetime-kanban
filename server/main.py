@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from config import settings
+import webhooks
 
 app = FastAPI(title="spacetimedb-kanban", version="0.1.0")
 
@@ -208,48 +209,9 @@ def _row_to_task(r: dict) -> TaskOut:
     )
 
 
-async def _notify_discord(action: str, task: dict, extra: str = ""):
-    """Send a Discord webhook notification for a task event."""
-    if not settings.discord_webhook_url:
-        return
-    emoji = {
-        "created": "🆕",
-        "claimed": "👤",
-        "unclaimed": "↩️",
-        "completed": "✅",
-        "blocked": "🚧",
-    }.get(action, "🔔")
-    color = {
-        "created": 0x5865F2,
-        "claimed": 0xFEE75C,
-        "unclaimed": 0x808080,
-        "completed": 0x57F287,
-        "blocked": 0xED4245,
-    }.get(action, 0x5865F2)
-    title = task.get("title", "?")
-    task_id = task.get("id", "?")
-    repo = task.get("repo", "")
-    agent = task.get("assigned_to", extra) or extra
-    embed = {
-        "embeds": [{
-            "title": f"{emoji} {action.title()} — {title}",
-            "color": color,
-            "fields": [
-                {"name": "Task", "value": f"`{task_id}`", "inline": True},
-                {"name": "Repo", "value": repo or "—", "inline": True},
-            ],
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-        }]
-    }
-    if agent:
-        embed["embeds"][0]["fields"].append({"name": "Agent", "value": agent, "inline": True})
-    if extra and action in ("blocked", "completed"):
-        embed["embeds"][0]["fields"].append({"name": "Notes", "value": extra[:500], "inline": False})
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(settings.discord_webhook_url, json=embed)
-    except Exception:
-        pass  # notifications are best-effort
+async def _notify(action: str, task: dict, extra: str = ""):
+    """Send notifications to all configured webhooks."""
+    await webhooks.notify(action, task, extra, discord_url=settings.discord_webhook_url or "")
 
 def _row_to_log(r: dict) -> LogOut:
     return LogOut(
@@ -385,7 +347,7 @@ async def create_task(body: TaskCreate):
         if rows:
             newest = max(rows, key=lambda r: r.get("created_at", 0))
             await _call("set_task_skills", [newest["id"], body.required_skills])
-    asyncio.ensure_future(_notify_discord("created", {
+    asyncio.ensure_future(_notify("created", {
         "title": body.title,
         "id": "pending",
         "repo": body.repo,
@@ -428,7 +390,7 @@ async def claim_task(task_id: str, body: ClaimRequest):
     result = await _call("claim_task", [task_id, body.agent_id])
     rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
     if rows:
-        asyncio.ensure_future(_notify_discord("claimed", rows[0]))
+        asyncio.ensure_future(_notify("claimed", rows[0]))
     return {"status": "claimed", "task_id": task_id, "assigned_to": body.agent_id}
 
 @app.post("/api/tasks/{task_id}/unclaim")
@@ -436,7 +398,7 @@ async def unclaim_task(task_id: str):
     await _call("unclaim_task", [task_id])
     rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
     if rows:
-        asyncio.ensure_future(_notify_discord("unclaimed", rows[0]))
+        asyncio.ensure_future(_notify("unclaimed", rows[0]))
     return {"status": "unclaimed", "task_id": task_id}
 
 @app.post("/api/tasks/{task_id}/complete")
@@ -444,7 +406,7 @@ async def complete_task(task_id: str, body: CompleteRequest = CompleteRequest())
     await _call("complete_task", [task_id, body.result_notes])
     rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
     if rows:
-        asyncio.ensure_future(_notify_discord("completed", rows[0], body.result_notes))
+        asyncio.ensure_future(_notify("completed", rows[0], body.result_notes))
     return {"status": "completed", "task_id": task_id}
 
 @app.post("/api/tasks/{task_id}/block")
@@ -452,7 +414,7 @@ async def block_task(task_id: str, body: BlockRequest = BlockRequest()):
     await _call("block_task", [task_id, body.reason])
     rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
     if rows:
-        asyncio.ensure_future(_notify_discord("blocked", rows[0], body.reason))
+        asyncio.ensure_future(_notify("blocked", rows[0], body.reason))
     return {"status": "blocked", "task_id": task_id}
 
 @app.post("/api/tasks/{task_id}/dependency")
@@ -588,7 +550,68 @@ async def import_roadmap(body: RoadmapImportRequest):
     return {"status": "imported", "task_count": task_count}
 
 
-# ── GitHub Webhook ─────────────────────────────────────��───────────
+# ── Webhook Subscriptions ────────────────────────────────────────────
+
+
+class WebhookCreateRequest(BaseModel):
+    url: str
+    type: str = "generic"
+    events: list[str] = ["created", "claimed", "unclaimed", "completed", "blocked"]
+    label: str = ""
+
+
+class WebhookUpdateRequest(BaseModel):
+    url: Optional[str] = None
+    type: Optional[str] = None
+    events: Optional[list[str]] = None
+    label: Optional[str] = None
+
+
+@app.get("/api/webhooks")
+async def list_webhooks():
+    """List all registered webhook subscriptions."""
+    return webhooks.list_webhooks()
+
+
+@app.post("/api/webhooks", status_code=201)
+async def create_webhook(body: WebhookCreateRequest):
+    """Register a new webhook subscription."""
+    return webhooks.add_webhook(
+        url=body.url,
+        type=body.type,
+        events=body.events,
+        label=body.label,
+    )
+
+
+@app.get("/api/webhooks/{webhook_id}")
+async def get_webhook(webhook_id: str):
+    """Get a specific webhook subscription."""
+    wh = webhooks.get_webhook(webhook_id)
+    if not wh:
+        raise HTTPException(404, "Webhook not found")
+    return wh
+
+
+@app.patch("/api/webhooks/{webhook_id}")
+async def update_webhook(webhook_id: str, body: WebhookUpdateRequest):
+    """Update a webhook subscription."""
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    wh = webhooks.update_webhook(webhook_id, updates)
+    if not wh:
+        raise HTTPException(404, "Webhook not found")
+    return wh
+
+
+@app.delete("/api/webhooks/{webhook_id}")
+async def delete_webhook(webhook_id: str):
+    """Remove a webhook subscription."""
+    if not webhooks.remove_webhook(webhook_id):
+        raise HTTPException(404, "Webhook not found")
+    return {"status": "deleted"}
+
+
+# ── GitHub Webhook ───────────────────────────────────────────────────
 
 BRANCH_PATTERN = re.compile(
     r"^(?:feature|fix|chore|refactor|docs|test)/"
@@ -631,7 +654,7 @@ async def github_webhook(request: Request):
             await _call("update_task", [task_id, pr_title, f"PR: {pr_url}", 2, branch])
         except HTTPException:
             pass
-        asyncio.ensure_future(_notify_discord("linked", {
+        asyncio.ensure_future(_notify("linked", {
             "id": task_id,
             "title": pr_title,
             "repo": payload.get("repository", {}).get("full_name", ""),
@@ -653,7 +676,7 @@ async def github_webhook(request: Request):
                     # Claim as github-actions, then complete
                     await _call("claim_task", [task_id, "github-actions"])
                     await _call("complete_task", [task_id, notes])
-                asyncio.ensure_future(_notify_discord("completed", t, notes))
+                asyncio.ensure_future(_notify("completed", t, notes))
                 return {"status": "completed", "task_id": task_id}
         except HTTPException:
             pass

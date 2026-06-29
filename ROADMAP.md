@@ -61,5 +61,8 @@
 - [x] Auto-dispatch cron — runs every 30m, claims tasks with score >= 100
 - [x] `--skills` flag on `kanban create` — set required skills at creation time
 - [x] Fix: STDB SQL unsupported ORDER BY/LIMIT in create_task endpoint
+- [x] Generic outbound webhook system — Discord, Slack, Telegram, generic JSON
+- [x] Webhook CRUD API — `GET/POST/PATCH/DELETE /api/webhooks`
+- [x] Webhook CLI — `kanban webhook list/add/remove` with event filtering
+- [x] Backward-compatible: legacy `discord_webhook_url` still fires alongside new webhooks
 - [ ] GitHub issue sync — two-way sync between kanban tasks and GitHub issues
-- [ ] Webhook outbound — generic webhooks (Telegram, Slack, email) on state transitions
