@@ -7,14 +7,14 @@
 - [x] AGENTS.md with complete API guide
 - [x] Basic kanban board UI
 
-## Phase 2 — Multi-Agent UX
+## Phase 2 — Multi-Agent UX ✅
 - [x] WebSocket live-updates for the board (no refresh needed) — via STDB native sub
 - [x] Agent heartbeat — detects stuck tasks (claimed but no activity for 30min)
 - [x] Auto-unclaim stale tasks back to available
 - [x] Discord webhook notifications on task state changes
 - [x] Task dependencies / ordering — task B blocked on task A, enforced at claim time
 
-## Phase 3 — Workflow & Integration
+## Phase 3 — Workflow & Integration ✅
 - [x] Git branch naming convention enforcement — `kanban check-branch` + pre-push hook
 - [x] Webhook integration — Discord notifications on all task state changes
 - [x] Roadmap import — bulk-create tasks from a repo's ROADMAP.md (`kanban roadmap-import`)
@@ -24,3 +24,38 @@
 - [x] Priority scoring — auto-suggest highest-value task based on agent capabilities
 - [x] Swarm mode — auto-discover agents on the network
 - [x] Agent capability tags — tasks tagged by required skill, agents self-select
+
+## Phase 5 — Detail & UX ✅
+- [x] Task detail modal — click card to see full info, logs, dependencies
+- [x] Create task dialog — skills field, responsive grid layout
+- [x] Dependency graph visualization — full-screen SVG DAG with status colors
+
+## Phase 6 — Agent Daemon ✅
+- [x] `kanban watch` — foreground/daemon agent lifecycle manager
+- [x] Graceful shutdown — sends offline status, cleans up PID file
+- [x] Real-time status output — heartbeat ticks, suggestion picks
+
+## Phase 7 — Native Hermes Integration ✅
+- [x] MCP server — 18 tools covering full kanban API (list, create, claim, complete, block, suggest, swarm, logs)
+- [x] `add_log` STDB reducer + `POST /api/tasks/{task_id}/log` endpoint
+- [x] MCP tools registered in Hermes config — auto-discovered on every session
+- [x] Hermes registered in swarm as agent `hermes` with full capability tags
+- [x] Auto-heartbeat cron — keeps Hermes alive in the swarm (every 2m, silent)
+
+## Phase 8 — Web Dashboard Evolution ✅
+- [x] Search bar — filter tasks by title, description, skills, repo, or ID
+- [x] Search-aware empty state — shows "No tasks match X" when filtering
+- [x] Combined repo + search filtering
+
+## Phase 9 — Analytics & Cycle Time
+- [ ] Throughput dashboard — tasks completed per day/week per repo
+- [ ] Cycle time tracking — average time created → claimed → done
+- [ ] Agent productivity — per-agent completion rates, stale rates
+- [ ] Stale map — which repos/phases have the most stuck tasks
+
+## Phase 10 — Autonomous Workflow
+- [ ] Auto-suggest on session start — Hermes checks kanban, pulls top suggestion
+- [ ] Parallel agent dispatch — `kanban dispatch` spawns subagents for available tasks
+- [ ] Task gating — auto-claim tasks matching Hermes' registered capabilities
+- [ ] Webhook outbound — generic webhooks (Telegram, Slack, email) on state transitions
+- [ ] GitHub issue sync — two-way sync between kanban tasks and GitHub issues
