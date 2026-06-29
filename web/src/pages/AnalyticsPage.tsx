@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { BarChart3, CheckCircle2, Clock, Users, AlertCircle, Layers, Loader2 } from 'lucide-react'
+import { BarChart3, CheckCircle2, Clock, Users, AlertCircle, Layers, Loader2, Download } from 'lucide-react'
 
 interface Overview {
   total: number
@@ -75,9 +75,20 @@ export default function AnalyticsPage() {
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-6">
-      <div className="flex items-center gap-2">
-        <BarChart3 className="w-5 h-5 text-[var(--color-primary)]" />
-        <h1 className="text-lg sm:text-xl font-semibold">Analytics</h1>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-[var(--color-primary)]" />
+          <h1 className="text-lg sm:text-xl font-semibold">Analytics</h1>
+        </div>
+        <div className="relative group">
+          <button className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors">
+            <Download className="w-3 h-3" /> Export
+          </button>
+          <div className="absolute right-0 top-full mt-1 w-24 bg-[var(--color-card)] border border-[var(--color-border)] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+            <button onClick={() => window.open(api.tasks.export('csv'), '_blank')} className="w-full text-left text-xs px-3 py-2 hover:bg-white/5 transition-colors rounded-t-lg">CSV</button>
+            <button onClick={() => window.open(api.tasks.export('json'), '_blank')} className="w-full text-left text-xs px-3 py-2 hover:bg-white/5 transition-colors rounded-b-lg">JSON</button>
+          </div>
+        </div>
       </div>
 
       {/* Stat cards */}

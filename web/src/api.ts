@@ -155,6 +155,13 @@ export const api = {
     delete: (id: string) =>
       apiDelete<{ status: string }>(`/tasks/${id}`),
     seed: () => apiPost<{ status: string }>('/tasks/seed'),
+    export: (format?: string, status?: string, repo?: string) => {
+      const qs = new URLSearchParams()
+      if (format) qs.set('format', format)
+      if (status) qs.set('status', status)
+      if (repo) qs.set('repo', repo)
+      return `${BASE}/tasks/export?${qs.toString()}`
+    },
   },
   logs: {
     list: (task_id?: string, limit?: number) => {

@@ -109,6 +109,13 @@
 - [x] Opacity dimming on dragged card, primary ring on drop zone
 - [x] "Drag cards between columns" hint in board header
 
+## Phase 17 — Task Export ✅
+- [x] Server endpoint GET /api/tasks/export?format=csv|json with status/repo filters
+- [x] CSV export: 15-column header, proper Content-Disposition headers
+- [x] JSON export: full task objects as array
+- [x] Export button with CSV/JSON dropdown on Board page
+- [x] Export button with CSV/JSON dropdown on Analytics page
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
