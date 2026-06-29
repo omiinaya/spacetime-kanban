@@ -87,3 +87,13 @@
 - [x] GitHub Actions CI: Python syntax check, Rust wasm build, Vite frontend build
 - [x] E2E test fixes: correct port (8725→8727), proper agents endpoint response format
 - [x] All 9 E2E tests passing: health, tasks, atomic claim, claim→complete, block→unclaim, logs, agents, delete
+
+## Bug Fixes & Polish ✅
+- [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
+- [x] create_task race condition — pre-generated UUID IDs eliminate skills race
+- [x] Vite dev proxy port 8725→8727 (was silently broken)
+- [x] Seed endpoint missing — POST /api/tasks/seed now works
+- [x] Throughput chart: real date labels (Jun 16) instead of "14d ago"
+- [x] Auto-refresh: Analytics, Issues, Activity Log pages refresh every 30s
+- [x] Activity log timestamps — each entry now shows HH:MM when it occurred
+- [x] Live toast notifications — popups for claim/complete/block/release via STDB subscriptions
