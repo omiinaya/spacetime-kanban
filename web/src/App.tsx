@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { KanbanSquare, Clock, Menu, X } from 'lucide-react'
+import { KanbanSquare, Clock, BarChart3, Menu, X } from 'lucide-react'
 import BoardPage from './pages/BoardPage'
 import LogsPage from './pages/LogsPage'
+import AnalyticsPage from './pages/AnalyticsPage'
 
 const navItems = [
   { path: '/', label: 'Board', icon: KanbanSquare },
   { path: '/logs', label: 'Activity Log', icon: Clock },
+  { path: '/analytics', label: 'Analytics', icon: BarChart3 },
 ]
 
 export default function App() {
@@ -92,6 +94,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<BoardPage />} />
           <Route path="/logs" element={<LogsPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
         </Routes>
       </main>
     </div>

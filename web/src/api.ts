@@ -146,4 +146,18 @@ export const api = {
       return apiGet<SuggestResult[]>(`/tasks/suggest${q ? `?${q}` : ''}`)
     },
   },
+  analytics: {
+    overview: () => apiGet<{
+      total: number
+      by_status: Record<string, number>
+      completed_today: number
+      completed_week: number
+      total_done: number
+      repos: Record<string, { total: number; done: number; in_progress: number; blocked: number; available: number }>
+      agent_count: number
+    }>('/analytics/overview'),
+    throughput: (days?: number) => apiGet<{ date: string; completed: number }[]>(`/analytics/throughput${days ? `?days=${days}` : ''}`),
+    cycleTimes: () => apiGet<{ repo: string; count: number; avg_hours: number; min_hours: number; max_hours: number }[]>('/analytics/cycle-times'),
+    agents: () => apiGet<{ id: string; status: string; completed: number; blocked: number; capabilities: string | null; repo_focus: string | null; last_heartbeat: number }[]>('/analytics/agents'),
+  },
 }
