@@ -485,3 +485,149 @@ pub fn add_log(
     log_action(ctx, &task_id, &action, agent_opt, notes_opt);
     Ok(())
 }
+
+// ── Webhook Subscriptions (STDB-native) ──────────────────────────────
+
+#[spacetimedb::table(accessor = webhook_subscriptions, public)]
+#[derive(Debug, Clone)]
+pub struct WebhookSubscription {
+    #[primary_key]
+    pub id: String,
+    pub url: String,
+    pub wh_type: String,     // "discord", "slack", "telegram", "generic"
+    pub events: String,       // comma-separated event types
+    pub label: String,
+    pub created_at: u64,
+}
+
+fn find_webhook(ctx: &ReducerContext, wh_id: &str) -> Option<WebhookSubscription> {
+    ctx.db.webhook_subscriptions().iter()
+        .find(|w| w.id == wh_id)
+        .map(|w| w.clone())
+}
+
+#[reducer]
+pub fn add_webhook_subscription(
+    ctx: &ReducerContext,
+    id: String,
+    url: String,
+    wh_type: String,
+    events: String, // comma-separated, e.g. "created,claimed,completed,blocked"
+    label: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    ctx.db.webhook_subscriptions().insert(WebhookSubscription {
+        id,
+        url,
+        wh_type,
+        events,
+        label,
+        created_at: now,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn remove_webhook_subscription(ctx: &ReducerContext, wh_id: String) -> Result<(), String> {
+    let wh = find_webhook(ctx, &wh_id)
+        .ok_or_else(|| "Webhook not found".to_string())?;
+    ctx.db.webhook_subscriptions().delete(wh);
+    Ok(())
+}
+
+#[reducer]
+pub fn update_webhook_subscription(
+    ctx: &ReducerContext,
+    wh_id: String,
+    url: String,
+    wh_type: String,
+    events: String,
+    label: String,
+) -> Result<(), String> {
+    let mut wh = find_webhook(ctx, &wh_id)
+        .ok_or_else(|| "Webhook not found".to_string())?;
+    if !url.is_empty() { wh.url = url; }
+    if !wh_type.is_empty() { wh.wh_type = wh_type; }
+    if !events.is_empty() { wh.events = events; }
+    if !label.is_empty() { wh.label = label; }
+    let old: Vec<WebhookSubscription> = ctx.db.webhook_subscriptions().iter()
+        .filter(|w| w.id == wh.id)
+        .map(|w| w.clone())
+        .collect();
+    for w in old { ctx.db.webhook_subscriptions().delete(w); }
+    ctx.db.webhook_subscriptions().insert(wh);
+    Ok(())
+}
+
+// ── Issue Links (STDB-native, two-way GitHub sync) ───────────────────
+
+#[spacetimedb::table(accessor = issue_links, public)]
+#[derive(Debug, Clone)]
+pub struct IssueLink {
+    #[primary_key]
+    pub kanban_task_id: String,
+    pub issue_number: u32,
+    pub repo: String,
+    pub issue_url: String,
+    pub html_url: String,
+    pub status: String,      // "open" or "closed"
+    pub linked_at: u64,
+}
+
+fn find_issue_link(ctx: &ReducerContext, task_id: &str) -> Option<IssueLink> {
+    ctx.db.issue_links().iter()
+        .find(|l| l.kanban_task_id == task_id)
+        .map(|l| l.clone())
+}
+
+#[reducer]
+pub fn link_issue(
+    ctx: &ReducerContext,
+    kanban_task_id: String,
+    issue_number: u32,
+    repo: String,
+    issue_url: String,
+    html_url: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    // Remove existing link for this task if any
+    if let Some(existing) = find_issue_link(ctx, &kanban_task_id) {
+        ctx.db.issue_links().delete(existing);
+    }
+    ctx.db.issue_links().insert(IssueLink {
+        kanban_task_id,
+        issue_number,
+        repo,
+        issue_url,
+        html_url,
+        status: "open".to_string(),
+        linked_at: now,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn unlink_issue(ctx: &ReducerContext, kanban_task_id: String) -> Result<(), String> {
+    let link = find_issue_link(ctx, &kanban_task_id)
+        .ok_or_else(|| "Issue link not found".to_string())?;
+    ctx.db.issue_links().delete(link);
+    Ok(())
+}
+
+#[reducer]
+pub fn update_issue_link_status(
+    ctx: &ReducerContext,
+    kanban_task_id: String,
+    status: String,
+) -> Result<(), String> {
+    let mut link = find_issue_link(ctx, &kanban_task_id)
+        .ok_or_else(|| "Issue link not found".to_string())?;
+    link.status = status;
+    let old: Vec<IssueLink> = ctx.db.issue_links().iter()
+        .filter(|l| l.kanban_task_id == link.kanban_task_id)
+        .map(|l| l.clone())
+        .collect();
+    for l in old { ctx.db.issue_links().delete(l); }
+    ctx.db.issue_links().insert(link);
+    Ok(())
+}

@@ -1,66 +1,119 @@
 """Two-way GitHub issue sync for spacetimedb-kanban.
 
-Stores the kanban-task ⟷ GitHub-issue mapping in ~/.kanban/issue_map.json.
+Stores the kanban-task ⟷ GitHub-issue mapping in STDB (issue_links table).
 Provides GitHub API helpers for creating, closing, and reopening issues.
 """
 import json
-import os
-import uuid
+import re
 from datetime import datetime
 from typing import Optional
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
-from urllib.parse import urljoin
 
-ISSUE_MAP_FILE = os.path.expanduser("~/.kanban/issue_map.json")
+import httpx
+
+from config import settings
+
+STDB_SQL_URL = f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/sql"
+STDB_CALL_URL = f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/call"
 GITHUB_API = "https://api.github.com"
 
 
-# ── Mapping Store ────────────────────────────────────────────────────
-
-def _ensure_file():
-    os.makedirs(os.path.dirname(ISSUE_MAP_FILE), exist_ok=True)
-    if not os.path.exists(ISSUE_MAP_FILE):
-        with open(ISSUE_MAP_FILE, "w") as f:
-            json.dump({}, f)
+# ── STDB helpers (synchronous) ───────────────────────────────────────
 
 
-def _load_map() -> dict:
-    """Return {kanban_task_id: mapping_dict, ...}"""
-    _ensure_file()
-    try:
-        with open(ISSUE_MAP_FILE) as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {}
+def _stdb_sql(query: str) -> list[dict]:
+    """Execute a synchronous SQL query against STDB."""
+    resp = httpx.post(
+        STDB_SQL_URL,
+        content=query,
+        headers={"Content-Type": "application/sql"},
+        timeout=10,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"SQL query failed: {resp.text[:300]}")
+    data = resp.json()
+    return _parse_rows(data)
 
 
-def _save_map(m: dict):
-    _ensure_file()
-    with open(ISSUE_MAP_FILE, "w") as f:
-        json.dump(m, f, indent=2)
+def _parse_rows(resp_json: list[dict]) -> list[dict]:
+    """Parse STDB SATS row format into dicts."""
+    if not resp_json:
+        return []
+    entry = resp_json[0]
+    schema = entry.get("schema", {})
+    elements = schema.get("elements", [])
+    col_names: list[str] = []
+    for el in elements:
+        name = el.get("name", {})
+        if isinstance(name, dict):
+            name = name.get("some", name)
+        col_names.append(str(name) if name else "?")
+    rows = entry.get("rows", [])
+    result: list[dict] = []
+    for row in rows:
+        row_dict = {}
+        for i, val in enumerate(row):
+            key = col_names[i] if i < len(col_names) else f"col_{i}"
+            if isinstance(val, list) and len(val) == 2:
+                if val[0] == 0:
+                    val = val[1] if val[1] and val[1] != [] else None
+                else:
+                    val = None
+            row_dict[key] = val
+        result.append(row_dict)
+    return result
 
 
-# ── Public mapping API ────────────────────────────────────────────────
+def _call(reducer: str, args: list) -> dict:
+    """Call a synchronous STDB reducer."""
+    resp = httpx.post(
+        f"{STDB_CALL_URL}/{reducer}",
+        json=args,
+        timeout=10,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Reducer failed: {resp.text[:300]}")
+    text = resp.text.strip()
+    if text:
+        return resp.json()
+    return {"status": "ok"}
+
+
+# ── Public mapping API (STDB-backed) ──────────────────────────────────
+
 
 def get_link(task_id: str) -> Optional[dict]:
     """Get the GitHub issue link for a kanban task, if any."""
-    return _load_map().get(task_id)
+    rows = _stdb_sql(f"SELECT * FROM issue_links WHERE kanban_task_id = '{task_id}'")
+    if not rows:
+        return None
+    r = rows[0]
+    return {
+        "issue_number": r.get("issue_number", 0),
+        "repo": r.get("repo", ""),
+        "issue_url": r.get("issue_url", ""),
+        "html_url": r.get("html_url", ""),
+        "status": r.get("status", "open"),
+        "linked_at": r.get("linked_at", 0),
+    }
 
 
 def get_task_id_for_issue(repo: str, issue_number: int) -> Optional[str]:
     """Reverse lookup: find kanban task ID by GitHub issue."""
-    m = _load_map()
-    for tid, info in m.items():
-        if info.get("repo") == repo and info.get("issue_number") == issue_number:
-            return tid
+    rows = _stdb_sql(
+        f"SELECT kanban_task_id FROM issue_links "
+        f"WHERE repo = '{repo}' AND issue_number = {issue_number}"
+    )
+    if rows:
+        return rows[0].get("kanban_task_id")
     return None
 
 
 def link_issue(task_id: str, repo: str, issue_number: int, issue_url: str, html_url: str) -> dict:
-    """Record a kanban ⟷ GitHub issue link."""
-    m = _load_map()
-    m[task_id] = {
+    """Record a kanban ⟷ GitHub issue link in STDB."""
+    _call("link_issue", [task_id, issue_number, repo, issue_url, html_url])
+    return get_link(task_id) or {
         "issue_number": issue_number,
         "repo": repo,
         "issue_url": issue_url,
@@ -68,43 +121,53 @@ def link_issue(task_id: str, repo: str, issue_number: int, issue_url: str, html_
         "status": "open",
         "linked_at": int(datetime.utcnow().timestamp() * 1000),
     }
-    _save_map(m)
-    return m[task_id]
 
 
 def unlink_issue(task_id: str) -> bool:
     """Remove a kanban ⟷ GitHub issue link. Returns True if existed."""
-    m = _load_map()
-    if task_id in m:
-        del m[task_id]
-        _save_map(m)
+    try:
+        _call("unlink_issue", [task_id])
         return True
-    return False
+    except RuntimeError as e:
+        if "not found" in str(e).lower():
+            return False
+        raise
 
 
 def update_issue_status(task_id: str, status: str) -> Optional[dict]:
-    """Update the cached GH issue status (open/closed)."""
-    m = _load_map()
-    if task_id in m:
-        m[task_id]["status"] = status
-        _save_map(m)
-        return m[task_id]
-    return None
+    """Update the cached GH issue status (open/closed) in STDB."""
+    try:
+        _call("update_issue_link_status", [task_id, status])
+    except RuntimeError as e:
+        if "not found" in str(e).lower():
+            return None
+        raise
+    return get_link(task_id)
 
 
 def list_links(repo: Optional[str] = None) -> list[dict]:
     """List all linked issues, optionally filtered by repo."""
-    m = _load_map()
+    if repo:
+        rows = _stdb_sql(f"SELECT * FROM issue_links WHERE repo = '{repo}'")
+    else:
+        rows = _stdb_sql("SELECT * FROM issue_links")
     results = []
-    for tid, info in m.items():
-        if repo and info.get("repo") != repo:
-            continue
-        results.append({"kanban_task_id": tid, **info})
-    results.sort(key=lambda r: -r.get("linked_at", 0))
+    for r in rows:
+        results.append({
+            "kanban_task_id": r.get("kanban_task_id", ""),
+            "issue_number": r.get("issue_number", 0),
+            "repo": r.get("repo", ""),
+            "issue_url": r.get("issue_url", ""),
+            "html_url": r.get("html_url", ""),
+            "status": r.get("status", "open"),
+            "linked_at": r.get("linked_at", 0),
+        })
+    results.sort(key=lambda x: -x.get("linked_at", 0))
     return results
 
 
-# ── GitHub API helpers ────────────────────────────────────────────────
+# ── GitHub API helpers (unchanged) ────────────────────────────────────
+
 
 def _gh_headers(token: str) -> dict:
     return {

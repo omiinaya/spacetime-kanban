@@ -74,3 +74,11 @@
 - [x] GitHub Issues nav item in sidebar
 - [x] MCP issue tools — kanban_issue_link, kanban_issue_create, kanban_issue_status, kanban_issue_list
 - [x] API client methods for issue operations in web frontend
+
+## Phase 12 — STDB-Native Infrastructure ✅
+- [x] Migrate webhook subscriptions from `~/.kanban/webhooks.json` → STDB `webhook_subscriptions` table
+- [x] Migrate issue links from `~/.kanban/issue_map.json` → STDB `issue_links` table
+- [x] STDB reducers: `add_webhook_subscription`, `remove_webhook_subscription`, `update_webhook_subscription`
+- [x] STDB reducers: `link_issue`, `unlink_issue`, `update_issue_link_status`
+- [x] SQL queries for reads, reducers for writes — consistent with existing architecture
+- [x] No ad-hoc JSON files — all persistence in STDB

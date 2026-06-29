@@ -1,97 +1,161 @@
 """Outbound webhook notification system for spacetimedb-kanban.
 
-Stores webhook subscriptions in ~/.kanban/webhooks.json.
+Stores webhook subscriptions in STDB (webhook_subscriptions table).
 Supports Discord embeds, Slack messages, Telegram, and generic JSON POST.
 """
 
 import json
-import os
 import uuid
 from datetime import datetime
 from typing import Optional
 
 import httpx
 
-WEBHOOKS_FILE = os.path.expanduser("~/.kanban/webhooks.json")
+from config import settings
+
+STDB_SQL_URL = f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/sql"
+STDB_CALL_URL = f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/call"
 
 
-def _ensure_file():
-    """Create the webhooks file if it doesn't exist."""
-    os.makedirs(os.path.dirname(WEBHOOKS_FILE), exist_ok=True)
-    if not os.path.exists(WEBHOOKS_FILE):
-        with open(WEBHOOKS_FILE, "w") as f:
-            json.dump([], f)
+def _stdb_sql(query: str) -> list[dict]:
+    """Execute a synchronous SQL query against STDB."""
+    resp = httpx.post(
+        STDB_SQL_URL,
+        content=query,
+        headers={"Content-Type": "application/sql"},
+        timeout=10,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"SQL query failed: {resp.text[:300]}")
+    data = resp.json()
+    return _parse_rows(data)
 
 
-def _load_webhooks() -> list[dict]:
-    _ensure_file()
-    try:
-        with open(WEBHOOKS_FILE) as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
+def _parse_rows(resp_json: list[dict]) -> list[dict]:
+    """Parse STDB SATS row format into dicts."""
+    if not resp_json:
         return []
+    entry = resp_json[0]
+    schema = entry.get("schema", {})
+    elements = schema.get("elements", [])
+    col_names: list[str] = []
+    for el in elements:
+        name = el.get("name", {})
+        if isinstance(name, dict):
+            name = name.get("some", name)
+        col_names.append(str(name) if name else "?")
+    rows = entry.get("rows", [])
+    result: list[dict] = []
+    for row in rows:
+        row_dict = {}
+        for i, val in enumerate(row):
+            key = col_names[i] if i < len(col_names) else f"col_{i}"
+            if isinstance(val, list) and len(val) == 2:
+                if val[0] == 0:
+                    val = val[1] if val[1] and val[1] != [] else None
+                else:
+                    val = None
+            row_dict[key] = val
+        result.append(row_dict)
+    return result
 
 
-def _save_webhooks(webhooks: list[dict]):
-    _ensure_file()
-    with open(WEBHOOKS_FILE, "w") as f:
-        json.dump(webhooks, f, indent=2)
+def _call(reducer: str, args: list) -> dict:
+    """Call a synchronous STDB reducer."""
+    resp = httpx.post(
+        f"{STDB_CALL_URL}/{reducer}",
+        json=args,
+        timeout=10,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Reducer failed: {resp.text[:300]}")
+    text = resp.text.strip()
+    if text:
+        return resp.json()
+    return {"status": "ok"}
+
+
+# ── Public API (called from main.py) ──────────────────────────────────
 
 
 def list_webhooks() -> list[dict]:
-    """Return all registered webhooks."""
-    return _load_webhooks()
+    """Return all registered webhooks from STDB."""
+    rows = _stdb_sql("SELECT * FROM webhook_subscriptions")
+    # Convert DB rows to the same dict format the API expects
+    result = []
+    for r in rows:
+        result.append({
+            "id": r.get("id", ""),
+            "url": r.get("url", ""),
+            "type": r.get("wh_type", "generic"),
+            "events": r.get("events", "").split(",") if r.get("events") else [],
+            "label": r.get("label", ""),
+            "created_at": r.get("created_at", 0),
+        })
+    return result
 
 
 def get_webhook(webhook_id: str) -> Optional[dict]:
-    for wh in _load_webhooks():
-        if wh["id"] == webhook_id:
-            return wh
-    return None
+    """Get a specific webhook subscription."""
+    rows = _stdb_sql(f"SELECT * FROM webhook_subscriptions WHERE id = '{webhook_id}'")
+    if not rows:
+        return None
+    r = rows[0]
+    return {
+        "id": r.get("id", ""),
+        "url": r.get("url", ""),
+        "type": r.get("wh_type", "generic"),
+        "events": r.get("events", "").split(",") if r.get("events") else [],
+        "label": r.get("label", ""),
+        "created_at": r.get("created_at", 0),
+    }
 
 
-def add_webhook(url: str, type: str = "generic", events: Optional[list[str]] = None,
+def add_webhook(url: str, wh_type: str = "generic", events: Optional[list[str]] = None,
                 label: str = "") -> dict:
-    """Register a new webhook subscription."""
-    webhooks = _load_webhooks()
-    wh = {
-        "id": f"wh_{uuid.uuid4().hex[:12]}",
+    """Register a new webhook subscription in STDB."""
+    wh_id = f"wh_{uuid.uuid4().hex[:12]}"
+    events_str = ",".join(events or ["created", "claimed", "unclaimed", "completed", "blocked"])
+    label = label or f"{wh_type}:{url[:40]}"
+
+    _call("add_webhook_subscription", [wh_id, url, wh_type, events_str, label])
+
+    return {
+        "id": wh_id,
         "url": url,
-        "type": type,
-        "events": events or ["created", "claimed", "unclaimed", "completed", "blocked"],
-        "label": label or f"{type}:{url[:40]}",
+        "type": wh_type,
+        "events": events_str.split(","),
+        "label": label,
         "created_at": int(datetime.utcnow().timestamp() * 1000),
     }
-    webhooks.append(wh)
-    _save_webhooks(webhooks)
-    return wh
 
 
 def remove_webhook(webhook_id: str) -> bool:
-    """Remove a webhook subscription."""
-    webhooks = _load_webhooks()
-    before = len(webhooks)
-    webhooks = [wh for wh in webhooks if wh["id"] != webhook_id]
-    _save_webhooks(webhooks)
-    return len(webhooks) < before
+    """Remove a webhook subscription from STDB."""
+    try:
+        _call("remove_webhook_subscription", [webhook_id])
+        return True
+    except RuntimeError as e:
+        if "not found" in str(e).lower():
+            return False
+        raise
 
 
 def update_webhook(webhook_id: str, updates: dict) -> Optional[dict]:
-    """Update a webhook's events, label, or URL."""
-    webhooks = _load_webhooks()
-    for wh in webhooks:
-        if wh["id"] == webhook_id:
-            if "url" in updates:
-                wh["url"] = updates["url"]
-            if "type" in updates:
-                wh["type"] = updates["type"]
-            if "events" in updates:
-                wh["events"] = updates["events"]
-            if "label" in updates:
-                wh["label"] = updates["label"]
-            _save_webhooks(webhooks)
-            return wh
-    return None
+    """Update a webhook's events, label, or URL in STDB."""
+    # Load current state
+    current = get_webhook(webhook_id)
+    if not current:
+        return None
+
+    url = updates.get("url", current["url"])
+    wh_type = updates.get("type", current["type"])
+    events_list = updates.get("events", current["events"])
+    events_str = ",".join(events_list) if isinstance(events_list, list) else events_list
+    label = updates.get("label", current["label"])
+
+    _call("update_webhook_subscription", [webhook_id, url, wh_type, events_str, label])
+    return get_webhook(webhook_id)
 
 
 # ── Format helpers ────────────────────────────────────────────────────
@@ -208,7 +272,7 @@ def _format_payload(wh_type: str, action: str, task: dict, extra: str = "") -> d
 
 async def notify(action: str, task: dict, extra: str = "", discord_url: str = ""):
     """Send notification to all matching webhooks + legacy Discord URL."""
-    webhooks = _load_webhooks()
+    webhooks = list_webhooks()
     tasks_to_send = []
 
     # Legacy Discord webhook
@@ -226,7 +290,6 @@ async def notify(action: str, task: dict, extra: str = "", discord_url: str = ""
         for wh_type, url, payload in tasks_to_send:
             try:
                 if wh_type == "telegram":
-                    # Telegram Bot API: chat_id is part of the webhook URL pattern
                     resp = await client.post(url, json=payload)
                 elif wh_type == "generic":
                     resp = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
