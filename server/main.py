@@ -12,10 +12,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from config import settings
 import webhooks
+import issue_sync
 
 app = FastAPI(title="spacetimedb-kanban", version="0.1.0")
 
@@ -399,7 +401,42 @@ async def unclaim_task(task_id: str):
     rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
     if rows:
         asyncio.ensure_future(_notify("unclaimed", rows[0]))
+        asyncio.ensure_future(_sync_to_github(task_id, "unclaimed"))
     return {"status": "unclaimed", "task_id": task_id}
+
+async def _sync_to_github(task_id: str, event: str, notes: str = ""):
+    """Push a kanban task state change back to a linked GitHub issue."""
+    link = issue_sync.get_link(task_id)
+    if not link:
+        return  # No GitHub issue linked
+    token = settings.github_token
+    if not token:
+        return  # No token configured
+    repo = link.get("repo", "")
+    issue_number = link.get("issue_number", 0)
+    if not repo or not issue_number:
+        return
+    try:
+        if event == "completed":
+            issue_sync.close_issue(token, repo, issue_number)
+            issue_sync.update_issue_status(task_id, "closed")
+            if notes:
+                try:
+                    issue_sync.add_issue_comment(token, repo, issue_number, f"✅ Kanban task completed: {notes}")
+                except Exception:
+                    pass
+        elif event == "unclaimed":
+            issue_sync.reopen_issue(token, repo, issue_number)
+            issue_sync.update_issue_status(task_id, "open")
+            if notes:
+                try:
+                    issue_sync.add_issue_comment(token, repo, issue_number, f"🔄 Kanban task reopened: {notes}")
+                except Exception:
+                    pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to sync task {task_id} to GitHub: {e}")
+
 
 @app.post("/api/tasks/{task_id}/complete")
 async def complete_task(task_id: str, body: CompleteRequest = CompleteRequest()):
@@ -407,6 +444,7 @@ async def complete_task(task_id: str, body: CompleteRequest = CompleteRequest())
     rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
     if rows:
         asyncio.ensure_future(_notify("completed", rows[0], body.result_notes))
+        asyncio.ensure_future(_sync_to_github(task_id, "completed", body.result_notes))
     return {"status": "completed", "task_id": task_id}
 
 @app.post("/api/tasks/{task_id}/block")
@@ -495,11 +533,11 @@ async def get_agent(agent_id: str):
 async def spa_fallback(request, exc):
     """Catch-all for SPA client-side routing."""
     if request.url.path.startswith("/api/"):
-        raise exc
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
     index = os.path.join(WEB_DIST, "index.html")
     if os.path.isfile(index):
         return FileResponse(index)
-    raise exc
+    return JSONResponse(status_code=404, content={"detail": "Not found"})
 
 
 # ── Roadmap Import ─────────────────────────────────────────────────
@@ -611,6 +649,108 @@ async def delete_webhook(webhook_id: str):
     return {"status": "deleted"}
 
 
+# ── Issue Sync ────────────────────────────────────────────────────────
+
+class IssueLinkRequest(BaseModel):
+    task_id: str
+    repo: str
+    issue_number: int
+    issue_url: str = ""
+    html_url: str = ""
+
+class IssueCreateRequest(BaseModel):
+    task_id: str
+    repo: str = ""
+    labels: str = ""
+    assignee: str = ""
+
+
+@app.get("/api/issues")
+async def list_issue_links(repo: str = ""):
+    """List all kanban-task ⟷ GitHub-issue links."""
+    return issue_sync.list_links(repo or None)
+
+
+@app.get("/api/issues/{task_id}")
+async def get_issue_link(task_id: str):
+    """Get the GitHub issue link for a specific kanban task."""
+    link = issue_sync.get_link(task_id)
+    if not link:
+        raise HTTPException(404, "No GitHub issue linked to this task")
+    return {"kanban_task_id": task_id, **link}
+
+
+@app.post("/api/issues/link")
+async def link_issue(body: IssueLinkRequest):
+    """Link a kanban task to an existing GitHub issue."""
+    existing = issue_sync.get_link(body.task_id)
+    if existing:
+        raise HTTPException(409, f"Task already linked to {existing['html_url']}")
+    link = issue_sync.link_issue(
+        task_id=body.task_id,
+        repo=body.repo,
+        issue_number=body.issue_number,
+        issue_url=body.issue_url or f"https://api.github.com/repos/{body.repo}/issues/{body.issue_number}",
+        html_url=body.html_url or f"https://github.com/{body.repo}/issues/{body.issue_number}",
+    )
+    return {"status": "linked", **link}
+
+
+@app.post("/api/issues/unlink")
+async def unlink_issue(task_id: str):
+    """Remove a kanban-task ⟷ GitHub-issue link."""
+    if not issue_sync.unlink_issue(task_id):
+        raise HTTPException(404, "No link found for this task")
+    return {"status": "unlinked", "task_id": task_id}
+
+
+@app.post("/api/issues/create")
+async def create_issue_from_task(body: IssueCreateRequest):
+    """Create a GitHub issue from a kanban task and link it."""
+    # Fetch task details
+    rows = await _sql(f"SELECT * FROM tasks WHERE id = '{body.task_id}'")
+    if not rows:
+        raise HTTPException(404, "Task not found")
+    task = rows[0]
+
+    token = settings.github_token
+    if not token:
+        raise HTTPException(400, "GitHub token not configured (set GITHUB_TOKEN env var)")
+
+    repo = body.repo or settings.github_default_repo
+    if not repo:
+        raise HTTPException(400, "No repo specified and no github_default_repo configured")
+
+    label_list = [l.strip() for l in body.labels.split(",") if l.strip()] if body.labels else []
+    # Build issue body from task description + metadata
+    issue_body = task.get("description", "") or ""
+    meta = (
+        f"\n\n---\n"
+        f"_Created from kanban task `{body.task_id}`_"
+        f"\n_Priority: {task.get('priority', 2)}_"
+        f"\n_Skills: {task.get('required_skills', 'none')}_"
+        f"\n_Roadmap: {task.get('roadmap_item', '—')}_"
+    )
+    issue_body += meta
+
+    result = issue_sync.create_issue(token, repo, task["title"], issue_body, label_list, body.assignee or None)
+    issue_sync.link_issue(body.task_id, repo, result["issue_number"], result["issue_url"], result["html_url"])
+    issue_sync.update_issue_status(body.task_id, result["state"])
+
+    # Add activity log
+    try:
+        await _call("add_log", [body.task_id, "github_issue_created", "", f"Issue #{result['issue_number']}: {result['html_url']}"])
+    except Exception:
+        pass
+
+    return {
+        "status": "created",
+        "task_id": body.task_id,
+        "issue_number": result["issue_number"],
+        "html_url": result["html_url"],
+    }
+
+
 # ── GitHub Webhook ───────────────────────────────────────────────────
 
 BRANCH_PATTERN = re.compile(
@@ -622,13 +762,96 @@ BRANCH_PATTERN = re.compile(
 
 @app.post("/api/webhook/github")
 async def github_webhook(request: Request):
-    """Receive GitHub webhook events for PR linking."""
+    """Receive GitHub webhook events for PR linking and issue sync."""
     event = request.headers.get("X-GitHub-Event", "")
+    payload = await request.json()
+    action = payload.get("action", "")
+    repo_full = payload.get("repository", {}).get("full_name", "")
+
+    # ── Issue events (two-way sync) ─────────────────────────────────
+    if event == "issues":
+        issue = payload.get("issue", {})
+        issue_number = issue.get("number", 0)
+        issue_title = issue.get("title", "")
+        issue_html = issue.get("html_url", "")
+        issue_state = issue.get("state", "open")
+        issue_body = issue.get("body", "") or ""
+
+        if action == "opened":
+            # Create a kanban task linked to this issue
+            # Extract the kanban task ID from the issue body (if it was created from kanban)
+            task_id_match = re.search(r"kanban task `(task_\d+_[a-z0-9]+)`", issue_body)
+            if task_id_match:
+                # Already linked — just record the mapping
+                existing_task_id = task_id_match.group(1)
+                issue_sync.link_issue(existing_task_id, repo_full, issue_number, issue.get("url", ""), issue_html)
+                issue_sync.update_issue_status(existing_task_id, issue_state)
+                return {"status": "re-linked", "task_id": existing_task_id}
+
+            # New issue from outside kanban — create task
+            await _call("add_task", [
+                issue_title,
+                f"Issue #{issue_number}: {issue_html}\n\n{issue_body[:500]}",
+                2,
+                repo_full,
+                f"GitHub Issues — {repo_full}",
+                "github-webhook",
+            ])
+            # Find the newly created task
+            rows = await _sql("SELECT id, created_at FROM tasks")
+            if rows:
+                newest = max(rows, key=lambda r: r.get("created_at", 0))
+                issue_sync.link_issue(newest["id"], repo_full, issue_number, issue.get("url", ""), issue_html)
+                issue_sync.update_issue_status(newest["id"], issue_state)
+                try:
+                    await _call("add_log", [newest["id"], "created", "github-webhook", f"From issue #{issue_number}: {issue_html}"])
+                except Exception:
+                    pass
+                asyncio.ensure_future(_notify("created", {
+                    "title": issue_title, "id": newest["id"], "repo": repo_full,
+                }, f"Issue #{issue_number}"))
+                return {"status": "created", "task_id": newest["id"], "issue_number": issue_number}
+
+        elif action == "closed":
+            # Auto-complete the linked kanban task
+            task_id = issue_sync.get_task_id_for_issue(repo_full, issue_number)
+            if task_id:
+                rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
+                if rows and rows[0].get("status") != "done":
+                    notes = f"GitHub issue #{issue_number} closed"
+                    if rows[0].get("status") == "in_progress":
+                        await _call("complete_task", [task_id, notes])
+                    elif rows[0].get("status") == "available":
+                        await _call("claim_task", [task_id, "github-webhook"])
+                        await _call("complete_task", [task_id, notes])
+                    else:
+                        await _call("complete_task", [task_id, notes])
+                    issue_sync.update_issue_status(task_id, "closed")
+                    asyncio.ensure_future(_notify("completed", rows[0], notes))
+                    return {"status": "completed", "task_id": task_id}
+            return {"status": "ignored", "reason": "no linked task found"}
+
+        elif action == "reopened":
+            # Re-open the linked kanban task
+            task_id = issue_sync.get_task_id_for_issue(repo_full, issue_number)
+            if task_id:
+                rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
+                if rows and rows[0].get("status") == "done":
+                    await _call("unclaim_task", [task_id])
+                    try:
+                        await _call("add_log", [task_id, "unclaimed", "github-webhook", f"Issue #{issue_number} reopened"])
+                    except Exception:
+                        pass
+                    issue_sync.update_issue_status(task_id, "open")
+                    asyncio.ensure_future(_notify("unclaimed", rows[0], f"Issue #{issue_number} reopened"))
+                    return {"status": "reopened", "task_id": task_id}
+            return {"status": "ignored", "reason": "no linked task or not done"}
+        return {"status": "ignored", "action": action, "event": event}
+
+    # ── PR events ───────────────────────────────────────────────────
     if event != "pull_request":
         return {"status": "ignored", "event": event}
 
-    payload = await request.json()
-    action = payload.get("action", "")
     pr = payload.get("pull_request", {})
     branch = (pr.get("head", {}) or {}).get("ref", "")
     pr_url = pr.get("html_url", "")

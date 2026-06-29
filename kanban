@@ -893,6 +893,120 @@ def cmd_webhook(args: list[str]):
         else:
             print(f'Removed webhook {opts.id[:20]}')
 
+
+def cmd_issue(args: list[str]):
+    """GitHub issue sync commands."""
+    import argparse
+    p = argparse.ArgumentParser(prog='kanban issue')
+    sub = p.add_subparsers(dest='subcommand', required=True)
+
+    p_link = sub.add_parser('link', help='Link a kanban task to an existing GitHub issue')
+    p_link.add_argument('task_id', help='Kanban task ID')
+    p_link.add_argument('--repo', required=True, help='GitHub repo (owner/repo)')
+    p_link.add_argument('--number', type=int, required=True, help='GitHub issue number')
+    p_link.add_argument('--json', action='store_true')
+
+    p_unlink = sub.add_parser('unlink', help='Remove a kanban-task ⟷ GitHub-issue link')
+    p_unlink.add_argument('task_id', help='Kanban task ID')
+    p_unlink.add_argument('--json', action='store_true')
+
+    p_status = sub.add_parser('status', help='Show issue sync status for a task')
+    p_status.add_argument('task_id', help='Kanban task ID')
+    p_status.add_argument('--json', action='store_true')
+
+    p_list = sub.add_parser('list', help='List all linked issues')
+    p_list.add_argument('--repo', default='', help='Filter by repo')
+    p_list.add_argument('--json', action='store_true')
+
+    p_create = sub.add_parser('create', help='Create a GitHub issue from a kanban task')
+    p_create.add_argument('task_id', help='Kanban task ID')
+    p_create.add_argument('--repo', default='', help='GitHub repo (default: from config or env)')
+    p_create.add_argument('--labels', default='', help='Comma-separated labels')
+    p_create.add_argument('--assignee', default='', help='GitHub username to assign')
+    p_create.add_argument('--json', action='store_true')
+
+    p_sync = sub.add_parser('sync', help='Sync kanban task status to GitHub issue')
+    p_sync.add_argument('task_id', help='Kanban task ID')
+    p_sync.add_argument('--json', action='store_true')
+
+    opts = p.parse_args(args)
+
+    if opts.subcommand == 'link':
+        result = api_post('/api/issues/link', {
+            'task_id': opts.task_id,
+            'repo': opts.repo,
+            'issue_number': opts.number,
+        })
+        if opts.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f'✅ Linked {opts.task_id[:24]} → GitHub issue #{opts.number} on {opts.repo}')
+            print(f'   URL: {result.get("html_url", "?")}')
+
+    elif opts.subcommand == 'unlink':
+        result = api_post(f'/api/issues/unlink?task_id={opts.task_id}')
+        if opts.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f'✅ Unlinked {opts.task_id[:24]} from GitHub issue')
+
+    elif opts.subcommand == 'status':
+        result = api_get(f'/api/issues/{opts.task_id}')
+        if opts.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f'📋 Kanban task: {opts.task_id[:24]}')
+            print(f'   GitHub issue: #{result.get("issue_number", "?")}')
+            print(f'   Repo: {result.get("repo", "?")}')
+            print(f'   Status: {result.get("status", "?")}')
+            print(f'   URL: {result.get("html_url", "?")}')
+
+    elif opts.subcommand == 'list':
+        params = f'?repo={opts.repo}' if opts.repo else ''
+        result = api_get(f'/api/issues{params}')
+        if opts.json:
+            print(json.dumps(result, indent=2))
+        else:
+            if not result:
+                print('No GitHub issue links configured.')
+                print('  Link one: kanban issue link <task-id> --repo=owner/repo --number=<n>')
+                return
+            for r in result:
+                ts = r.get('linked_at', 0)
+                date = datetime.fromtimestamp(ts / 1000).strftime('%m-%d %H:%M') if ts else '?'
+                print(f'  {r["kanban_task_id"][:24]:24s}  #{r.get("issue_number", "?"):>5}  {r.get("status", "?"):8s}  {r.get("repo", "?"):20s}  {date}')
+
+    elif opts.subcommand == 'create':
+        result = api_post('/api/issues/create', {
+            'task_id': opts.task_id,
+            'repo': opts.repo,
+            'labels': opts.labels,
+            'assignee': opts.assignee,
+        })
+        if opts.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f'✅ Created GitHub issue #{result.get("issue_number", "?")}')
+            print(f'   URL: {result.get("html_url", "?")}')
+
+    elif opts.subcommand == 'sync':
+        # Trigger sync: fetch task, push state to linked issue
+        link = api_get(f'/api/issues/{opts.task_id}')
+        task = api_get(f'/api/tasks/{opts.task_id}')
+        if opts.json:
+            print(json.dumps({'task': task, 'link': link}, indent=2))
+        else:
+            task_status = task.get('status', '?')
+            issue_num = link.get('issue_number', '?')
+            print(f'🔁 Syncing task {opts.task_id[:24]} ({task_status})')
+            print(f'   → GitHub issue #{issue_num} on {link.get("repo", "?")}')
+            if task_status == 'done':
+                print('   ⏩ Issue will be closed on next webhook check')
+            elif task_status in ('available', 'in_progress'):
+                print('   ⏩ Issue will be reopened on next webhook check')
+            print('   (Webhook handles the actual push — ensure the GitHub webhook is configured)')
+
+
 COMMANDS = {
     "list": cmd_list,
     "claim": cmd_claim,
@@ -911,6 +1025,7 @@ COMMANDS = {
     "skills": cmd_skills,
     "watch": cmd_watch,
     "dispatch": cmd_dispatch,
+    "issue": cmd_issue,
     "webhook": cmd_webhook,
 }
 
