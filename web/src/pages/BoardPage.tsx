@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
   Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
-  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal, Tag
+  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal, Tag, Keyboard
 } from 'lucide-react'
 import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
@@ -58,6 +58,8 @@ export default function BoardPage() {
   const [filterLabels, setFilterLabels] = useState<Set<string>>(new Set())
   const [allLabels, setAllLabels] = useState<KanbanLabel[]>([])
   const [taskLabelMap, setTaskLabelMap] = useState<Map<string, KanbanLabel[]>>(new Map())
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -316,6 +318,88 @@ export default function BoardPage() {
     const timer = setTimeout(() => setToasts([]), 3500)
     return () => clearTimeout(timer)
   }, [toasts])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in inputs
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        if (e.key === 'Escape') {
+          (e.target as HTMLElement)?.blur()
+        }
+        return
+      }
+
+      switch (e.key) {
+        case 'n':
+          e.preventDefault()
+          setShowCreate(true)
+          break
+        case 's':
+        case '/':
+          e.preventDefault()
+          searchRef.current?.focus()
+          break
+        case 'c':
+          e.preventDefault()
+          setCompactMode(prev => !prev)
+          break
+        case 'f':
+          e.preventDefault()
+          setShowFilters(prev => !prev)
+          break
+        case 'b':
+          e.preventDefault()
+          setSelectMode(prev => !prev)
+          break
+        case 'g':
+          e.preventDefault()
+          setShowGraph(prev => !prev)
+          break
+        case 'e':
+          e.preventDefault()
+          // Focus export button area — we'll just open the first export
+          handleExport('csv')
+          break
+        case '1':
+          setMobileStatusTab('available')
+          break
+        case '2':
+          setMobileStatusTab('in_progress')
+          break
+        case '3':
+          setMobileStatusTab('blocked')
+          break
+        case '4':
+          setMobileStatusTab('done')
+          break
+        case '?':
+          e.preventDefault()
+          setShowShortcuts(true)
+          break
+        case 'Escape':
+          if (showPanel !== 'none') {
+            setShowPanel('none')
+          } else if (showFilters) {
+            setShowFilters(false)
+          } else if (showCreate) {
+            setShowCreate(false)
+          } else if (detailTaskId) {
+            setDetailTaskId(null)
+          } else if (showGraph) {
+            setShowGraph(false)
+          } else if (selectMode) {
+            setSelectMode(false)
+          } else if (showShortcuts) {
+            setShowShortcuts(false)
+          }
+          break
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  })
 
   const renderDependencyBadge = (depId: string | null | undefined) => {
     if (!depId) return null
@@ -578,6 +662,7 @@ export default function BoardPage() {
           <div className="relative flex-1 min-w-[120px] max-w-[200px]">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--color-muted)] pointer-events-none" />
             <input
+              ref={searchRef}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search tasks..."
@@ -946,6 +1031,42 @@ export default function BoardPage() {
           onSelectTask={(id) => { setDetailTaskId(id); setShowGraph(false) }}
           onClose={() => setShowGraph(false)}
         />
+      )}
+
+      {/* Keyboard Shortcuts Help */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowShortcuts(false)}>
+          <div className="w-full max-w-md bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2"><Keyboard className="w-4 h-4" /> Keyboard Shortcuts</h3>
+              <button onClick={() => setShowShortcuts(false)} className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-1.5">
+              {[
+                ['n', 'New task'],
+                ['s / /', 'Search tasks'],
+                ['c', 'Toggle compact view'],
+                ['f', 'Toggle filters'],
+                ['b', 'Toggle select mode'],
+                ['g', 'Toggle dependency graph'],
+                ['e', 'Export as CSV'],
+                ['1-4', 'Switch column tab (mobile)'],
+                ['?', 'Show this help'],
+                ['Esc', 'Close / deselect'],
+              ].map(([key, desc]) => (
+                <div key={key} className="flex items-center justify-between py-1.5">
+                  <span className="text-sm text-[var(--color-muted-foreground)]">{desc}</span>
+                  <kbd className="text-xs px-2 py-0.5 rounded bg-white/10 text-[var(--color-muted)] font-mono border border-[var(--color-border)]">{key}</kbd>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-[var(--color-muted)] text-center pt-1">
+              Shortcuts don't work when typing in input fields
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Bulk Action Bar */}
