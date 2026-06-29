@@ -335,7 +335,10 @@ async def get_task(task_id: str):
 
 @app.post("/api/tasks", status_code=201)
 async def create_task(body: TaskCreate):
+    import uuid as _uuid
+    task_id = f"task_{_uuid.uuid4().hex[:16]}"
     await _call("add_task", [
+        task_id,
         body.title,
         body.description,
         body.priority,
@@ -343,18 +346,15 @@ async def create_task(body: TaskCreate):
         body.roadmap_item,
         body.created_by,
     ])
-    # Set skills if provided
+    # Set skills if provided — using known task_id, no race condition
     if body.required_skills:
-        rows = await _sql("SELECT id, created_at FROM tasks")
-        if rows:
-            newest = max(rows, key=lambda r: r.get("created_at", 0))
-            await _call("set_task_skills", [newest["id"], body.required_skills])
+        await _call("set_task_skills", [task_id, body.required_skills])
     asyncio.ensure_future(_notify("created", {
         "title": body.title,
-        "id": "pending",
+        "id": task_id,
         "repo": body.repo,
     }, body.created_by))
-    return {"status": "created"}
+    return {"status": "created", "id": task_id}
 
 
 # ── Task Logs ────────────────────────────────────────────────────────
@@ -579,11 +579,11 @@ async def import_roadmap(body: RoadmapImportRequest):
 
             if len(tasks) >= 5:
                 for t in tasks:
-                    await _call("add_task", [t["title"], t["description"], t["priority"], t["repo"], t["roadmap_item"], t["created_by"]])
+                    await _call("add_task", ["", t["title"], t["description"], t["priority"], t["repo"], t["roadmap_item"], t["created_by"]])
                 tasks = []
 
     for t in tasks:
-        await _call("add_task", [t["title"], t["description"], t["priority"], t["repo"], t["roadmap_item"], t["created_by"]])
+        await _call("add_task", ["", t["title"], t["description"], t["priority"], t["repo"], t["roadmap_item"], t["created_by"]])
 
     return {"status": "imported", "task_count": task_count}
 
@@ -789,7 +789,10 @@ async def github_webhook(request: Request):
                 return {"status": "re-linked", "task_id": existing_task_id}
 
             # New issue from outside kanban — create task
+            import uuid as _uuid
+            gh_task_id = f"task_{_uuid.uuid4().hex[:16]}"
             await _call("add_task", [
+                gh_task_id,
                 issue_title,
                 f"Issue #{issue_number}: {issue_html}\n\n{issue_body[:500]}",
                 2,
@@ -797,20 +800,13 @@ async def github_webhook(request: Request):
                 f"GitHub Issues — {repo_full}",
                 "github-webhook",
             ])
-            # Find the newly created task
-            rows = await _sql("SELECT id, created_at FROM tasks")
-            if rows:
-                newest = max(rows, key=lambda r: r.get("created_at", 0))
-                issue_sync.link_issue(newest["id"], repo_full, issue_number, issue.get("url", ""), issue_html)
-                issue_sync.update_issue_status(newest["id"], issue_state)
-                try:
-                    await _call("add_log", [newest["id"], "created", "github-webhook", f"From issue #{issue_number}: {issue_html}"])
-                except Exception:
-                    pass
-                asyncio.ensure_future(_notify("created", {
-                    "title": issue_title, "id": newest["id"], "repo": repo_full,
-                }, f"Issue #{issue_number}"))
-                return {"status": "created", "task_id": newest["id"], "issue_number": issue_number}
+            await _call("add_log", [gh_task_id, "created", "github-webhook", f"From issue #{issue_number}: {issue_html}"])
+            issue_sync.link_issue(gh_task_id, repo_full, issue_number, issue.get("url", ""), issue_html)
+            issue_sync.update_issue_status(gh_task_id, issue_state)
+            asyncio.ensure_future(_notify("created", {
+                "title": issue_title, "id": gh_task_id, "repo": repo_full,
+            }, f"Issue #{issue_number}"))
+            return {"status": "created", "task_id": gh_task_id, "issue_number": issue_number}
 
         elif action == "closed":
             # Auto-complete the linked kanban task
@@ -868,18 +864,19 @@ async def github_webhook(request: Request):
     task_id = m.group(1)
 
     if action == "opened" or action == "reopened":
-        # Set branch field on the task
+        # Set branch field on the task — preserve original title
         try:
-            await _call("update_task", [task_id, pr_title, "", 2, branch])
+            rows = await _sql(f"SELECT title FROM tasks WHERE id = '{task_id}'")
+            original_title = rows[0]["title"] if rows else pr_title
+        except Exception:
+            original_title = pr_title
+        try:
+            await _call("update_task", [task_id, original_title, f"PR: {pr_url}", 2, branch])
         except HTTPException:
             pass  # Task may not exist yet
-        try:
-            await _call("update_task", [task_id, pr_title, f"PR: {pr_url}", 2, branch])
-        except HTTPException:
-            pass
         asyncio.ensure_future(_notify("linked", {
             "id": task_id,
-            "title": pr_title,
+            "title": original_title,
             "repo": payload.get("repository", {}).get("full_name", ""),
             "assigned_to": None,
         }, f"PR {pr_url}"))
