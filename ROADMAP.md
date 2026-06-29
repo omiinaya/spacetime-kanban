@@ -95,6 +95,13 @@
 - [x] Sidebar nav item: Webhooks between GitHub Issues and Activity Log
 - [x] Add webhook event definitions for "test" action in all formatters (discord, slack, telegram)
 
+## Phase 15 — Agent Health Dashboard ✅
+- [x] Server endpoint GET /api/agents/health: agents joined with current task details, staleness detection (>5min stale)
+- [x] Agent Health page: stat cards (online/working/stale), agent grid with capability chips, heartbeat ages
+- [x] Current task inline display with click-to-navigate to board
+- [x] Auto-refresh every 15 seconds, manual refresh button
+- [x] AgentHealth nav item between Webhooks and Activity Log
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
