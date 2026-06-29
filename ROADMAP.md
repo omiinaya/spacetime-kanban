@@ -55,9 +55,11 @@
 - [x] Agent performance — per-agent completed/blocked counts with capability tags
 - [x] Server-side analytics endpoints (`GET /api/analytics/overview`, `/throughput`, `/cycle-times`, `/agents`)
 
-## Phase 10 — Autonomous Workflow
-- [ ] Auto-suggest on session start — Hermes checks kanban, pulls top suggestion
-- [ ] Parallel agent dispatch — `kanban dispatch` spawns subagents for available tasks
-- [ ] Task gating — auto-claim tasks matching Hermes' registered capabilities
-- [ ] Webhook outbound — generic webhooks (Telegram, Slack, email) on state transitions
+## Phase 10 — Autonomous Workflow ✅
+- [x] `kanban dispatch` CLI command — scans tasks, scores, auto-claims best match
+- [x] Skill-filtered dispatch — matches tasks against agent capabilities
+- [x] Auto-dispatch cron — runs every 30m, claims tasks with score >= 100
+- [x] `--skills` flag on `kanban create` — set required skills at creation time
+- [x] Fix: STDB SQL unsupported ORDER BY/LIMIT in create_task endpoint
 - [ ] GitHub issue sync — two-way sync between kanban tasks and GitHub issues
+- [ ] Webhook outbound — generic webhooks (Telegram, Slack, email) on state transitions

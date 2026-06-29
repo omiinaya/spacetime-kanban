@@ -25,6 +25,7 @@ Usage:
   kanban skills <task-id> [--skills=<s>] [--json]
   kanban info [--json]
   kanban watch [--capabilities=<c>] [--repo=<r>] [--daemon] [--heartbeat-interval=<s>] [--suggest-interval=<s>]
+  kanban dispatch [--capabilities=<c>] [--repo=<r>] [--limit=<n>] [--auto] [--json]
   kanban --help
 """
 import json
@@ -246,6 +247,7 @@ def cmd_create(args: list[str]):
     p.add_argument("--priority", type=int, default=2)
     p.add_argument("--repo", default="")
     p.add_argument("--roadmap", default="")
+    p.add_argument("--skills", default="")
     p.add_argument("--agent", default=None)
     p.add_argument("--json", action="store_true")
     opts = p.parse_args(args)
@@ -257,6 +259,7 @@ def cmd_create(args: list[str]):
         "repo": opts.repo,
         "roadmap_item": opts.roadmap,
         "created_by": agent,
+        "required_skills": opts.skills,
     })
     if opts.json:
         print(json.dumps(result, indent=2))
@@ -722,6 +725,122 @@ def cmd_watch(args: list[str]):
             pass
 
 
+def cmd_dispatch(args: list[str]):
+    """Auto-dispatch: find available tasks matching capabilities, claim the best."""
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban dispatch")
+    p.add_argument("--capabilities", default="", help="Comma-separated skills to match (default: auto-detect from registered agent)")
+    p.add_argument("--repo", default="", help="Filter by repo")
+    p.add_argument("--limit", type=int, default=1, help="Max tasks to claim (default: 1)")
+    p.add_argument("--auto", action="store_true", help="Non-interactive: auto-claim without prompting")
+    p.add_argument("--json", action="store_true")
+    opts = p.parse_args(args)
+
+    agent_id = detect_agent_id()
+
+    # Get capabilities from registered agent if not specified
+    caps = opts.capabilities
+    if not caps:
+        try:
+            agent = api_get(f"/api/agents/{agent_id}")
+            if isinstance(agent, dict) and agent.get("capabilities"):
+                caps = agent["capabilities"]
+        except:
+            pass
+
+    # Fetch suggestions from the API
+    params = f"limit={opts.limit * 3}"  # fetch more to filter
+    if caps:
+        params += f"&agent_id={agent_id}"
+
+    suggestions = api_get(f"/api/tasks/suggest?{params}")
+
+    if not suggestions or not isinstance(suggestions, list):
+        if opts.json:
+            print(json.dumps({"status": "no_tasks", "agent": agent_id, "capabilities": caps}))
+            return
+        print(f"No available tasks matching capabilities: {caps or '(any)'}")
+        return
+
+    # Filter by repo if specified
+    if opts.repo:
+        suggestions = [s for s in suggestions if s.get("task", {}).get("repo") == opts.repo]
+
+    if not suggestions:
+        if opts.json:
+            print(json.dumps({"status": "no_matches", "agent": agent_id, "filter": opts.repo}))
+            return
+        print(f"No tasks match repo filter: {opts.repo}")
+        return
+
+    # Sort by score descending
+    suggestions.sort(key=lambda s: -(s.get("score", 0) or 0))
+    to_claim = suggestions[:opts.limit]
+    results = []
+
+    if not opts.json:
+        print(f"🤖 Agent: {agent_id}")
+        if caps:
+            print(f"🛠️  Capabilities: {caps}")
+        print(f"📋 Found {len(to_claim)} task(s) to dispatch")
+        print()
+
+    for s in to_claim:
+        task = s.get("task", {})
+        tid = task.get("id", "")
+        title = task.get("title", "?")
+        score = s.get("score", 0)
+        reason = s.get("reason", "")
+        prio = task.get("priority", 2)
+        required = task.get("required_skills", "")
+        repo = task.get("repo", "")
+
+        if opts.auto:
+            # Auto-claim
+            result = api_post(f"/api/tasks/{tid}/claim", {"agent_id": agent_id})
+            success = isinstance(result, dict) and result.get("status") == "claimed"
+            if success:
+                # Add a log
+                notes = f"Auto-dispatched to {agent_id} (score: {score}, caps: {caps})"
+                try:
+                    api_post(f"/api/tasks/{tid}/log", {
+                        "task_id": tid,
+                        "action": "auto-dispatched",
+                        "agent_id": agent_id,
+                        "notes": notes,
+                    })
+                except:
+                    pass
+                results.append({"task_id": tid, "title": title, "status": "claimed", "score": score})
+                if not opts.json:
+                    print(f"  ✅ [{prio}] {title}")
+                    print(f"     Claimed: {tid[:24]} (score {score})")
+                    if required:
+                        print(f"     Skills: {required}")
+                    if reason:
+                        print(f"     Why: {reason}")
+            else:
+                results.append({"task_id": tid, "title": title, "status": "failed", "error": str(result)})
+                if not opts.json:
+                    print(f"  ❌ [{prio}] {title} — claim failed: {result}")
+        else:
+            # Interactive: show suggestion
+            if not opts.json:
+                print(f"  💡 [{prio}] {title}")
+                print(f"     ID: {tid[:24]} | Score: {score} | Repo: {repo}")
+                if required:
+                    print(f"     Needs: {required}")
+                if reason:
+                    print(f"     Why: {reason}")
+                print()
+
+    if not opts.auto and not opts.json:
+        if to_claim:
+            ids = [s.get("task", {}).get("id", "")[:24] for s in to_claim]
+            print(f"Run 'kanban claim <task-id>' to claim, or 'kanban dispatch --auto' for unattended")
+    elif opts.auto and opts.json:
+        print(json.dumps({"status": "dispatched", "agent": agent_id, "results": results}))
+
 COMMANDS = {
     "list": cmd_list,
     "claim": cmd_claim,
@@ -739,6 +858,7 @@ COMMANDS = {
     "heartbeat": cmd_heartbeat,
     "skills": cmd_skills,
     "watch": cmd_watch,
+    "dispatch": cmd_dispatch,
 }
 
 

@@ -381,9 +381,10 @@ async def create_task(body: TaskCreate):
     ])
     # Set skills if provided
     if body.required_skills:
-        rows = await _sql(f"SELECT id FROM tasks ORDER BY created_at DESC LIMIT 1")
+        rows = await _sql("SELECT id, created_at FROM tasks")
         if rows:
-            await _call("set_task_skills", [rows[0]["id"], body.required_skills])
+            newest = max(rows, key=lambda r: r.get("created_at", 0))
+            await _call("set_task_skills", [newest["id"], body.required_skills])
     asyncio.ensure_future(_notify_discord("created", {
         "title": body.title,
         "id": "pending",

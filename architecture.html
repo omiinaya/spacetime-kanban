@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SpacetimedbKanban Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'JetBrains Mono',monospace;background:#020617;min-height:100vh;padding:2rem;color:white}
+.container{max-width:1200px;margin:0 auto}
+.header{margin-bottom:2rem}
+.header-row{display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem}
+.pulse-dot{width:12px;height:12px;background:#22d3ee;border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+h1{font-size:1.5rem;font-weight:700;letter-spacing:-0.025em}
+.subtitle{color:#94a3b8;font-size:0.875rem;margin-left:1.75rem}
+.diagram-container{background:rgba(15,23,42,0.5);border-radius:1rem;border:1px solid #1e293b;padding:1.5rem;overflow-x:auto}
+svg{width:100%;min-width:900px;display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-top:2rem}
+.card{background:rgba(15,23,42,0.5);border-radius:0.75rem;border:1px solid #1e293b;padding:1.25rem}
+.card-header{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem}
+.card-dot{width:8px;height:8px;border-radius:50%}
+.card-dot.cyan{background:#22d3ee}
+.card-dot.emerald{background:#34d399}
+.card-dot.violet{background:#a78bfa}
+.card-dot.rose{background:#fb7185}
+.card h3{font-size:0.875rem;font-weight:600}
+.card ul{list-style:none;color:#94a3b8;font-size:0.75rem}
+.card li{margin-bottom:0.375rem}
+.footer{text-align:center;margin-top:1.5rem;color:#475569;font-size:0.75rem}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<div class="header-row"><div class="pulse-dot"></div><h1>SpacetimedbKanban Architecture</h1></div>
+<p class="subtitle">Atomic multi-agent kanban on SpacetimeDB</p>
+</div>
+<div class="diagram-container">
+<svg viewBox="0 0 1000 480">
+<defs>
+<marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#64748b"/></marker>
+<marker id="arrow-em" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#34d399"/></marker>
+<pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/></pattern>
+</defs>
+<rect width="100%" height="100%" fill="url(#grid)"/>
+
+<!-- Legend -->
+<text x="720" y="60" fill="white" font-size="10" font-weight="600">Legend</text>
+<rect x="720" y="72" width="16" height="10" rx="2" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/><text x="742" y="80" fill="#94a3b8" font-size="8">Frontend</text>
+<rect x="720" y="88" width="16" height="10" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/><text x="742" y="96" fill="#94a3b8" font-size="8">Backend</text>
+<rect x="720" y="104" width="16" height="10" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/><text x="742" y="112" fill="#94a3b8" font-size="8">Database</text>
+
+<!-- AI Agents -->
+<rect x="40" y="110" width="130" height="80" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+<text x="105" y="135" fill="white" font-size="11" font-weight="600" text-anchor="middle">AI Agents</text>
+<text x="105" y="152" fill="#94a3b8" font-size="9" text-anchor="middle">Hermes · Claude</text>
+<text x="105" y="168" fill="#94a3b8" font-size="9" text-anchor="middle">Ciel · Copilot</text>
+
+<!-- Agent HTTP -->
+<line x1="170" y1="130" x2="228" y2="130" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="200" y="124" fill="#94a3b8" font-size="9">HTTP</text>
+
+<!-- Clean FastAPI -->
+<rect x="230" y="100" width="140" height="60" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+<text x="300" y="123" fill="white" font-size="11" font-weight="600" text-anchor="middle">FastAPI</text>
+<text x="300" y="140" fill="#34d399" font-size="9" text-anchor="middle">:8727</text>
+<text x="300" y="153" fill="#94a3b8" font-size="8" text-anchor="middle">Task CRUD</text>
+
+<!-- STDB -->
+<rect x="230" y="220" width="140" height="70" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="300" y="243" fill="white" font-size="11" font-weight="600" text-anchor="middle">SpacetimeDB</text>
+<text x="300" y="260" fill="#94a3b8" font-size="9" text-anchor="middle">:3001</text>
+<text x="300" y="278" fill="#94a3b8" font-size="8" text-anchor="middle">tasks · history</text>
+
+<!-- Frontend -->
+<rect x="440" y="100" width="140" height="60" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="510" y="123" fill="white" font-size="11" font-weight="600" text-anchor="middle">Frontend</text>
+<text x="510" y="140" fill="#22d3ee" font-size="9" text-anchor="middle">React :5189</text>
+
+<!-- Watchdog -->
+<rect x="440" y="220" width="140" height="50" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+<text x="510" y="243" fill="white" font-size="11" font-weight="600" text-anchor="middle">Watchdog</text>
+<text x="510" y="258" fill="#94a3b8" font-size="9" text-anchor="middle">every 5m</text>
+
+<!-- Webhook -->
+<rect x="440" y="310" width="140" height="50" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+<text x="510" y="333" fill="white" font-size="11" font-weight="600" text-anchor="middle">GitHub Webhook</text>
+
+<!-- Arrows -->
+<line x1="370" y1="160" x2="370" y2="218" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="370" y1="130" x2="438" y2="130" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="510" y1="270" x2="510" y2="308" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<!-- State machine box -->
+<rect x="30" y="280" width="170" height="100" rx="8" fill="rgba(15,23,42,0.6)" stroke="#1e293b" stroke-width="1"/>
+<text x="115" y="300" fill="white" font-size="9" font-weight="600" text-anchor="middle">Task State Machine</text>
+<text x="115" y="320" fill="#94a3b8" font-size="8" text-anchor="middle">available ──[claim]──→ in_progress</text>
+<text x="115" y="336" fill="#94a3b8" font-size="8" text-anchor="middle">in_progress ──[complete]──→ done</text>
+<text x="115" y="352" fill="#94a3b8" font-size="8" text-anchor="middle">in_progress ──[block]──→ blocked</text>
+<text x="115" y="368" fill="#94a3b8" font-size="8" text-anchor="middle">blocked ──[unclaim]──→ available</text>
+</svg>
+</div>
+<div class="cards">
+<div class="card"><div class="card-header"><div class="card-dot emerald"></div><h3>Backend</h3></div><ul><li>FastAPI on :8727</li><li>REST task CRUD</li><li>Atomic task claiming</li></ul></div>
+<div class="card"><div class="card-header"><div class="card-dot violet"></div><h3>Database</h3></div><ul><li>SpacetimeDB on :3001</li><li>tasks + history tables</li><li>Dependency enforcement</li></ul></div>
+<div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>Automation</h3></div><ul><li>Stale task watchdog (5m)</li><li>GitHub PR webhook</li><li>Auto-close on merge</li></ul></div>
+</div>
+<p class="footer">SpacetimedbKanban • 2026</p>
+</div>
+</body>
+</html>
