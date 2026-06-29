@@ -11,3 +11,8 @@ __pycache__/
 .venv/
 server/.env
 server/venv/
+
+# Playwright E2E
+web/test-results/
+web/playwright-report/
+web/playwright/.cache/

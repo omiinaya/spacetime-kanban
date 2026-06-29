@@ -165,11 +165,11 @@ def _format_discord(action: str, task: dict, extra: str = "") -> dict:
     """Format as Discord webhook embed."""
     emoji = {
         "created": "🆕", "claimed": "👤", "unclaimed": "↩️",
-        "completed": "✅", "blocked": "🚧", "linked": "🔗",
+        "completed": "✅", "blocked": "🚧", "linked": "🔗", "test": "🔔",
     }.get(action, "🔔")
     color = {
         "created": 0x5865F2, "claimed": 0xFEE75C, "unclaimed": 0x808080,
-        "completed": 0x57F287, "blocked": 0xED4245, "linked": 0x5865F2,
+        "completed": 0x57F287, "blocked": 0xED4245, "linked": 0x5865F2, "test": 0x5865F2,
     }.get(action, 0x5865F2)
     title = task.get("title", "?")
     task_id = task.get("id", "?")
@@ -197,7 +197,7 @@ def _format_slack(action: str, task: dict, extra: str = "") -> dict:
     """Format as Slack webhook message."""
     emoji = {
         "created": ":new:", "claimed": ":bust_in_silhouette:", "unclaimed": ":leftwards_arrow_with_hook:",
-        "completed": ":white_check_mark:", "blocked": ":no_entry:", "linked": ":link:",
+        "completed": ":white_check_mark:", "blocked": ":no_entry:", "linked": ":link:", "test": ":bell:",
     }.get(action, ":bell:")
     title = task.get("title", "?")
     task_id = task.get("id", "?")
@@ -221,7 +221,7 @@ def _format_telegram(action: str, task: dict, extra: str = "") -> dict:
     """Format as Telegram message payload."""
     emoji = {
         "created": "🆕", "claimed": "👤", "unclaimed": "↩️",
-        "completed": "✅", "blocked": "🚧", "linked": "🔗",
+        "completed": "✅", "blocked": "🚧", "linked": "🔗", "test": "🔔",
     }.get(action, "🔔")
     title = task.get("title", "?")
     task_id = task.get("id", "?")

@@ -647,6 +647,43 @@ async def update_webhook(webhook_id: str, body: WebhookUpdateRequest):
     return wh
 
 
+@app.post("/api/webhooks/{webhook_id}/test")
+async def test_webhook(webhook_id: str):
+    """Send a test ping to a webhook to verify it's working."""
+    wh = webhooks.get_webhook(webhook_id)
+    if not wh:
+        raise HTTPException(404, "Webhook not found")
+    test_task = {
+        "id": "test_ping",
+        "title": "🔔 Test notification from spacetimedb-kanban",
+        "description": "This is a test event to verify your webhook configuration.",
+        "priority": 0,
+        "status": "available",
+        "assigned_to": None,
+        "repo": "spacetimedb-kanban",
+        "branch": None,
+        "roadmap_item": "Integration Testing",
+        "created_by": "webhook-test",
+        "created_at": 0,
+        "updated_at": 0,
+        "depends_on": None,
+        "required_skills": None,
+        "score": 0,
+    }
+    from webhooks import _format_payload
+    payload = _format_payload(wh["type"], "test", test_task, "Webhook test ping")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            if wh["type"] == "telegram":
+                resp = await client.post(wh["url"], json=payload)
+            else:
+                resp = await client.post(wh["url"], json=payload,
+                    headers={"Content-Type": "application/json"} if wh["type"] == "generic" else {})
+            resp.raise_for_status()
+        return {"status": "sent", "webhook_id": webhook_id, "response_code": resp.status_code}
+    except Exception as e:
+        raise HTTPException(502, f"Webhook test failed: {str(e)[:200]}")
+
 @app.delete("/api/webhooks/{webhook_id}")
 async def delete_webhook(webhook_id: str):
     """Remove a webhook subscription."""
