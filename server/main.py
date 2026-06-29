@@ -672,7 +672,166 @@ async def list_logs(task_id: Optional[str] = None, limit: int = 50):
     return logs[:limit]
 
 
-# ─── Auto-star GitHub repo on startup ─────────────────────────────────────────
+# ── Analytics ────────────────────────────────────────────────────────
+
+
+@app.get("/api/analytics/overview")
+async def analytics_overview():
+    """High-level metrics: total, per-status, completed today/this week."""
+    tasks = await _sql("SELECT * FROM tasks")
+    logs = await _sql("SELECT * FROM task_logs")
+
+    now = int(datetime.utcnow().timestamp() * 1000)
+    day_ms = 86_400_000
+    week_ms = 7 * day_ms
+
+    total = len(tasks)
+    by_status = {}
+    for t in tasks:
+        s = t.get("status", "unknown")
+        by_status[s] = by_status.get(s, 0) + 1
+
+    # Completed recently
+    completed_today = sum(
+        1 for t in tasks
+        if t.get("status") == "done" and (now - t.get("updated_at", 0)) < day_ms
+    )
+    completed_week = sum(
+        1 for t in tasks
+        if t.get("status") == "done" and (now - t.get("updated_at", 0)) < week_ms
+    )
+    total_done = by_status.get("done", 0)
+
+    # Repo breakdown
+    repos = {}
+    for t in tasks:
+        r = t.get("repo") or "none"
+        if r not in repos:
+            repos[r] = {"total": 0, "done": 0, "in_progress": 0, "blocked": 0, "available": 0}
+        repos[r]["total"] += 1
+        s = t.get("status", "unknown")
+        if s in repos[r]:
+            repos[r][s] += 1
+
+    return {
+        "total": total,
+        "by_status": by_status,
+        "completed_today": completed_today,
+        "completed_week": completed_week,
+        "total_done": total_done,
+        "repos": repos,
+        "agent_count": len(await _sql("SELECT * FROM swarm_agents")),
+    }
+
+
+@app.get("/api/analytics/throughput")
+async def analytics_throughput(days: int = 14):
+    """Tasks completed per day for the last N days."""
+    rows = await _sql("SELECT * FROM tasks")
+    now = int(datetime.utcnow().timestamp() * 1000)
+    day_ms = 86_400_000
+
+    # Build a map of date -> count (only done tasks)
+    daily: dict[str, int] = {}
+    for t in rows:
+        if t.get("status") != "done":
+            continue
+        updated = t.get("updated_at", 0)
+        age_days = (now - updated) // day_ms
+        if age_days > days:
+            continue
+        # Bucket by days_ago
+        label = f"{int(age_days)}d ago" if age_days > 0 else "today"
+        daily[label] = daily.get(label, 0) + 1
+
+    # Fill in missing days
+    result = []
+    for i in range(days, -1, -1):
+        label = "today" if i == 0 else f"{i}d ago"
+        result.append({"date": label, "completed": daily.get(label, 0)})
+    return result
+
+
+@app.get("/api/analytics/cycle-times")
+async def analytics_cycle_times():
+    """Average time from created to done per repo."""
+    logs = await _sql("SELECT * FROM task_logs")
+
+    # Group logs by task_id and find created vs completed timestamps
+    task_times: dict[str, dict] = {}
+    for log in logs:
+        tid = log.get("task_id", "")
+        action = log.get("action", "")
+        ts = log.get("timestamp", 0)
+        if tid not in task_times:
+            task_times[tid] = {}
+        if action == "created":
+            task_times[tid]["created"] = ts
+        elif action == "completed":
+            task_times[tid]["completed"] = ts
+
+    # Fetch task repos
+    tasks = await _sql("SELECT * FROM tasks")
+    task_repo = {t["id"]: t.get("repo", "") for t in tasks}
+
+    repo_cycles: dict[str, list[int]] = {}
+    for tid, times in task_times.items():
+        if "created" in times and "completed" in times:
+            cycle_ms = times["completed"] - times["created"]
+            if cycle_ms > 0:
+                repo = task_repo.get(tid, "")
+                if repo not in repo_cycles:
+                    repo_cycles[repo] = []
+                repo_cycles[repo].append(cycle_ms)
+
+    result = []
+    for repo, cycles in sorted(repo_cycles.items()):
+        avg_ms = sum(cycles) / len(cycles)
+        result.append({
+            "repo": repo or "(none)",
+            "count": len(cycles),
+            "avg_hours": round(avg_ms / 3_600_000, 1),
+            "min_hours": round(min(cycles) / 3_600_000, 1),
+            "max_hours": round(max(cycles) / 3_600_000, 1),
+        })
+    return result
+
+
+@app.get("/api/analytics/agents")
+async def analytics_agents():
+    """Per-agent stats: tasks completed, stale rate."""
+    agents = await _sql("SELECT * FROM swarm_agents")
+    logs = await _sql("SELECT * FROM task_logs")
+    tasks = await _sql("SELECT * FROM tasks")
+
+    # Count completed tasks per agent from logs
+    agent_completions: dict[str, int] = {}
+    agent_stales: dict[str, int] = {}
+    for log in logs:
+        agent = log.get("agent_id") or ""
+        action = log.get("action", "")
+        if agent:
+            if action == "completed":
+                agent_completions[agent] = agent_completions.get(agent, 0) + 1
+            elif action == "blocked":
+                agent_stales[agent] = agent_stales.get(agent, 0) + 1
+
+    result = []
+    for a in agents:
+        aid = a.get("id", "")
+        result.append({
+            "id": aid,
+            "status": a.get("status", "offline"),
+            "completed": agent_completions.get(aid, 0),
+            "blocked": agent_stales.get(aid, 0),
+            "capabilities": a.get("capabilities"),
+            "repo_focus": a.get("repo_focus"),
+            "last_heartbeat": a.get("last_heartbeat", 0),
+        })
+    return result
+
+
+# ─── Auto-star GitHub repo on startup ────────────────────────────────────────
 
 import threading as _threading
 import urllib.request as _urllib_request

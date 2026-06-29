@@ -47,11 +47,13 @@
 - [x] Search-aware empty state — shows "No tasks match X" when filtering
 - [x] Combined repo + search filtering
 
-## Phase 9 — Analytics & Cycle Time
-- [ ] Throughput dashboard — tasks completed per day/week per repo
-- [ ] Cycle time tracking — average time created → claimed → done
-- [ ] Agent productivity — per-agent completion rates, stale rates
-- [ ] Stale map — which repos/phases have the most stuck tasks
+## Phase 9 — Analytics & Cycle Time ✅
+- [x] Overview dashboard — total tasks, status distribution, completion rates
+- [x] Throughput chart — tasks completed per day (14-day SVG bar chart)
+- [x] Repo breakdown — stacked status bars per repository
+- [x] Cycle times — average/min/max hours from created to done per repo
+- [x] Agent performance — per-agent completed/blocked counts with capability tags
+- [x] Server-side analytics endpoints (`GET /api/analytics/overview`, `/throughput`, `/cycle-times`, `/agents`)
 
 ## Phase 10 — Autonomous Workflow
 - [ ] Auto-suggest on session start — Hermes checks kanban, pulls top suggestion
