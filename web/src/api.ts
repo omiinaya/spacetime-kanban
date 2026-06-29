@@ -98,6 +98,25 @@ export interface IssueLink {
   linked_at: number
 }
 
+export interface AgentHealth {
+  id: string
+  host: string
+  status: string
+  capabilities: string | null
+  repo_focus: string | null
+  current_task: {
+    id: string
+    title: string
+    status: string
+    priority: number
+    repo: string
+  } | null
+  last_heartbeat: number
+  heartbeat_age_seconds: number
+  stale: boolean
+  first_seen: number
+}
+
 export interface Webhook {
   id: string
   url: string
@@ -155,6 +174,7 @@ export const api = {
       apiPost<{ status: string }>(`/agents/${agent_id}/heartbeat`, body),
     setCapabilities: (agent_id: string, body: { capabilities?: string; repo_focus?: string }) =>
       apiPost<{ status: string }>(`/agents/${agent_id}/capabilities`, body),
+    health: () => apiGet<AgentHealth[]>('/agents/health'),
   },
   suggest: {
     list: (params?: { agent_id?: string; limit?: number }) => {

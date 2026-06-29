@@ -514,6 +514,52 @@ async def set_agent_capabilities(agent_id: str, body: AgentCapabilitiesRequest):
     return {"status": "updated", "agent_id": agent_id}
 
 
+@app.get("/api/agents/health")
+async def agent_health():
+    """Return all agents enriched with current task details and staleness."""
+    agents = await _sql("SELECT * FROM swarm_agents")
+    tasks = await _sql("SELECT id, title, description, status, priority, repo FROM tasks")
+    task_map = {t["id"]: t for t in tasks}
+
+    now_ms = int(datetime.utcnow().timestamp() * 1000)
+    stale_threshold = 5 * 60 * 1000  # 5 minutes
+
+    result = []
+    for r in agents:
+        aid = r.get("id", "")
+        current_task_id = r.get("current_task_id")
+        task_info = None
+        if current_task_id and current_task_id in task_map:
+            t = task_map[current_task_id]
+            task_info = {
+                "id": t["id"],
+                "title": t["title"],
+                "status": t.get("status", ""),
+                "priority": t.get("priority", 2),
+                "repo": t.get("repo", ""),
+            }
+
+        last_hb = r.get("last_heartbeat", 0)
+        age_ms = now_ms - last_hb
+        stale = age_ms > stale_threshold if last_hb > 0 else True
+
+        result.append({
+            "id": aid,
+            "host": r.get("host", ""),
+            "status": r.get("status", "offline"),
+            "capabilities": r.get("capabilities"),
+            "repo_focus": r.get("repo_focus"),
+            "current_task": task_info,
+            "last_heartbeat": last_hb,
+            "heartbeat_age_seconds": max(0, age_ms // 1000) if last_hb > 0 else -1,
+            "stale": stale,
+            "first_seen": r.get("first_seen", 0),
+        })
+
+    result.sort(key=lambda a: -a["last_heartbeat"])
+    return result
+
+
 @app.get("/api/agents", response_model=list[AgentOut])
 async def list_agents():
     """List all registered swarm agents."""
@@ -533,6 +579,7 @@ async def get_agent(agent_id: str):
     if not rows:
         raise HTTPException(404, "Agent not found")
     return await _row_to_agent(rows[0])
+
 
 
 @app.exception_handler(404)
