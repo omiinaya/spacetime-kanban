@@ -44,6 +44,8 @@ export default function BoardPage() {
   const [toasts, setToasts] = useState<{ id: number; emoji: string; text: string }[]>([])
   const prevTasksRef = useRef<Task[]>([])
   const toastIdCounter = useRef(0)
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -88,9 +90,58 @@ export default function BoardPage() {
     const reason = prompt('Block reason:')
     if (reason === null) return
     try {
-      await api.tasks.block(taskId, reason || 'Blocked via web UI')
+      await api.tasks.block(taskId, reason || 'Blocked')
     } catch (e: any) {
       alert(`Block failed: ${e.message}`)
+    }
+  }
+
+  const handleDragStart = (taskId: string) => {
+    setDraggedTaskId(taskId)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedTaskId(null)
+    setDragOverColumn(null)
+  }
+
+  const handleDropOnColumn = async (targetStatus: TaskStatus) => {
+    const taskId = draggedTaskId
+    if (!taskId) return
+    setDraggedTaskId(null)
+    setDragOverColumn(null)
+
+    const task = tasks.find(t => t.id === taskId)
+    if (!task || task.status === targetStatus) return
+
+    try {
+      switch (targetStatus) {
+        case 'available':
+          if (task.status === 'in_progress' || task.status === 'blocked') {
+            await api.tasks.unclaim(taskId)
+          }
+          break
+        case 'in_progress':
+          if (task.status === 'available') {
+            await api.tasks.claim(taskId, 'web-user')
+          }
+          break
+        case 'blocked':
+          if (task.status !== 'blocked') {
+            await api.tasks.block(taskId, 'Moved to blocked')
+          }
+          break
+        case 'done':
+          if (task.status === 'in_progress') {
+            await api.tasks.complete(taskId)
+          } else if (task.status === 'available') {
+            await api.tasks.claim(taskId, 'web-user')
+            await api.tasks.complete(taskId)
+          }
+          break
+      }
+    } catch (e: any) {
+      alert(`Drop failed: ${e.message}`)
     }
   }
 
@@ -190,8 +241,13 @@ export default function BoardPage() {
 
   const renderTaskCard = (task: Task) => (
     <div key={task.id}
+      draggable
+      onDragStart={() => handleDragStart(task.id)}
+      onDragEnd={handleDragEnd}
       onClick={() => setDetailTaskId(task.id)}
-      className="bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] p-3 space-y-2 cursor-pointer hover:border-[var(--color-ring)] transition-colors"
+      className={`bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] p-3 space-y-2 cursor-pointer hover:border-[var(--color-ring)] transition-colors ${
+        draggedTaskId === task.id ? 'opacity-50 ring-2 ring-[var(--color-primary)]' : ''
+      }`}
     >
       <div className="flex items-start justify-between gap-2">
         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${PRIORITY_COLORS[task.priority] || ''}`}>
@@ -302,6 +358,7 @@ export default function BoardPage() {
                 FALLBACK
               </span>
             )}
+            <span className="text-[10px] text-[var(--color-muted)] font-normal hidden sm:inline">Drag cards between columns</span>
           </h1>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -507,6 +564,7 @@ export default function BoardPage() {
       <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {STATUS_COLUMNS.map((status) => {
           const colTasks = filtered.filter((t) => t.status === status)
+          const isOver = dragOverColumn === status && draggedTaskId !== null
           return (
             <div key={status} className="space-y-3">
               <div className="flex items-center justify-between">
@@ -517,11 +575,23 @@ export default function BoardPage() {
                   {colTasks.length}
                 </span>
               </div>
-              <div className="space-y-2 min-h-[120px]">
+              <div
+                className={`space-y-2 min-h-[120px] rounded-lg transition-colors ${
+                  isOver ? 'bg-white/5 ring-2 ring-[var(--color-primary)] border-2 border-dashed border-[var(--color-primary)]' : ''
+                }`}
+                onDragOver={(e) => { e.preventDefault(); setDragOverColumn(status) }}
+                onDragEnter={(e) => { e.preventDefault(); setDragOverColumn(status) }}
+                onDragLeave={() => setDragOverColumn(null)}
+                onDrop={() => handleDropOnColumn(status)}
+              >
                 {colTasks.map(renderTaskCard)}
                 {colTasks.length === 0 && (
-                  <div className="text-center py-6 text-xs text-[var(--color-muted)] border border-dashed border-[var(--color-border)] rounded-lg">
-                    Empty
+                  <div className={`text-center py-6 text-xs border border-dashed rounded-lg transition-colors ${
+                    isOver
+                      ? 'text-[var(--color-primary)] border-[var(--color-primary)] bg-white/5'
+                      : 'text-[var(--color-muted)] border-[var(--color-border)]'
+                  }`}>
+                    {isOver ? 'Drop here' : 'Empty'}
                   </div>
                 )}
               </div>
