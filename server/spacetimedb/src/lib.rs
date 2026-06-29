@@ -273,6 +273,17 @@ pub fn delete_task(ctx: &ReducerContext, task_id: String) -> Result<(), String> 
         .ok_or_else(|| "Task not found".to_string())?;
     ctx.db.tasks().delete(task);
     delete_logs_for_task(ctx, &task_id);
+    // Clean up label assignments
+    let assignments: Vec<TaskLabelAssignment> = ctx
+        .db
+        .task_label_assignments()
+        .iter()
+        .filter(|a| a.task_id == task_id)
+        .map(|a| a.clone())
+        .collect();
+    for a in assignments {
+        ctx.db.task_label_assignments().delete(a);
+    }
     Ok(())
 }
 
@@ -630,5 +641,138 @@ pub fn update_issue_link_status(
         .collect();
     for l in old { ctx.db.issue_links().delete(l); }
     ctx.db.issue_links().insert(link);
+    Ok(())
+}
+
+// ── Labels / Tag System ───────────────────────────────────────────────
+
+#[spacetimedb::table(accessor = kanban_labels, public)]
+#[derive(Debug, Clone)]
+pub struct KanbanLabel {
+    #[primary_key]
+    pub id: String,
+    pub name: String,
+    pub color: String,         // hex color, e.g. "#0ea5e9"
+    pub description: String,
+    pub created_at: u64,
+}
+
+#[spacetimedb::table(accessor = task_label_assignments, public)]
+#[derive(Debug, Clone)]
+pub struct TaskLabelAssignment {
+    #[primary_key]
+    pub id: String,              // composite: "task_id:label_id"
+    pub task_id: String,
+    pub label_id: String,
+}
+
+fn assignment_id(task_id: &str, label_id: &str) -> String {
+    format!("{}:{}", task_id, label_id)
+}
+
+fn find_label(ctx: &ReducerContext, label_id: &str) -> Option<KanbanLabel> {
+    ctx.db.kanban_labels().iter()
+        .find(|l| l.id == label_id)
+        .map(|l| l.clone())
+}
+
+#[reducer]
+pub fn add_label(
+    ctx: &ReducerContext,
+    id: String,
+    name: String,
+    color: String,
+    description: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let label_id = if id.is_empty() { make_id("label", ctx) } else { id };
+    ctx.db.kanban_labels().insert(KanbanLabel {
+        id: label_id,
+        name,
+        color,
+        description,
+        created_at: now,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn remove_label(ctx: &ReducerContext, label_id: String) -> Result<(), String> {
+    let label = find_label(ctx, &label_id)
+        .ok_or_else(|| "Label not found".to_string())?;
+    ctx.db.kanban_labels().delete(label);
+    // Clean up all task assignments for this label
+    let assignments: Vec<TaskLabelAssignment> = ctx.db.task_label_assignments().iter()
+        .filter(|a| a.label_id == label_id)
+        .map(|a| a.clone())
+        .collect();
+    for a in assignments {
+        ctx.db.task_label_assignments().delete(a);
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn update_label(
+    ctx: &ReducerContext,
+    label_id: String,
+    name: String,
+    color: String,
+    description: String,
+) -> Result<(), String> {
+    let mut label = find_label(ctx, &label_id)
+        .ok_or_else(|| "Label not found".to_string())?;
+    if !name.is_empty() { label.name = name; }
+    if !color.is_empty() { label.color = color; }
+    label.description = description;
+    let old: Vec<KanbanLabel> = ctx.db.kanban_labels().iter()
+        .filter(|l| l.id == label.id)
+        .map(|l| l.clone())
+        .collect();
+    for l in old { ctx.db.kanban_labels().delete(l); }
+    ctx.db.kanban_labels().insert(label);
+    Ok(())
+}
+
+#[reducer]
+pub fn assign_label_to_task(
+    ctx: &ReducerContext,
+    task_id: String,
+    label_id: String,
+) -> Result<(), String> {
+    // Verify both exist
+    let _task = find_task(ctx, &task_id)
+        .ok_or_else(|| "Task not found".to_string())?;
+    let _label = find_label(ctx, &label_id)
+        .ok_or_else(|| "Label not found".to_string())?;
+    // Check not already assigned
+    let exists = ctx.db.task_label_assignments().iter()
+        .any(|a| a.task_id == task_id && a.label_id == label_id);
+    if !exists {
+        ctx.db.task_label_assignments().insert(TaskLabelAssignment {
+            id: assignment_id(&task_id, &label_id),
+            task_id: task_id.clone(),
+            label_id,
+        });
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn unassign_label_from_task(
+    ctx: &ReducerContext,
+    task_id: String,
+    label_id: String,
+) -> Result<(), String> {
+    let assignment: Vec<TaskLabelAssignment> = ctx.db.task_label_assignments().iter()
+        .filter(|a| a.task_id == task_id && a.label_id == label_id)
+        .map(|a| a.clone())
+        .collect();
+    if assignment.is_empty() {
+        return Err("Label assignment not found".to_string());
+    }
+    for a in assignment {
+        ctx.db.task_label_assignments().delete(a);
+    }
     Ok(())
 }

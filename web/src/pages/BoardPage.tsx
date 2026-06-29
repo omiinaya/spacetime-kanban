@@ -2,11 +2,12 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
   Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
-  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal
+  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal, Tag
 } from 'lucide-react'
-import { api, type SuggestResult, type Agent, type Task as ApiTask } from '../api'
+import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
 import DependencyGraph from './DependencyGraph'
+import { Link as RouterLink } from 'react-router-dom'
 
 const PRIORITY_LABELS: Record<number, string> = {
   0: 'Urgent',
@@ -54,6 +55,9 @@ export default function BoardPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [filterPriorities, setFilterPriorities] = useState<Set<number>>(new Set())
   const [filterAssignees, setFilterAssignees] = useState<Set<string>>(new Set())
+  const [filterLabels, setFilterLabels] = useState<Set<string>>(new Set())
+  const [allLabels, setAllLabels] = useState<KanbanLabel[]>([])
+  const [taskLabelMap, setTaskLabelMap] = useState<Map<string, KanbanLabel[]>>(new Map())
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -248,6 +252,33 @@ export default function BoardPage() {
     return () => clearInterval(interval)
   }, [])
 
+  // Load labels and task-label assignments
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const lbls = await api.labels.list()
+        setAllLabels(lbls)
+
+        // Build label map: for each label, find which tasks use it
+        const map = new Map<string, KanbanLabel[]>()
+        await Promise.all(lbls.map(async (lbl) => {
+          try {
+            const labelTasks = await api.tasks.list({ label: lbl.id })
+            for (const t of labelTasks) {
+              const existing = map.get(t.id) || []
+              existing.push(lbl)
+              map.set(t.id, existing)
+            }
+          } catch {}
+        }))
+        setTaskLabelMap(map)
+      } catch {}
+    }
+    load()
+    const interval = setInterval(load, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
   // Toast notifications for live task changes
   useEffect(() => {
     const prev = prevTasksRef.current
@@ -333,6 +364,10 @@ export default function BoardPage() {
               <span className="text-[10px] px-1 py-0.5 rounded bg-white/8 text-[var(--color-muted)] font-medium flex-shrink-0">{task.repo}</span>
             )}
             {renderDependencyBadge(task.dependsOn)}
+            {/* Label dots on compact cards */}
+            {(taskLabelMap.get(task.id) || []).map(lbl => (
+              <span key={lbl.id} className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: lbl.color }} title={lbl.name} />
+            ))}
           </div>
           <div className="flex items-center gap-0.5 flex-shrink-0">
             {task.status === 'available' && (
@@ -415,6 +450,14 @@ export default function BoardPage() {
             <Cpu className="w-3 h-3 inline mr-0.5" />{task.requiredSkills}
           </span>
         )}
+        {/* Label badges */}
+        {(taskLabelMap.get(task.id) || []).map(lbl => (
+          <span key={lbl.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-[100px]"
+            style={{ backgroundColor: lbl.color + '20', color: lbl.color, border: `1px solid ${lbl.color}40` }}>
+            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: lbl.color }} />
+            {lbl.name}
+          </span>
+        ))}
       </div>
 
       <div className="flex items-center gap-1 pt-1 border-t border-[var(--color-border)]">
@@ -476,12 +519,21 @@ export default function BoardPage() {
         t.id.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : repoFiltered
-  // Filter: priority + assignee
+  // Filter: priority + assignee + labels
   const filtered = searchFiltered.filter(t => {
     if (filterPriorities.size > 0 && !filterPriorities.has(t.priority)) return false
     if (filterAssignees.size > 0) {
       const taskAssignee = t.assignedTo || 'unassigned'
       if (!filterAssignees.has(taskAssignee)) return false
+    }
+    if (filterLabels.size > 0) {
+      const taskLabels = taskLabelMap.get(t.id) || []
+      const taskLabelIds = new Set(taskLabels.map(l => l.id))
+      let hasMatch = false
+      for (const lid of filterLabels) {
+        if (taskLabelIds.has(lid)) { hasMatch = true; break }
+      }
+      if (!hasMatch) return false
     }
     return true
   })
@@ -543,7 +595,7 @@ export default function BoardPage() {
           ><Lightbulb className="w-3 h-3" /> Suggest</button>
           <button onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded transition-colors ${
-              showFilters || filterPriorities.size > 0 || filterAssignees.size > 0
+              showFilters || filterPriorities.size > 0 || filterAssignees.size > 0 || filterLabels.size > 0
                 ? 'bg-[var(--color-primary)]/15 text-[var(--color-primary)]'
                 : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
             }`}
@@ -640,14 +692,44 @@ export default function BoardPage() {
                 })}
               </div>
             </div>
+
+            {/* Label filter */}
+            {allLabels.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Labels</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {allLabels.map(lbl => {
+                    const active = filterLabels.has(lbl.id)
+                    return (
+                      <button key={lbl.id}
+                        onClick={() => setFilterLabels(prev => {
+                          const next = new Set(prev)
+                          next.has(lbl.id) ? next.delete(lbl.id) : next.add(lbl.id)
+                          return next
+                        })}
+                        className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${
+                          active
+                            ? 'border-white/50 text-white'
+                            : 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--color-muted)]'
+                        }`}
+                        style={active ? { backgroundColor: lbl.color + '30', borderColor: lbl.color + '60' } : {}}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lbl.color }} />
+                        {active ? '✓ ' : ''}{lbl.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Clear filters */}
-          {(filterPriorities.size > 0 || filterAssignees.size > 0) && (
+          {(filterPriorities.size > 0 || filterAssignees.size > 0 || filterLabels.size > 0) && (
             <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border)]">
               <span className="text-xs text-[var(--color-muted)]">Active filters</span>
               <button
-                onClick={() => { setFilterPriorities(new Set()); setFilterAssignees(new Set()) }}
+                onClick={() => { setFilterPriorities(new Set()); setFilterAssignees(new Set()); setFilterLabels(new Set()) }}
                 className="text-xs px-2 py-1 rounded bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors"
               >Clear all filters</button>
             </div>
@@ -793,6 +875,8 @@ export default function BoardPage() {
           taskId={detailTaskId}
           tasks={tasks}
           taskTitleMap={taskTitleMap}
+          allLabels={allLabels}
+          taskLabelMap={taskLabelMap}
           onClose={() => setDetailTaskId(null)}
           onClaim={(id) => { handleClaim(id, 'web-user'); setDetailTaskId(null); }}
           onUnclaim={(id) => { handleUnclaim(id); setDetailTaskId(null); }}
@@ -1008,6 +1092,7 @@ function TaskDetailDialog({
   taskId, tasks, taskTitleMap, onClose,
   onClaim, onUnclaim, onComplete, onBlock, onDelete,
   onSetDependency, onSetSkills,
+  allLabels = [], taskLabelMap = new Map(),
 }: {
   taskId: string
   tasks: Task[]
@@ -1020,11 +1105,15 @@ function TaskDetailDialog({
   onDelete: (id: string) => void
   onSetDependency: (id: string) => void
   onSetSkills: (id: string) => void
+  allLabels?: KanbanLabel[]
+  taskLabelMap?: Map<string, KanbanLabel[]>
 }) {
   const [logs, setLogs] = useState<any[]>([])
   const [loadingLogs, setLoadingLogs] = useState(true)
   const [issueLink, setIssueLink] = useState<{ html_url: string; issue_number: number; repo: string; status?: string } | null>(null)
   const [loadingIssue, setLoadingIssue] = useState(true)
+  const [currentLabelIds, setCurrentLabelIds] = useState<Set<string>>(new Set())
+  const [labelSaving, setLabelSaving] = useState(false)
 
   const task = tasks.find(t => t.id === taskId)
   const downstream = tasks.filter(t => t.dependsOn === taskId)
@@ -1048,6 +1137,30 @@ function TaskDetailDialog({
     }).catch(() => { if (!cancelled) setLoadingIssue(false) })
     return () => { cancelled = true }
   }, [taskId])
+
+  // Initialize label IDs from taskLabelMap
+  useEffect(() => {
+    const labels = taskLabelMap.get(taskId) || []
+    setCurrentLabelIds(new Set(labels.map(l => l.id)))
+  }, [taskId, taskLabelMap])
+
+  const toggleLabel = async (labelId: string) => {
+    setLabelSaving(true)
+    const next = new Set(currentLabelIds)
+    if (next.has(labelId)) {
+      next.delete(labelId)
+    } else {
+      next.add(labelId)
+    }
+    try {
+      await api.labels.setForTask(taskId, { label_ids: [...next] })
+      setCurrentLabelIds(next)
+    } catch (e: any) {
+      alert(`Failed to update labels: ${e.message}`)
+    } finally {
+      setLabelSaving(false)
+    }
+  }
 
   const actionIcons: Record<string, string> = {
     created: '🆕', claimed: '👤', unclaimed: '↩️', completed: '✅',
@@ -1142,6 +1255,36 @@ function TaskDetailDialog({
                     <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400"><Cpu className="w-2.5 h-2.5 inline mr-0.5" />{s.trim()}</span>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Labels */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-2 flex items-center gap-1">
+              <Tag className="w-3 h-3" /> Labels
+            </p>
+            {allLabels.length === 0 ? (
+              <p className="text-xs text-[var(--color-muted)]">No labels defined. <RouterLink to="/labels" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">Create labels</RouterLink> to organize tasks.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {allLabels.map(lbl => {
+                  const active = currentLabelIds.has(lbl.id)
+                  return (
+                    <button key={lbl.id} onClick={() => toggleLabel(lbl.id)}
+                      disabled={labelSaving}
+                      className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-all ${
+                        active
+                          ? 'border-white/50 text-white font-medium'
+                          : 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--color-muted)]'
+                      } disabled:opacity-50`}
+                      style={active ? { backgroundColor: lbl.color + '30', borderColor: lbl.color + '60' } : {}}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: lbl.color }} />
+                      {active ? '✓ ' : ''}{lbl.name}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
