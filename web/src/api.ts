@@ -98,6 +98,15 @@ export interface IssueLink {
   linked_at: number
 }
 
+export interface Webhook {
+  id: string
+  url: string
+  type: string
+  events: string[]
+  label: string
+  created_at: number
+}
+
 export const api = {
   tasks: {
     list: (params?: { status?: string; repo?: string }) => {
@@ -184,5 +193,17 @@ export const api = {
       apiPost<{ status: string; task_id: string; issue_number: number; html_url: string }>('/issues/create', {
         task_id: taskId, repo: repo || '', labels: labels || '', assignee: assignee || '',
       }),
+  },
+  webhooks: {
+    list: () => apiGet<Webhook[]>('/webhooks'),
+    get: (id: string) => apiGet<Webhook>(`/webhooks/${id}`),
+    create: (body: { url: string; type?: string; events?: string[]; label?: string }) =>
+      apiPost<Webhook>('/webhooks', body),
+    update: (id: string, body: { url?: string; type?: string; events?: string[]; label?: string }) =>
+      apiPatch<Webhook>(`/webhooks/${id}`, body),
+    delete: (id: string) =>
+      apiDelete<{ status: string }>(`/webhooks/${id}`),
+    test: (id: string) =>
+      apiPost<{ status: string; webhook_id: string; response_code: number }>(`/webhooks/${id}/test`),
   },
 }

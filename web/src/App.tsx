@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { KanbanSquare, Clock, BarChart3, Menu, X, Github } from 'lucide-react'
+import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook } from 'lucide-react'
 import BoardPage from './pages/BoardPage'
 import LogsPage from './pages/LogsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import IssuesPage from './pages/IssuesPage'
+import WebhooksPage from './pages/WebhooksPage'
 
 const navItems = [
   { path: '/', label: 'Board', icon: KanbanSquare },
   { path: '/issues', label: 'GitHub Issues', icon: Github },
+  { path: '/webhooks', label: 'Webhooks', icon: Webhook },
   { path: '/logs', label: 'Activity Log', icon: Clock },
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
 ]
@@ -96,6 +98,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<BoardPage />} />
           <Route path="/issues" element={<IssuesPage />} />
+          <Route path="/webhooks" element={<WebhooksPage />} />
           <Route path="/logs" element={<LogsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
         </Routes>

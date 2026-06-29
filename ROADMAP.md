@@ -88,6 +88,13 @@
 - [x] E2E test fixes: correct port (8725→8727), proper agents endpoint response format
 - [x] All 9 E2E tests passing: health, tasks, atomic claim, claim→complete, block→unclaim, logs, agents, delete
 
+## Phase 14 — Webhook Management UI ✅
+- [x] Webhook test endpoint: POST /api/webhooks/{id}/test fires a test ping to verify configuration
+- [x] Webhooks API client in frontend (list, get, create, update, delete, test)
+- [x] Webhook management page: create form, event toggles, type selector, edit events/label, test button, delete
+- [x] Sidebar nav item: Webhooks between GitHub Issues and Activity Log
+- [x] Add webhook event definitions for "test" action in all formatters (discord, slack, telegram)
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
