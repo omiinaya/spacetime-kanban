@@ -2,7 +2,7 @@
 """End-to-end test: simulates two agents claiming tasks atomically."""
 import httpx, time, json
 
-BASE = "http://localhost:8725"
+BASE = "http://localhost:8727"
 
 def test_health():
     r = httpx.get(f"{BASE}/api/health")
@@ -107,8 +107,8 @@ def test_logs():
 def test_agents():
     r = httpx.get(f"{BASE}/api/agents")
     assert r.status_code == 200
-    agents = r.json()["agents"]
-    print(f"✅ Active agents: {agents}")
+    agents = r.json()
+    print(f"✅ Active agents: {len(agents)} registered")
 
 def test_delete():
     r = httpx.get(f"{BASE}/api/tasks?status=available")
