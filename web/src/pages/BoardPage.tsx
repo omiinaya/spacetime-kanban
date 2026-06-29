@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { api, type SuggestResult, type Agent, type Task as ApiTask } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
+import DependencyGraph from './DependencyGraph'
 
 const PRIORITY_LABELS: Record<number, string> = {
   0: 'Urgent',
@@ -39,6 +40,7 @@ export default function BoardPage() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [showPanel, setShowPanel] = useState<'none' | 'suggestions' | 'agents'>('none')
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
+  const [showGraph, setShowGraph] = useState(false)
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -279,6 +281,9 @@ export default function BoardPage() {
               showPanel === 'agents' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
             }`}
           ><Users className="w-3 h-3" /> Agents</button>
+          <button onClick={() => setShowGraph(true)}
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-violet-500/15 text-violet-400 hover:bg-violet-500/30 transition-colors"
+          ><span className="text-sm">🗺️</span> Graph</button>
           <button onClick={() => api.tasks.seed()}
             className="text-xs px-2.5 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors hidden sm:inline-block"
           >Seed</button>
@@ -458,6 +463,15 @@ export default function BoardPage() {
           </div>
         )}
       </div>
+
+      {/* Dependency Graph Overlay */}
+      {showGraph && (
+        <DependencyGraph
+          tasks={filtered}
+          onSelectTask={(id) => { setDetailTaskId(id); setShowGraph(false) }}
+          onClose={() => setShowGraph(false)}
+        />
+      )}
     </div>
   )
 }

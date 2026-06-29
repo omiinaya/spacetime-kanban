@@ -24,14 +24,18 @@ Usage:
   kanban heartbeat [--status=<s>] [--task=<id>] [--json]
   kanban skills <task-id> [--skills=<s>] [--json]
   kanban info [--json]
+  kanban watch [--capabilities=<c>] [--repo=<r>] [--daemon] [--heartbeat-interval=<s>] [--suggest-interval=<s>]
   kanban --help
 """
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import time
+from datetime import datetime
 import urllib.error
 import urllib.request
 from urllib.parse import urljoin
@@ -577,6 +581,147 @@ def api_put(path: str, body: dict) -> dict:
         sys.exit(1)
 
 
+def cmd_watch(args: list[str]):
+    """Agent daemon — registers, heartbeats, and monitors the swarm."""
+    import argparse
+    p = argparse.ArgumentParser(prog="kanban watch")
+    p.add_argument("--capabilities", default="", help="Comma-separated skills")
+    p.add_argument("--repo", default="", help="Primary repo focus")
+    p.add_argument("--daemon", action="store_true", help="Run in background")
+    p.add_argument("--heartbeat-interval", type=int, default=30, help="Heartbeat interval in seconds (default: 30)")
+    p.add_argument("--suggest-interval", type=int, default=60, help="Suggestion check interval in seconds (default: 60)")
+    opts = p.parse_args(args)
+
+    agent_id = detect_agent_id()
+    hostname = os.uname().nodename if hasattr(os, "uname") else "unknown"
+    pid_file = os.path.expanduser("~/.kanban/watch.pid")
+    log_dir = os.path.expanduser("~/.kanban")
+    log_file = os.path.join(log_dir, "watch.log")
+
+    # Daemonize
+    if opts.daemon:
+        pid = os.fork()
+        if pid > 0:
+            print(f"✅ Agent daemon started (PID {pid})")
+            print(f"   Log: {log_file}")
+            print(f"   Stop: kill {pid} or rm -f {pid_file} && kanban watch --stop")
+            # Write PID file from parent (child PID is what we need)
+            os.makedirs(log_dir, exist_ok=True)
+            with open(pid_file, "w") as f:
+                f.write(str(pid))
+            sys.exit(0)
+        # Child: detach from terminal
+        os.setsid()
+        os.makedirs(log_dir, exist_ok=True)
+        try:
+            sys.stdout.close()
+            sys.stderr.close()
+        except:
+            pass
+        sys.stdout = open(log_file, "a")
+        sys.stderr = open(log_file, "a")
+        # Re-register PID as child
+        with open(pid_file, "w") as f:
+            f.write(str(os.getpid()))
+
+    # Register
+    try:
+        api_post("/api/agents/register", {
+            "agent_id": agent_id,
+            "host": hostname,
+            "capabilities": opts.capabilities,
+            "repo_focus": opts.repo,
+        })
+        if not opts.daemon:
+            print(f"🟢 Registered as {agent_id} in the swarm")
+            if opts.capabilities:
+                print(f"🛠️  Capabilities: {opts.capabilities}")
+            if opts.repo:
+                print(f"📂 Focus: {opts.repo}")
+    except SystemExit:
+        eprint("✗ Failed to register agent — is the kanban API running?")
+        sys.exit(1)
+
+    last_suggest_time = 0
+    running = True
+    loop_count = 0
+
+    def shutdown(sig=None, frame=None):
+        nonlocal running
+        running = False
+
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+
+    if not opts.daemon:
+        print(f"📡 Watching (heartbeat every {opts.heartbeat_interval}s, suggest every {opts.suggest_interval}s)")
+        print(f"   Press Ctrl+C to stop")
+
+    while running:
+        now_t = time.time()
+        loop_count += 1
+
+        # Heartbeat
+        try:
+            api_post(f"/api/agents/{agent_id}/heartbeat", {
+                "agent_id": agent_id,
+                "status": "online",
+                "current_task_id": "",
+            })
+            ts = datetime.fromtimestamp(now_t).strftime("%H:%M:%S")
+            if not opts.daemon:
+                print(f"  📡 {ts} Heartbeat ✓")
+        except:
+            if not opts.daemon:
+                print(f"  ⚠ {datetime.fromtimestamp(now_t).strftime('%H:%M:%S')} Heartbeat FAILED")
+
+        # Suggestions
+        if now_t - last_suggest_time >= opts.suggest_interval:
+            try:
+                suggestions = api_get(f"/api/tasks/suggest?limit=2")
+                if suggestions and not opts.daemon:
+                    for s in suggestions:
+                        t = s.get("task", {})
+                        score = s.get("score", 0)
+                        reason = s.get("reason", "")
+                        title = t.get("title", "?")
+                        prio = {0: "U", 1: "H", 2: "M", 3: "L"}.get(t.get("priority", 2), "?")
+                        repo = t.get("repo", "")
+                        repo_tag = f" [{repo}]" if repo else ""
+                        skills = t.get("required_skills", "") or ""
+                        skill_tag = f" <{skills}>" if skills else ""
+                        print(f"  💡 [{prio}] {title}{repo_tag}{skill_tag}")
+                        print(f"     Score: {score} | {reason}")
+            except:
+                pass
+            last_suggest_time = now_t
+
+        # Sleep with interrupt checking
+        for _ in range(opts.heartbeat_interval):
+            if not running:
+                break
+            time.sleep(1)
+
+    # Graceful shutdown
+    ts = datetime.now().strftime("%H:%M:%S")
+    if not opts.daemon:
+        print(f"\n  🔴 {ts} Agent {agent_id} going offline")
+    try:
+        api_post(f"/api/agents/{agent_id}/heartbeat", {
+            "agent_id": agent_id,
+            "status": "offline",
+            "current_task_id": "",
+        })
+    except:
+        pass
+
+    if os.path.exists(pid_file):
+        try:
+            os.remove(pid_file)
+        except:
+            pass
+
+
 COMMANDS = {
     "list": cmd_list,
     "claim": cmd_claim,
@@ -593,6 +738,7 @@ COMMANDS = {
     "register": cmd_register,
     "heartbeat": cmd_heartbeat,
     "skills": cmd_skills,
+    "watch": cmd_watch,
 }
 
 

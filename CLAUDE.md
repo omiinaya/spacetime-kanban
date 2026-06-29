@@ -1,5 +1,7 @@
 # Claude — Kanban Workflow
 
+**First, read [AGENTS.md](./AGENTS.md)** — the full agent guide with API reference, state machine, and task lifecycle.
+
 This project uses a **shared kanban board** at `localhost:8727` to coordinate agents working on the same roadmap. Before starting any work, **always check the kanban first**.
 
 The `kanban` CLI tool handles all interactions. Install it from the `spacetimedb-kanban` repo:
