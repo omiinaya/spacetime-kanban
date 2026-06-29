@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
   Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github
@@ -41,6 +41,9 @@ export default function BoardPage() {
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const [showGraph, setShowGraph] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [toasts, setToasts] = useState<{ id: number; emoji: string; text: string }[]>([])
+  const prevTasksRef = useRef<Task[]>([])
+  const toastIdCounter = useRef(0)
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -136,6 +139,44 @@ export default function BoardPage() {
     const interval = setInterval(load, 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // Toast notifications for live task changes
+  useEffect(() => {
+    const prev = prevTasksRef.current
+    const prevMap = new Map(prev.map(t => [t.id, t]))
+
+    const added: typeof toasts = []
+    for (const t of tasks) {
+      const old = prevMap.get(t.id)
+      if (!old) {
+        // New task created
+        added.push({ id: ++toastIdCounter.current, emoji: '🆕', text: `"${t.title}" created` })
+      } else if (old.status !== t.status || old.assignedTo !== t.assignedTo) {
+        if (t.status === 'in_progress' && old.status === 'available') {
+          added.push({ id: ++toastIdCounter.current, emoji: '👤', text: `"${t.title}" claimed by ${t.assignedTo || 'web-user'}` })
+        } else if (t.status === 'done') {
+          added.push({ id: ++toastIdCounter.current, emoji: '✅', text: `"${t.title}" completed` })
+        } else if (t.status === 'blocked') {
+          added.push({ id: ++toastIdCounter.current, emoji: '🚧', text: `"${t.title}" blocked` })
+        } else if (t.status === 'available' && old.status !== 'available') {
+          added.push({ id: ++toastIdCounter.current, emoji: '↩️', text: `"${t.title}" released` })
+        }
+      }
+    }
+
+    if (added.length > 0) {
+      setToasts(prev => [...prev, ...added].slice(-5))  // max 5 visible
+    }
+
+    prevTasksRef.current = tasks
+  }, [tasks])
+
+  // Auto-dismiss toasts after 3.5s
+  useEffect(() => {
+    if (toasts.length === 0) return
+    const timer = setTimeout(() => setToasts([]), 3500)
+    return () => clearTimeout(timer)
+  }, [toasts])
 
   const renderDependencyBadge = (depId: string | null | undefined) => {
     if (!depId) return null
@@ -312,6 +353,20 @@ export default function BoardPage() {
           ><Plus className="w-4 h-4" /> New</button>
         </div>
       </div>
+
+      {/* Live Toast Notifications */}
+      {toasts.length > 0 && (
+        <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm pointer-events-none">
+          {toasts.map(t => (
+            <div key={t.id}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-card)] border border-[var(--color-border)] shadow-lg text-sm pointer-events-auto transition-all"
+            >
+              <span className="text-lg">{t.emoji}</span>
+              <span className="truncate text-[var(--color-foreground)]">{t.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {(stdbError || !filtered.length) && !stdbError && (
         <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
