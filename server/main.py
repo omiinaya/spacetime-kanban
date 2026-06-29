@@ -984,15 +984,17 @@ async def analytics_throughput(days: int = 14):
         age_days = (now - updated) // day_ms
         if age_days > days:
             continue
-        # Bucket by days_ago
-        label = f"{int(age_days)}d ago" if age_days > 0 else "today"
-        daily[label] = daily.get(label, 0) + 1
+        # Use actual date string
+        dt = datetime.utcfromtimestamp(updated / 1000)
+        date_str = dt.strftime("%b %d")
+        daily[date_str] = daily.get(date_str, 0) + 1
 
     # Fill in missing days
     result = []
     for i in range(days, -1, -1):
-        label = "today" if i == 0 else f"{i}d ago"
-        result.append({"date": label, "completed": daily.get(label, 0)})
+        dt = datetime.utcfromtimestamp((now - i * day_ms) / 1000)
+        date_str = dt.strftime("%b %d")
+        result.append({"date": date_str, "completed": daily.get(date_str, 0)})
     return result
 
 

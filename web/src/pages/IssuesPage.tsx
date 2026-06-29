@@ -22,7 +22,11 @@ export default function IssuesPage() {
       })
   }
 
-  useEffect(() => { fetchLinks() }, [])
+  useEffect(() => {
+    fetchLinks()
+    const interval = setInterval(fetchLinks, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   const filtered = searchQuery
     ? links.filter(l =>
