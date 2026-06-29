@@ -1,8 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
-import {
-  Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
+import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
-  Users, Cpu, Info, History, GitBranch, ExternalLink, X
+  Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search
 } from 'lucide-react'
 import { api, type SuggestResult, type Agent, type Task as ApiTask } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
@@ -41,6 +40,7 @@ export default function BoardPage() {
   const [showPanel, setShowPanel] = useState<'none' | 'suggestions' | 'agents'>('none')
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const [showGraph, setShowGraph] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -231,7 +231,17 @@ export default function BoardPage() {
 
   // Sort: priority asc, then createdAt desc
   const sorted = [...tasks].sort((a, b) => a.priority - b.priority || Number(b.createdAt - a.createdAt))
-  const filtered = repoFilter ? sorted.filter(t => t.repo === repoFilter) : sorted
+  // Filter: repo + search
+  const repoFiltered = repoFilter ? sorted.filter(t => t.repo === repoFilter) : sorted
+  const filtered = searchQuery
+    ? repoFiltered.filter(t =>
+        t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.requiredSkills?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.repo?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.id.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : repoFiltered
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
@@ -267,6 +277,16 @@ export default function BoardPage() {
               ))}
             </select>
           )}
+          {/* Search */}
+          <div className="relative flex-1 min-w-[120px] max-w-[200px]">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--color-muted)] pointer-events-none" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search tasks..."
+              className="w-full pl-7 pr-2 py-1.5 text-xs rounded bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] placeholder:text-[var(--color-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+            />
+          </div>
           {connected
             ? <Wifi className="w-3.5 h-3.5 text-emerald-400 hidden sm:block" />
             : <WifiOff className="w-3.5 h-3.5 text-amber-400 hidden sm:block" />
@@ -296,7 +316,9 @@ export default function BoardPage() {
       {(stdbError || !filtered.length) && !stdbError && (
         <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          {stdbError || 'No tasks found. Seed some sample data or create a new task.'}
+          {searchQuery
+            ? `No tasks match "${searchQuery}"`
+            : 'No tasks found. Seed some sample data or create a new task.'}
         </div>
       )}
 
