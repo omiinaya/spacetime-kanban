@@ -25,6 +25,14 @@ export interface LogEntry {
   timestamp: number
 }
 
+export interface LogStats {
+  total_events: number
+  today_events: number
+  active_agents_today: number
+  action_breakdown: Record<string, number>
+  top_agents: Record<string, number>
+}
+
 export interface Agent {
   id: string
   host: string
@@ -177,13 +185,24 @@ export const api = {
     },
   },
   logs: {
-    list: (task_id?: string, limit?: number) => {
+    list: (params?: {
+      task_id?: string; action?: string; agent_id?: string;
+      search?: string; since?: number; until?: number;
+      offset?: number; limit?: number;
+    }) => {
       const qs = new URLSearchParams()
-      if (task_id) qs.set('task_id', task_id)
-      if (limit) qs.set('limit', String(limit))
+      if (params?.task_id) qs.set('task_id', params.task_id)
+      if (params?.action) qs.set('action', params.action)
+      if (params?.agent_id) qs.set('agent_id', params.agent_id)
+      if (params?.search) qs.set('search', params.search)
+      if (params?.since) qs.set('since', String(params.since))
+      if (params?.until) qs.set('until', String(params.until))
+      if (params?.offset) qs.set('offset', String(params.offset))
+      if (params?.limit) qs.set('limit', String(params.limit))
       const q = qs.toString()
       return apiGet<LogEntry[]>(`/logs${q ? `?${q}` : ''}`)
     },
+    stats: () => apiGet<LogStats>('/logs/stats'),
   },
   agents: {
     list: () => apiGet<Agent[]>('/agents'),
