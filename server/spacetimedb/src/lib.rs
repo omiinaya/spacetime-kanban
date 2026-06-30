@@ -885,3 +885,51 @@ pub fn log_webhook_delivery(
     });
     Ok(())
 }
+
+// ── Task Comments ─────────────────────────────────────────────────────
+
+#[spacetimedb::table(accessor = task_comments, public)]
+#[derive(Debug, Clone)]
+pub struct TaskComment {
+    #[primary_key]
+    pub id: String,
+    pub task_id: String,
+    pub author: String,
+    pub body: String,
+    pub created_at: u64,
+}
+
+#[reducer]
+pub fn add_comment(
+    ctx: &ReducerContext,
+    id: String,
+    task_id: String,
+    author: String,
+    body: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let comment_id = if id.is_empty() { make_id("cmt", ctx) } else { id };
+    ctx.db.task_comments().insert(TaskComment {
+        id: comment_id,
+        task_id,
+        author,
+        body,
+        created_at: now,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn delete_comment(ctx: &ReducerContext, comment_id: String) -> Result<(), String> {
+    let comment: Vec<TaskComment> = ctx.db.task_comments().iter()
+        .filter(|c| c.id == comment_id)
+        .map(|c| c.clone())
+        .collect();
+    if comment.is_empty() {
+        return Err("Comment not found".to_string());
+    }
+    for c in comment {
+        ctx.db.task_comments().delete(c);
+    }
+    Ok(())
+}

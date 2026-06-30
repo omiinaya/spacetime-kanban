@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
   Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
-  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal, Tag, Keyboard, Save, Bookmark
+  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal, Tag, Keyboard, Save, Bookmark,
+  MessageSquare, Send
 } from 'lucide-react'
 
 interface SavedFilterView {
@@ -15,7 +16,7 @@ interface SavedFilterView {
   filterLabels: string[]
 }
 
-import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel, type IssueLink } from '../api'
+import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel, type IssueLink, type TaskComment } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
 import DependencyGraph from './DependencyGraph'
 import { Link as RouterLink } from 'react-router-dom'
@@ -1597,6 +1598,12 @@ function TaskDetailDialog({
   const [currentLabelIds, setCurrentLabelIds] = useState<Set<string>>(new Set())
   const [labelSaving, setLabelSaving] = useState(false)
 
+  // ── Comments state ─────────────────────────────────────────────────
+  const [comments, setComments] = useState<TaskComment[]>([])
+  const [loadingComments, setLoadingComments] = useState(true)
+  const [newComment, setNewComment] = useState('')
+  const [sendingComment, setSendingComment] = useState(false)
+
   const task = tasks.find(t => t.id === taskId)
   const downstream = tasks.filter(t => t.dependsOn === taskId)
   const upstream = task?.dependsOn ? tasks.find(t => t.id === task.dependsOn) : null
@@ -1625,6 +1632,39 @@ function TaskDetailDialog({
     const labels = taskLabelMap.get(taskId) || []
     setCurrentLabelIds(new Set(labels.map(l => l.id)))
   }, [taskId, taskLabelMap])
+
+  // Load comments
+  useEffect(() => {
+    let cancelled = false
+    setLoadingComments(true)
+    api.comments.list(taskId).then(c => {
+      if (!cancelled) { setComments(c); setLoadingComments(false) }
+    }).catch(() => { if (!cancelled) setLoadingComments(false) })
+    return () => { cancelled = true }
+  }, [taskId])
+
+  const handleAddComment = async () => {
+    const text = newComment.trim()
+    if (!text) return
+    setSendingComment(true)
+    try {
+      const result = await api.comments.add(taskId, text, 'web-user')
+      if (result.id) {
+        setComments(prev => [...prev, {
+          id: result.id,
+          task_id: taskId,
+          author: 'web-user',
+          body: text,
+          created_at: Date.now(),
+        }])
+        setNewComment('')
+      }
+    } catch (e: any) {
+      alert(`Failed to add comment: ${e.message}`)
+    } finally {
+      setSendingComment(false)
+    }
+  }
 
   const toggleLabel = async (labelId: string) => {
     setLabelSaving(true)
@@ -1888,6 +1928,64 @@ function TaskDetailDialog({
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Comments */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-2 flex items-center gap-1">
+              <MessageSquare className="w-3 h-3" /> Comments
+            </p>
+            {loadingComments ? (
+              <div className="flex items-center gap-2 text-xs text-[var(--color-muted)] py-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> Loading...
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto mb-3">
+                {comments.length === 0 ? (
+                  <p className="text-xs text-[var(--color-muted)] py-1">No comments yet.</p>
+                ) : (
+                  comments.map(cmt => (
+                    <div key={cmt.id} className="flex items-start gap-2 p-2 rounded bg-white/[0.03] border border-[var(--color-border)]">
+                      <div className="w-6 h-6 rounded-full bg-[var(--color-primary)]/20 text-[var(--color-primary)] flex items-center justify-center text-[10px] font-semibold shrink-0 mt-0.5">
+                        {cmt.author.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium">{cmt.author}</span>
+                          <span className="text-[10px] text-[var(--color-muted)]">
+                            {new Date(cmt.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-[var(--color-muted-foreground)] mt-0.5 whitespace-pre-wrap break-words">{cmt.body}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            <div className="flex items-start gap-2">
+              <textarea
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleAddComment()
+                  }
+                }}
+                placeholder="Add a comment... (Enter to send, Shift+Enter for newline)"
+                rows={2}
+                className="flex-1 px-3 py-2 text-xs rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] placeholder:text-[var(--color-muted)]"
+              />
+              <button
+                onClick={handleAddComment}
+                disabled={!newComment.trim() || sendingComment}
+                className="flex items-center gap-1 text-xs px-3 py-2 rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+              >
+                {sendingComment ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                Send
+              </button>
+            </div>
           </div>
         </div>
 

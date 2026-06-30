@@ -144,6 +144,17 @@ class LabelUpdate(BaseModel):
 class TaskLabelAssign(BaseModel):
     label_ids: list[str] = []
 
+class CommentOut(BaseModel):
+    id: str
+    task_id: str
+    author: str
+    body: str
+    created_at: int
+
+class CommentCreate(BaseModel):
+    body: str
+    author: str = "web-user"
+
 # ── Static file serving (SPA dashboard) ──────────────────────────────
 
 WEB_DIST = os.path.join(os.path.dirname(__file__), "..", "web", "dist")
@@ -557,6 +568,30 @@ async def delete_task(task_id: str):
 async def set_task_skills(task_id: str, body: SetSkillsRequest):
     await _call("set_task_skills", [task_id, body.skills])
     return {"status": "updated", "task_id": task_id, "skills": body.skills or None}
+
+# ── Task Comments ──────────────────────────────────────────────────
+
+@app.post("/api/tasks/{task_id}/comments", status_code=201)
+async def add_comment(task_id: str, body: CommentCreate):
+    """Add a comment to a task."""
+    comment_id = f"cmt_{uuid.uuid4().hex[:16]}"
+    await _call("add_comment", [comment_id, task_id, body.author, body.body])
+    return {"status": "created", "id": comment_id}
+
+@app.get("/api/tasks/{task_id}/comments", response_model=list[CommentOut])
+async def list_comments(task_id: str):
+    """List all comments for a task, oldest first."""
+    rows = await _sql(
+        f"SELECT * FROM task_comments WHERE task_id = '{task_id}'"
+    )
+    rows.sort(key=lambda r: r.get("created_at", 0))
+    return [CommentOut(**r) for r in rows]
+
+@app.delete("/api/tasks/{task_id}/comments/{comment_id}")
+async def delete_comment(task_id: str, comment_id: str):
+    """Delete a comment from a task."""
+    await _call("delete_comment", [comment_id])
+    return {"status": "deleted"}
 
 # ── Priority Scoring / Suggestions ──────────────────────────────────
 

@@ -212,6 +212,14 @@
 - [x] Selected template highlighted, clicking another template swaps the pre-fill
 - [x] All fields remain editable after template selection
 
+## Phase 30 — Task Comments ✅
+- [x] STDB: `task_comments` table with id/task_id/author/body/created_at
+- [x] STDB reducers: `add_comment`, `delete_comment`
+- [x] Server: `POST /api/tasks/{id}/comments`, `GET /api/tasks/{id}/comments`, `DELETE /api/tasks/{id}/comments/{cmt_id}`
+- [x] Frontend: Comments section in TaskDetailDialog with live feed
+- [x] Enter to send, Shift+Enter for newline, avatar initials per author
+- [x] MCP tools: `kanban_add_comment`, `kanban_list_comments`, `kanban_delete_comment`
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
