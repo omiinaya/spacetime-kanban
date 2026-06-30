@@ -54,8 +54,9 @@ class TaskCreate(BaseModel):
     priority: int = 2
     repo: str = ""
     roadmap_item: str = ""
-    created_by: str = "web-ui"
     required_skills: str = ""
+    created_by: str = "web-user"
+    status: str = ""
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -429,6 +430,7 @@ async def create_task(body: TaskCreate):
         body.repo,
         body.roadmap_item,
         body.created_by,
+        body.status,
     ])
     # Set skills if provided — using known task_id, no race condition
     if body.required_skills:
@@ -710,11 +712,11 @@ async def import_roadmap(body: RoadmapImportRequest):
 
             if len(tasks) >= 5:
                 for t in tasks:
-                    await _call("add_task", ["", t["title"], t["description"], t["priority"], t["repo"], t["roadmap_item"], t["created_by"]])
+                    await _call("add_task", ["", t["title"], t["description"], t["priority"], t["repo"], t["roadmap_item"], t["created_by"], ""])
                 tasks = []
 
     for t in tasks:
-        await _call("add_task", ["", t["title"], t["description"], t["priority"], t["repo"], t["roadmap_item"], t["created_by"]])
+        await _call("add_task", ["", t["title"], t["description"], t["priority"], t["repo"], t["roadmap_item"], t["created_by"], ""])
 
     return {"status": "imported", "task_count": task_count}
 
@@ -973,6 +975,7 @@ async def github_webhook(request: Request):
                 repo_full,
                 f"GitHub Issues — {repo_full}",
                 "github-webhook",
+                "",
             ])
             await _call("add_log", [gh_task_id, "created", "github-webhook", f"From issue #{issue_number}: {issue_html}"])
             issue_sync.link_issue(gh_task_id, repo_full, issue_number, issue.get("url", ""), issue_html)

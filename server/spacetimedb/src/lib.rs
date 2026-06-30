@@ -99,16 +99,19 @@ pub fn add_task(
     repo: String,
     roadmap_item: String,
     created_by: String,
+    initial_status: String,
 ) -> Result<(), String> {
     let now = now_ms(ctx);
     let task_id = if id.is_empty() { make_id("task", ctx) } else { id };
+
+    let status = if initial_status.is_empty() { "available".to_string() } else { initial_status };
 
     ctx.db.tasks().insert(Task {
         id: task_id.clone(),
         title,
         description,
         priority,
-        status: "available".to_string(),
+        status,
         assigned_to: None,
         repo,
         branch: None,
