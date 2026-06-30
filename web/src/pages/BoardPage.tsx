@@ -1383,7 +1383,70 @@ export default function BoardPage() {
   )
 }
 
+interface TaskTemplate {
+  name: string
+  title: string
+  description: string
+  priority: number
+  repo: string
+  roadmap: string
+  skills: string
+  icon: string
+}
+
+const BUILT_IN_TEMPLATES: TaskTemplate[] = [
+  { name: 'Bug Fix', title: 'Fix: ', description: [
+    '## Steps to Reproduce',
+    '1. ',
+    '2. ',
+    '',
+    '## Expected Behavior',
+    '',
+    '## Actual Behavior',
+  ].join('\n'), priority: 0, repo: '', roadmap: '', skills: '', icon: '🐛' },
+  { name: 'Feature', title: 'Add ', description: [
+    '## Description',
+    '',
+    '## Acceptance Criteria',
+    '- [ ] ',
+    '- [ ] ',
+    '',
+    '## Implementation Notes',
+  ].join('\n'), priority: 1, repo: '', roadmap: '', skills: '', icon: '✨' },
+  { name: 'Refactor', title: 'Refactor ', description: [
+    '## Motivation',
+    '',
+    '## Changes',
+    '',
+    '## Risk Assessment',
+    '## ',
+  ].join('\n'), priority: 2, repo: '', roadmap: '', skills: '', icon: '🔧' },
+  { name: 'Chore/Task', title: '', description: '', priority: 2, repo: '', roadmap: '', skills: '', icon: '📋' },
+  { name: 'Documentation', title: 'Document ', description: [
+    '## What',
+    '',
+    '## Why',
+    '',
+    '## Who',
+  ].join('\n'), priority: 3, repo: '', roadmap: '', skills: '', icon: '📝' },
+  { name: 'Performance', title: 'Optimize ', description: [
+    '## Current State',
+    '',
+    '## Benchmarks',
+    '',
+    '## Expected Gain',
+  ].join('\n'), priority: 0, repo: '', roadmap: '', skills: '', icon: '⚡' },
+  { name: 'Security', title: 'Security: ', description: [
+    '## Vulnerability',
+    '',
+    '## Impact',
+    '',
+    '## Fix',
+  ].join('\n'), priority: 0, repo: '', roadmap: '', skills: '', icon: '🔒' },
+]
+
 function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState(2)
@@ -1391,6 +1454,16 @@ function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreat
   const [roadmap, setRoadmap] = useState('')
   const [skills, setSkills] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const applyTemplate = (tpl: TaskTemplate) => {
+    setSelectedTemplate(tpl)
+    setTitle(tpl.title)
+    setDescription(tpl.description)
+    setPriority(tpl.priority)
+    setRepo(tpl.repo)
+    setRoadmap(tpl.roadmap)
+    setSkills(tpl.skills)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1422,6 +1495,22 @@ function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreat
             <ChevronDown className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Template selector */}
+        <div className="flex flex-wrap gap-1.5 pb-2 border-b border-[var(--color-border)]">
+          {BUILT_IN_TEMPLATES.map(tpl => (
+            <button
+              key={tpl.name}
+              onClick={() => applyTemplate(tpl)}
+              className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                selectedTemplate?.name === tpl.name
+                  ? 'bg-[var(--color-primary)]/15 border-[var(--color-primary)]/30 text-[var(--color-primary)]'
+                  : 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--color-muted)] hover:text-[var(--color-foreground)]'
+              }`}
+            >{tpl.icon} {tpl.name}</button>
+          ))}
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-3">
           <input
             value={title}
