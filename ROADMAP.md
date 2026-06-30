@@ -148,6 +148,24 @@
 - [x] Nav item between Board and GitHub Issues
 - [x] API: CRUD + task assignment + filter via `label=` query param
 
+## Phase 22 — Enhanced Activity Log ✅
+- [x] Server: action/agent/search/date-range/offset filters on GET /api/logs
+- [x] Server: GET /api/logs/stats — total/today/agents/action-breakdown
+- [x] Stats bar: total events, today count, active agents, top action
+- [x] Action type multi-select dropdown with icons
+- [x] Agent dropdown filter, search in notes/task IDs
+- [x] Date range quick buttons (24h, 7d, 30d, All)
+- [x] Load more pagination with offset-based fetching
+- [x] Relative timestamps with absolute on hover
+- [x] Event distribution breakdown with click-to-filter
+
+## Phase 23 — Keyboard Shortcuts ✅
+- [x] n → New task, s// → Search focus, c → Compact, f → Filters, b → Select
+- [x] g → Dependency graph, e → Export CSV, 1-4 → Column tabs
+- [x] ? → Help modal with all shortcuts listed
+- [x] Esc → Progressive close (panel → filters → modals → graph → select)
+- [x] Smart suppression when typing in inputs; Esc blurs focused inputs
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race

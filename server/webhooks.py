@@ -286,6 +286,7 @@ async def notify(action: str, task: dict, extra: str = "", discord_url: str = ""
             tasks_to_send.append((wh["type"], wh["url"], payload))
 
     # Fire all (best-effort)
+    deliveries = []
     async with httpx.AsyncClient(timeout=5) as client:
         for wh_type, url, payload in tasks_to_send:
             try:
@@ -295,6 +296,62 @@ async def notify(action: str, task: dict, extra: str = "", discord_url: str = ""
                     resp = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
                 else:
                     resp = await client.post(url, json=payload)
-                resp.raise_for_status()
-            except Exception:
-                pass  # best-effort
+                code = resp.status_code
+                body = resp.text[:500]
+                success = resp.status_code < 500
+            except Exception as e:
+                code = 0
+                body = str(e)[:500]
+                success = False
+
+            # Find the webhook ID for logging
+            wh_id = ""
+            for wh in webhooks:
+                if wh["url"] == url and wh["type"] == wh_type:
+                    wh_id = wh["id"]
+                    break
+
+            deliveries.append({
+                "webhook_id": wh_id,
+                "event": action,
+                "url": url,
+                "status_code": code,
+                "response_body": body,
+                "success": success,
+            })
+
+    # Log deliveries to STDB (fire-and-forget)
+    for d in deliveries:
+        try:
+            _call("log_webhook_delivery", [
+                "",
+                d["webhook_id"],
+                d["event"],
+                d["url"],
+                d["status_code"],
+                d["response_body"],
+                d["success"],
+            ])
+        except Exception:
+            pass  # best-effort for logging too
+
+
+def list_webhook_deliveries(webhook_id: str, limit: int = 20) -> list[dict]:
+    """Get delivery history for a specific webhook."""
+    rows = _stdb_sql(
+        f"SELECT * FROM webhook_deliveries WHERE webhook_id = '{webhook_id}'"
+    )
+    rows.sort(key=lambda r: -(r.get("delivered_at", 0)))
+    result = []
+    for r in rows[:limit]:
+        result.append({
+            "id": r.get("id", ""),
+            "webhook_id": r.get("webhook_id", ""),
+            "event": r.get("event", ""),
+            "url": r.get("url", ""),
+            "status_code": r.get("status_code", 0),
+            "response_body": r.get("response_body", ""),
+            "success": r.get("success", False),
+            "delivered_at": r.get("delivered_at", 0),
+        })
+    return result

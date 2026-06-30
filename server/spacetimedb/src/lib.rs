@@ -776,3 +776,45 @@ pub fn unassign_label_from_task(
     }
     Ok(())
 }
+
+// ── Webhook Delivery Log ─────────────────────────────────────────────
+
+#[spacetimedb::table(accessor = webhook_deliveries, public)]
+#[derive(Debug, Clone)]
+pub struct WebhookDelivery {
+    #[primary_key]
+    pub id: String,
+    pub webhook_id: String,
+    pub event: String,
+    pub url: String,
+    pub status_code: u32,       // HTTP status code (0 = no response/error)
+    pub response_body: String,   // truncated response or error message
+    pub success: bool,
+    pub delivered_at: u64,
+}
+
+#[reducer]
+pub fn log_webhook_delivery(
+    ctx: &ReducerContext,
+    id: String,
+    webhook_id: String,
+    event: String,
+    url: String,
+    status_code: u32,
+    response_body: String,
+    success: bool,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let delivery_id = if id.is_empty() { make_id("whdel", ctx) } else { id };
+    ctx.db.webhook_deliveries().insert(WebhookDelivery {
+        id: delivery_id,
+        webhook_id,
+        event,
+        url,
+        status_code,
+        response_body,
+        success,
+        delivered_at: now,
+    });
+    Ok(())
+}
