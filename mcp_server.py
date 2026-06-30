@@ -363,6 +363,42 @@ async def list_tools() -> list[Tool]:
                 },
             },
         ),
+        Tool(
+            name="kanban_add_comment",
+            description="Add a comment to a kanban task.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "body": {"type": "string", "description": "Comment body text"},
+                    "author": {"type": "string", "description": "Author name", "default": "hermes"},
+                },
+                "required": ["task_id", "body"],
+            },
+        ),
+        Tool(
+            name="kanban_list_comments",
+            description="List all comments for a kanban task.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                },
+                "required": ["task_id"],
+            },
+        ),
+        Tool(
+            name="kanban_delete_comment",
+            description="Delete a comment from a kanban task.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "comment_id": {"type": "string", "description": "Comment ID to delete"},
+                },
+                "required": ["task_id", "comment_id"],
+            },
+        ),
     ]
 
 
@@ -400,6 +436,9 @@ def _route(name: str, args: dict) -> dict:
         "kanban_issue_create": _handle_issue_create,
         "kanban_issue_status": _handle_issue_status,
         "kanban_issue_list": _handle_issue_list,
+        "kanban_add_comment": _handle_add_comment,
+        "kanban_list_comments": _handle_list_comments,
+        "kanban_delete_comment": _handle_delete_comment,
     }
     handler = handlers.get(name)
     if not handler:
@@ -631,6 +670,32 @@ def _handle_issue_list(args: dict) -> dict:
         "links": links if isinstance(links, list) else [],
         "count": len(links) if isinstance(links, list) else 0,
     }
+
+
+def _handle_add_comment(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    body = _get_str(args, "body")
+    author = _get_str(args, "author", "hermes")
+    return api_post(f"/api/tasks/{task_id}/comments", {
+        "body": body,
+        "author": author,
+    })
+
+
+def _handle_list_comments(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    comments = api_get(f"/api/tasks/{task_id}/comments")
+    return {
+        "task_id": task_id,
+        "comments": comments if isinstance(comments, list) else [],
+        "count": len(comments) if isinstance(comments, list) else 0,
+    }
+
+
+def _handle_delete_comment(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    comment_id = _get_str(args, "comment_id")
+    return api_delete(f"/api/tasks/{task_id}/comments/{comment_id}")
 
 
 # ── Main entry point ──────────────────────────────────────────────────

@@ -153,6 +153,14 @@ export interface KanbanLabel {
   created_at: number
 }
 
+export interface TaskComment {
+  id: string
+  task_id: string
+  author: string
+  body: string
+  created_at: number
+}
+
 export interface TaskLabelAssign {
   label_ids: string[]
 }
@@ -298,5 +306,13 @@ export const api = {
       apiGet<KanbanLabel[]>(`/tasks/${taskId}/labels`),
     setForTask: (taskId: string, body: TaskLabelAssign) =>
       apiPost<{ status: string; assigned: string[] }>(`/tasks/${taskId}/labels`, body),
+  },
+  comments: {
+    list: (taskId: string) =>
+      apiGet<TaskComment[]>(`/tasks/${taskId}/comments`),
+    add: (taskId: string, body: string, author?: string) =>
+      apiPost<{ status: string; id: string }>(`/tasks/${taskId}/comments`, { body, author: author || 'web-user' }),
+    remove: (taskId: string, commentId: string) =>
+      apiDelete<{ status: string }>(`/tasks/${taskId}/comments/${commentId}`),
   },
 }
