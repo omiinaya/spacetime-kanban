@@ -2,8 +2,19 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
   Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
-  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal, Tag, Keyboard
+  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal, Tag, Keyboard, Save, Bookmark
 } from 'lucide-react'
+
+interface SavedFilterView {
+  id: string
+  name: string
+  searchQuery: string
+  repoFilter: string
+  filterPriorities: number[]
+  filterAssignees: string[]
+  filterLabels: string[]
+}
+
 import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
 import DependencyGraph from './DependencyGraph'
@@ -65,6 +76,47 @@ export default function BoardPage() {
   const [taskLabelMap, setTaskLabelMap] = useState<Map<string, KanbanLabel[]>>(new Map())
   const [showShortcuts, setShowShortcuts] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const [savedViews, setSavedViews] = useState<SavedFilterView[]>(() => {
+    try { return JSON.parse(localStorage.getItem('kanban_saved_views') || '[]') }
+    catch { return [] }
+  })
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [saveViewName, setSaveViewName] = useState('')
+
+  // Persist saved views to localStorage
+  useEffect(() => {
+    localStorage.setItem('kanban_saved_views', JSON.stringify(savedViews))
+  }, [savedViews])
+
+  const saveCurrentView = () => {
+    const name = saveViewName.trim()
+    if (!name) return
+    const newView: SavedFilterView = {
+      id: `view_${Date.now()}`,
+      name,
+      searchQuery,
+      repoFilter,
+      filterPriorities: [...filterPriorities],
+      filterAssignees: [...filterAssignees],
+      filterLabels: [...filterLabels],
+    }
+    setSavedViews(prev => [...prev, newView])
+    setSaveViewName('')
+    setShowSaveDialog(false)
+  }
+
+  const loadSavedView = (view: SavedFilterView) => {
+    setSearchQuery(view.searchQuery)
+    setRepoFilter(view.repoFilter)
+    setFilterPriorities(new Set(view.filterPriorities))
+    setFilterAssignees(new Set(view.filterAssignees))
+    setFilterLabels(new Set(view.filterLabels))
+    setShowFilters(true)
+  }
+
+  const deleteSavedView = (id: string) => {
+    setSavedViews(prev => prev.filter(v => v.id !== id))
+  }
 
   // Build a lookup map: taskId -> task title
   const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
@@ -734,6 +786,10 @@ export default function BoardPage() {
                 : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
             }`}
           ><SlidersHorizontal className="w-3 h-3" /> Filters</button>
+          <button onClick={() => setShowSaveDialog(true)}
+            className="flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors"
+            title="Save current filter as a view"
+          ><Save className="w-3 h-3" /> Save</button>
           <button onClick={() => setShowPanel(showPanel === 'agents' ? 'none' : 'agents')}
             className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded transition-colors ${
               showPanel === 'agents' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
@@ -770,6 +826,52 @@ export default function BoardPage() {
           ><Plus className="w-4 h-4" /> New</button>
         </div>
       </div>
+
+      {/* Saved Views Pills */}
+      {savedViews.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Bookmark className="w-3 h-3 text-[var(--color-muted)]" />
+          {savedViews.map(view => (
+            <div key={view.id} className="group relative">
+              <button
+                onClick={() => loadSavedView(view)}
+                className="text-xs px-2 py-1 rounded-full bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] transition-colors"
+              >{view.name}</button>
+              <button
+                onClick={() => deleteSavedView(view.id)}
+                className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                title="Delete view"
+              ><X className="w-2 h-2" /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Save View Dialog */}
+      {showSaveDialog && (
+        <div className="relative">
+          <div className="fixed inset-0 z-40" onClick={() => setShowSaveDialog(false)} />
+          <div className="absolute left-0 z-50 mt-1 w-64 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-xl space-y-2">
+            <p className="text-xs font-medium text-[var(--color-muted)]">Save current filters as</p>
+            <input
+              value={saveViewName}
+              onChange={e => setSaveViewName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') saveCurrentView(); if (e.key === 'Escape') setShowSaveDialog(false) }}
+              placeholder="View name..."
+              autoFocus
+              className="w-full px-2 py-1.5 text-xs rounded border border-[var(--color-border)] bg-[var(--color-background)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-primary)]"
+            />
+            <div className="flex items-center gap-2">
+              <button onClick={saveCurrentView} disabled={!saveViewName.trim()}
+                className="flex-1 text-xs px-2 py-1.5 rounded bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+              >Save</button>
+              <button onClick={() => setShowSaveDialog(false)}
+                className="flex-1 text-xs px-2 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors"
+              >Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Advanced Filters Bar */}
       {showFilters && (
