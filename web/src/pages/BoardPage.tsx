@@ -15,7 +15,7 @@ interface SavedFilterView {
   filterLabels: string[]
 }
 
-import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel } from '../api'
+import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel, type IssueLink } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
 import DependencyGraph from './DependencyGraph'
 import { Link as RouterLink } from 'react-router-dom'
@@ -74,6 +74,7 @@ export default function BoardPage() {
   const [filterLabels, setFilterLabels] = useState<Set<string>>(new Set())
   const [allLabels, setAllLabels] = useState<KanbanLabel[]>([])
   const [taskLabelMap, setTaskLabelMap] = useState<Map<string, KanbanLabel[]>>(new Map())
+  const [issueLinks, setIssueLinks] = useState<Record<string, IssueLink>>({})
   const [showShortcuts, setShowShortcuts] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const [savedViews, setSavedViews] = useState<SavedFilterView[]>(() => {
@@ -375,6 +376,23 @@ export default function BoardPage() {
     return () => clearInterval(interval)
   }, [])
 
+  // Load issue links for board badges
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const links = await api.issues.list()
+        const map: Record<string, IssueLink> = {}
+        for (const link of links) {
+          map[link.kanban_task_id] = link
+        }
+        setIssueLinks(map)
+      } catch {}
+    }
+    load()
+    const interval = setInterval(load, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
   // Toast notifications for live task changes
   useEffect(() => {
     const prev = prevTasksRef.current
@@ -553,6 +571,16 @@ export default function BoardPage() {
             {(taskLabelMap.get(task.id) || []).map(lbl => (
               <span key={lbl.id} className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: lbl.color }} title={lbl.name} />
             ))}
+            {/* Issue badge on compact card */}
+            {issueLinks[task.id] && (() => {
+              const link = issueLinks[task.id]
+              const closed = link.html_url?.includes('closed') || link.status === 'closed'
+              return (
+                <span className={`text-[10px] px-1 py-0.5 rounded font-medium flex-shrink-0 ${closed ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                  #{link.issue_number}
+                </span>
+              )
+            })()}
           </div>
           <div className="flex items-center gap-0.5 flex-shrink-0">
             {task.status === 'available' && (
@@ -635,6 +663,21 @@ export default function BoardPage() {
             <Cpu className="w-3 h-3 inline mr-0.5" />{task.requiredSkills}
           </span>
         )}
+        {/* Issue badge on detailed card */}
+        {issueLinks[task.id] && (() => {
+          const link = issueLinks[task.id]
+          const closed = link.html_url?.includes('closed') || link.status === 'closed'
+          return (
+            <a href={link.html_url} target="_blank" rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium hover:opacity-80 transition-opacity ${
+                closed ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'
+              }`}
+            >
+              <Github className="w-2.5 h-2.5" /> {link.repo.split('/').pop()}#{link.issue_number}
+            </a>
+          )
+        })()}
         {/* Label badges */}
         {(taskLabelMap.get(task.id) || []).map(lbl => (
           <span key={lbl.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-[100px]"

@@ -197,6 +197,14 @@
 - [x] "Save" button next to "Filters" opens inline name dialog
 - [x] Full state capture: search query, repo, priorities, assignees, label filters
 
+## Phase 28 — Issue Badges on Task Cards ✅
+- [x] Bulk-load all issue links alongside board data
+- [x] Issue badge on compact cards — `#143` style with open/closed color
+- [x] Issue badge on detailed cards — clickable `repo#123` with GitHub icon
+- [x] Open issues: green, closed issues: purple
+- [x] Click-through to GitHub issue from the badge on detailed cards
+- [x] Auto-fetched every 30s to stay in sync with issue linking
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
