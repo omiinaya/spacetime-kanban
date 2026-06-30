@@ -189,6 +189,14 @@
 - [x] Auto-focus on quick-add input when it appears
 - [x] All existing callers updated to pass the new param
 
+## Phase 27 — Saved Filter Views ✅
+- [x] Save any filter combination (repo + search + priority + assignee + labels) as a named view
+- [x] Saved views persist in localStorage across sessions
+- [x] Clickable pills below header bar — one tap restores saved filter state
+- [x] Hover-to-reveal delete button on each view
+- [x] "Save" button next to "Filters" opens inline name dialog
+- [x] Full state capture: search query, repo, priorities, assignees, label filters
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
