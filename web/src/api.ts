@@ -14,6 +14,7 @@ export interface Task {
   depends_on: string | null
   required_skills: string | null
   score: number
+  position: number | null
 }
 
 export interface LogEntry {
@@ -204,6 +205,10 @@ export const api = {
     delete: (id: string) =>
       apiDelete<{ status: string }>(`/tasks/${id}`),
     seed: () => apiPost<{ status: string }>('/tasks/seed'),
+    reorder: (task_id: string, position: number) =>
+      apiPost<{ status: string; task_id: string; position: number }>('/tasks/reorder', { task_id, position }),
+    bulkReorder: (items: { task_id: string; position: number }[]) =>
+      apiPost<{ status: string; count: number }>('/tasks/bulk-reorder', { items }),
     export: (format?: string, status?: string, repo?: string) => {
       const qs = new URLSearchParams()
       if (format) qs.set('format', format)

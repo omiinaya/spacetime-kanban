@@ -26,4 +26,5 @@ export default __t.row({
   dependsOn: __t.option(__t.string()).name("depends_on"),
   requiredSkills: __t.option(__t.string()).name("required_skills"),
   score: __t.u32(),
+  position: __t.option(__t.u32()),
 });

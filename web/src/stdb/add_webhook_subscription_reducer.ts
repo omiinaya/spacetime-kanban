@@ -12,11 +12,8 @@ import {
 
 export default {
   id: __t.string(),
-  title: __t.string(),
-  description: __t.string(),
-  priority: __t.u8(),
-  repo: __t.string(),
-  roadmapItem: __t.string(),
-  createdBy: __t.string(),
-  initialStatus: __t.string(),
+  url: __t.string(),
+  whType: __t.string(),
+  events: __t.string(),
+  label: __t.string(),
 };

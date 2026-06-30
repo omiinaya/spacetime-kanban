@@ -60,6 +60,7 @@ export default function BoardPage() {
   const toastIdCounter = useRef(0)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
+  const [dropOnTaskId, setDropOnTaskId] = useState<string | null>(null)
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchProcessing, setBatchProcessing] = useState(false)
@@ -176,6 +177,7 @@ export default function BoardPage() {
   const handleDragEnd = () => {
     setDraggedTaskId(null)
     setDragOverColumn(null)
+    setDropOnTaskId(null)
   }
 
   const handleDropOnColumn = async (targetStatus: TaskStatus) => {
@@ -215,6 +217,39 @@ export default function BoardPage() {
       }
     } catch (e: any) {
       alert(`Drop failed: ${e.message}`)
+    }
+  }
+
+  const handleDropOnTask = async (targetTaskId: string) => {
+    const taskId = draggedTaskId
+    if (!taskId || taskId === targetTaskId) return
+
+    const task = tasks.find(t => t.id === taskId)
+    const target = tasks.find(t => t.id === targetTaskId)
+    if (!task || !target || task.status !== target.status) return
+
+    setDraggedTaskId(null)
+    setDragOverColumn(null)
+    setDropOnTaskId(null)
+
+    // Reorder all tasks in the same column with sequential positions
+    const colTasks = filtered
+      .filter(t => t.status === task.status)
+      .sort((a, b) => (a.position ?? 999999) - (b.position ?? 999999) || a.priority - b.priority)
+
+    const srcIdx = colTasks.findIndex(t => t.id === taskId)
+    const dstIdx = colTasks.findIndex(t => t.id === targetTaskId)
+    if (srcIdx < 0 || dstIdx < 0) return
+
+    // Rebuild the array with the dragged card at the target position
+    const reordered = colTasks.filter(t => t.id !== taskId)
+    reordered.splice(dstIdx, 0, task)
+
+    const items = reordered.map((t, i) => ({ task_id: t.id, position: i * 100 }))
+    try {
+      await api.tasks.bulkReorder(items)
+    } catch (e: any) {
+      console.error('Reorder failed:', e)
     }
   }
 
@@ -541,11 +576,16 @@ export default function BoardPage() {
           draggable
           onDragStart={() => handleDragStart(task.id)}
           onDragEnd={handleDragEnd}
+          onDragOver={(e) => { e.preventDefault(); setDropOnTaskId(task.id) }}
+          onDragLeave={() => setDropOnTaskId(prev => prev === task.id ? null : prev)}
+          onDrop={() => handleDropOnTask(task.id)}
           onClick={() => setDetailTaskId(task.id)}
           className={`bg-[var(--color-card)] rounded border-l-4 border border-[var(--color-border)] py-1.5 px-2 cursor-pointer hover:border-[var(--color-ring)] transition-colors flex items-center gap-2 ${
             priorityColor
           } ${
             draggedTaskId === task.id ? 'opacity-50' : ''
+          } ${
+            dropOnTaskId === task.id ? 'border-t-2 border-t-[var(--color-primary)]' : ''
           }`}
         >
           {selectMode && (
@@ -615,9 +655,14 @@ export default function BoardPage() {
       draggable
       onDragStart={() => handleDragStart(task.id)}
       onDragEnd={handleDragEnd}
+      onDragOver={(e) => { e.preventDefault(); setDropOnTaskId(task.id) }}
+      onDragLeave={() => setDropOnTaskId(prev => prev === task.id ? null : prev)}
+      onDrop={() => handleDropOnTask(task.id)}
       onClick={() => setDetailTaskId(task.id)}
       className={`bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] p-3 space-y-2 cursor-pointer hover:border-[var(--color-ring)] transition-colors ${
         draggedTaskId === task.id ? 'opacity-50 ring-2 ring-[var(--color-primary)]' : ''
+      } ${
+        dropOnTaskId === task.id ? 'border-t-2 border-t-[var(--color-primary)]' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -734,8 +779,12 @@ export default function BoardPage() {
     )
   }
 
-  // Sort: priority asc, then createdAt desc
-  const sorted = [...tasks].sort((a, b) => a.priority - b.priority || Number(b.createdAt - a.createdAt))
+  // Sort: position asc (nulls last), then priority asc, then createdAt desc
+  const sorted = [...tasks].sort((a, b) => {
+    const posA = a.position ?? 999999
+    const posB = b.position ?? 999999
+    return posA - posB || a.priority - b.priority || Number(b.createdAt - a.createdAt)
+  })
   // Filter: repo
   const repoFiltered = repoFilter ? sorted.filter(t => t.repo === repoFilter) : sorted
   // Filter: search text

@@ -19,6 +19,7 @@ pub struct Task {
     pub depends_on: Option<String>,
     pub required_skills: Option<String>,
     pub score: u32,
+    pub position: Option<u32>,
 }
 
 #[spacetimedb::table(accessor = task_logs, public)]
@@ -122,6 +123,7 @@ pub fn add_task(
         depends_on: None,
         required_skills: None,
         score: 0,
+        position: Some(now as u32),
     });
 
     log_action(ctx, &task_id, "created", None, None);
@@ -331,6 +333,7 @@ pub fn seed_sample_tasks(ctx: &ReducerContext) -> Result<(), String> {
             depends_on: None,
             required_skills: None,
             score: 0,
+            position: Some(now as u32),
         });
 
         ctx.db.task_logs().insert(TaskLog {
@@ -1028,5 +1031,47 @@ pub fn reorder_checklist_items(
         .collect();
     for i in old { ctx.db.task_checklists().delete(i); }
     ctx.db.task_checklists().insert(item);
+    Ok(())
+}
+
+// ── Custom Task Order / Position ──────────────────────────────────────────
+
+#[reducer]
+pub fn reorder_task(
+    ctx: &ReducerContext,
+    task_id: String,
+    new_position: u32,
+) -> Result<(), String> {
+    let mut task = find_task(ctx, &task_id)
+        .ok_or_else(|| "Task not found".to_string())?;
+    task.position = Some(new_position);
+    task.updated_at = now_ms(ctx);
+    update_task_in_db(ctx, &task);
+    log_action(ctx, &task_id, "reordered", task.assigned_to.as_deref(), Some(&format!("position={}", new_position)));
+    Ok(())
+}
+
+#[reducer]
+pub fn bulk_reorder_tasks(
+    ctx: &ReducerContext,
+    items_json: String,
+) -> Result<(), String> {
+    // items_json is a JSON array of {task_id: String, position: u32}
+    // Example: [{"task_id":"abc","position":0},{"task_id":"def","position":1}]
+    let items: Vec<serde_json::Value> = serde_json::from_str(&items_json)
+        .map_err(|e| format!("Invalid JSON: {}", e))?;
+    let now = now_ms(ctx);
+    for item in &items {
+        let task_id = item["task_id"].as_str()
+            .ok_or("Missing task_id field")?;
+        let position = item["position"].as_u64()
+            .ok_or("Missing or invalid position field")?;
+        if let Some(mut task) = find_task(ctx, task_id) {
+            task.position = Some(position as u32);
+            task.updated_at = now;
+            update_task_in_db(ctx, &task);
+        }
+    }
+    log_action(ctx, "bulk_reorder", "bulk_reordered", None, Some(&format!("{} tasks", items.len())));
     Ok(())
 }
