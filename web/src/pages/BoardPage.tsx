@@ -53,6 +53,9 @@ export default function BoardPage() {
   const [batchProcessing, setBatchProcessing] = useState(false)
   const [showLabelPicker, setShowLabelPicker] = useState(false)
   const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set())
+  const [quickAddStatus, setQuickAddStatus] = useState<string | null>(null)
+  const [quickAddTitle, setQuickAddTitle] = useState('')
+  const quickAddRef = useRef<HTMLInputElement>(null)
   const [compactMode, setCompactMode] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [filterPriorities, setFilterPriorities] = useState<Set<number>>(new Set())
@@ -227,6 +230,26 @@ export default function BoardPage() {
     setBatchProcessing(false)
   }
 
+  const handleQuickAdd = async (status: string) => {
+    const title = quickAddTitle.trim()
+    if (!title) { setQuickAddStatus(null); return }
+    try {
+      if (status === 'in_progress') {
+        // Create as available, then claim
+        const result = await api.tasks.create({ title })
+        if (result.id) {
+          await api.tasks.claim(result.id, 'web-user')
+        }
+      } else {
+        await api.tasks.create({ title, status })
+      }
+      setQuickAddStatus(null)
+      setQuickAddTitle('')
+    } catch (e: any) {
+      alert(`Create failed: ${e.message}`)
+    }
+  }
+
   const handleDelete = async (taskId: string) => {
     if (!confirm('Delete this task?')) return
     try {
@@ -337,6 +360,13 @@ export default function BoardPage() {
     const timer = setTimeout(() => setToasts([]), 3500)
     return () => clearTimeout(timer)
   }, [toasts])
+
+  // Auto-focus quick-add input
+  useEffect(() => {
+    if (quickAddStatus && quickAddRef.current) {
+      quickAddRef.current.focus()
+    }
+  }, [quickAddStatus])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1003,10 +1033,37 @@ export default function BoardPage() {
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
                   {STATUS_LABELS[status]}
                 </h2>
-                <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--color-card)] text-[var(--color-muted)]">
-                  {colTasks.length}
-                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setQuickAddStatus(quickAddStatus === status ? null : status)}
+                    className="p-0.5 rounded hover:bg-white/10 text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+                    title={`Add task to ${STATUS_LABELS[status]}`}
+                  ><Plus className="w-3.5 h-3.5" /></button>
+                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--color-card)] text-[var(--color-muted)]">
+                    {colTasks.length}
+                  </span>
+                </div>
               </div>
+              {quickAddStatus === status && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    ref={quickAddRef}
+                    value={quickAddTitle}
+                    onChange={e => setQuickAddTitle(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleQuickAdd(status)
+                      if (e.key === 'Escape') { setQuickAddStatus(null); setQuickAddTitle('') }
+                    }}
+                    placeholder="Task title..."
+                    className="flex-1 px-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-background)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-primary)]"
+                  />
+                  <button
+                    onClick={() => handleQuickAdd(status)}
+                    disabled={!quickAddTitle.trim()}
+                    className="px-2 py-1 text-xs rounded bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+                  >Add</button>
+                </div>
+              )}
               <div
                 className={`space-y-2 min-h-[120px] rounded-lg transition-colors ${
                   isOver ? 'bg-white/5 ring-2 ring-[var(--color-primary)] border-2 border-dashed border-[var(--color-primary)]' : ''

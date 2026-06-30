@@ -168,7 +168,7 @@ export const api = {
       return apiGet<Task[]>(`/tasks${q ? `?${q}` : ''}`)
     },
     get: (id: string) => apiGet<Task>(`/tasks/${id}`),
-    create: (body: { title: string; description?: string; priority?: number; repo?: string; roadmap_item?: string; required_skills?: string }) =>
+    create: (body: { title: string; description?: string; priority?: number; repo?: string; roadmap_item?: string; required_skills?: string; status?: string }) =>
       apiPost<Task>('/tasks', body),
     update: (id: string, body: { title?: string; description?: string; priority?: number; branch?: string }) =>
       apiPatch<Task>(`/tasks/${id}`, body),

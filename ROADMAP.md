@@ -180,6 +180,15 @@
 - [x] Color-highlighted label toggle with Assign/Remove actions
 - [x] Proper route ordering — batch routes registered before `{task_id}` routes
 
+## Phase 26 — Quick Add to Column ✅
+- [x] "+" button on each column header (Available, In Progress, Blocked, Done)
+- [x] Inline title input with Enter to create, Escape to cancel
+- [x] STDB: `add_task` reducer accepts `initial_status` parameter (default "available")
+- [x] Server: `POST /api/tasks` accepts optional `status` field
+- [x] Frontend: auto-claim for In Progress column (create → claim)
+- [x] Auto-focus on quick-add input when it appears
+- [x] All existing callers updated to pass the new param
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
