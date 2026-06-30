@@ -205,6 +205,13 @@
 - [x] Click-through to GitHub issue from the badge on detailed cards
 - [x] Auto-fetched every 30s to stay in sync with issue linking
 
+## Phase 29 — Task Templates ✅
+- [x] 7 built-in templates: Bug Fix, Feature, Refactor, Chore, Documentation, Performance, Security
+- [x] Each template pre-fills: title, description, priority, skills, and icon
+- [x] Template picker row at the top of the Create Task dialog
+- [x] Selected template highlighted, clicking another template swaps the pre-fill
+- [x] All fields remain editable after template selection
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race
