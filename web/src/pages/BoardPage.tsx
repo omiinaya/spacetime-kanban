@@ -51,6 +51,8 @@ export default function BoardPage() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchProcessing, setBatchProcessing] = useState(false)
+  const [showLabelPicker, setShowLabelPicker] = useState(false)
+  const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set())
   const [compactMode, setCompactMode] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [filterPriorities, setFilterPriorities] = useState<Set<number>>(new Set())
@@ -206,6 +208,23 @@ export default function BoardPage() {
     setBatchProcessing(false)
     setSelectedIds(new Set())
     alert(`${label}d ${done}/${total} tasks`)
+  }
+
+  const handleBatchLabels = async (assign: boolean) => {
+    if (selectedIds.size === 0 || selectedLabelIds.size === 0) return
+    setBatchProcessing(true)
+    try {
+      if (assign) {
+        await api.tasks.batch.labels([...selectedIds], [...selectedLabelIds])
+      } else {
+        await api.tasks.batch.unlabels([...selectedIds], [...selectedLabelIds])
+      }
+      setShowLabelPicker(false)
+      setSelectedLabelIds(new Set())
+    } catch (e: any) {
+      alert(`Failed: ${e.message}`)
+    }
+    setBatchProcessing(false)
   }
 
   const handleDelete = async (taskId: string) => {
@@ -1104,6 +1123,57 @@ export default function BoardPage() {
               disabled={batchProcessing}
               className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-40"
             ><Trash2 className="w-3 h-3" /> Delete</button>
+            {/* Labels button */}
+            <div className="relative">
+              <button
+                onClick={() => { setShowLabelPicker(!showLabelPicker); if (!showLabelPicker) setSelectedLabelIds(new Set()) }}
+                disabled={batchProcessing}
+                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 transition-colors disabled:opacity-40"
+              ><Tag className="w-3 h-3" /> Labels</button>
+              {showLabelPicker && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowLabelPicker(false)} />
+                  <div className="absolute bottom-full right-0 mb-2 z-50 w-64 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-xl space-y-2">
+                    <p className="text-xs font-medium text-[var(--color-muted)]">Assign labels to {selectedIds.size} task(s)</p>
+                    {allLabels.length === 0 ? (
+                      <p className="text-xs text-[var(--color-muted)]">No labels exist.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                        {allLabels.map(lbl => (
+                          <button
+                            key={lbl.id}
+                            onClick={() => {
+                              const next = new Set(selectedLabelIds)
+                              if (next.has(lbl.id)) next.delete(lbl.id)
+                              else next.add(lbl.id)
+                              setSelectedLabelIds(next)
+                            }}
+                            className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                              selectedLabelIds.has(lbl.id)
+                                ? 'border-transparent text-white font-medium'
+                                : 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--color-muted)]'
+                            }`}
+                            style={selectedLabelIds.has(lbl.id) ? { backgroundColor: lbl.color } : {}}
+                          >{lbl.name}</button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 pt-1 border-t border-[var(--color-border)]">
+                      <button
+                        onClick={() => handleBatchLabels(true)}
+                        disabled={selectedLabelIds.size === 0 || batchProcessing}
+                        className="flex-1 text-xs px-2 py-1.5 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors disabled:opacity-40"
+                      >Assign</button>
+                      <button
+                        onClick={() => handleBatchLabels(false)}
+                        disabled={selectedLabelIds.size === 0 || batchProcessing}
+                        className="flex-1 text-xs px-2 py-1.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-40"
+                      >Remove</button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

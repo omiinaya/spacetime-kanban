@@ -194,6 +194,12 @@ export const api = {
       if (repo) qs.set('repo', repo)
       return `${BASE}/tasks/export?${qs.toString()}`
     },
+    batch: {
+      labels: (task_ids: string[], label_ids: string[]) =>
+        apiPost<{ status: string }>('/tasks/batch/labels', { task_ids, label_ids }),
+      unlabels: (task_ids: string[], label_ids: string[]) =>
+        apiPost<{ status: string }>('/tasks/batch/unlabels', { task_ids, label_ids }),
+    },
   },
   logs: {
     list: (params?: {

@@ -1196,6 +1196,39 @@ async def delete_label(label_id: str):
     return {"status": "deleted"}
 
 
+class BatchLabelsRequest(BaseModel):
+    task_ids: list[str]
+    label_ids: list[str]
+
+
+@app.post("/api/tasks/batch/labels", status_code=200)
+async def batch_assign_labels(body: BatchLabelsRequest):
+    """Batch assign labels to multiple tasks."""
+    if not body.task_ids or not body.label_ids:
+        raise HTTPException(400, "task_ids and label_ids must be non-empty")
+    try:
+        task_str = ",".join(body.task_ids)
+        label_str = ",".join(body.label_ids)
+        result = await _call("batch_assign_labels", [task_str, label_str])
+        return {"status": "assigned", "result": result}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/tasks/batch/unlabels", status_code=200)
+async def batch_unassign_labels(body: BatchLabelsRequest):
+    """Batch unassign labels from multiple tasks."""
+    if not body.task_ids or not body.label_ids:
+        raise HTTPException(400, "task_ids and label_ids must be non-empty")
+    try:
+        task_str = ",".join(body.task_ids)
+        label_str = ",".join(body.label_ids)
+        result = await _call("batch_unassign_labels", [task_str, label_str])
+        return {"status": "removed", "result": result}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get("/api/tasks/{task_id}/labels", response_model=list[LabelOut])
 async def get_task_labels(task_id: str):
     """Get all labels assigned to a task."""
