@@ -399,6 +399,53 @@ async def list_tools() -> list[Tool]:
                 "required": ["task_id", "comment_id"],
             },
         ),
+        Tool(
+            name="kanban_add_checklist_item",
+            description="Add a checklist item to a kanban task.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "text": {"type": "string", "description": "Checklist item text"},
+                },
+                "required": ["task_id", "text"],
+            },
+        ),
+        Tool(
+            name="kanban_list_checklist",
+            description="List all checklist items for a task.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                },
+                "required": ["task_id"],
+            },
+        ),
+        Tool(
+            name="kanban_toggle_checklist_item",
+            description="Toggle a checklist item's completed state.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "item_id": {"type": "string", "description": "Checklist item ID"},
+                },
+                "required": ["task_id", "item_id"],
+            },
+        ),
+        Tool(
+            name="kanban_remove_checklist_item",
+            description="Remove a checklist item from a task.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "item_id": {"type": "string", "description": "Checklist item ID"},
+                },
+                "required": ["task_id", "item_id"],
+            },
+        ),
     ]
 
 
@@ -439,6 +486,10 @@ def _route(name: str, args: dict) -> dict:
         "kanban_add_comment": _handle_add_comment,
         "kanban_list_comments": _handle_list_comments,
         "kanban_delete_comment": _handle_delete_comment,
+        "kanban_add_checklist_item": _handle_add_checklist_item,
+        "kanban_list_checklist": _handle_list_checklist,
+        "kanban_toggle_checklist_item": _handle_toggle_checklist_item,
+        "kanban_remove_checklist_item": _handle_remove_checklist_item,
     }
     handler = handlers.get(name)
     if not handler:
@@ -696,6 +747,37 @@ def _handle_delete_comment(args: dict) -> dict:
     task_id = _get_str(args, "task_id")
     comment_id = _get_str(args, "comment_id")
     return api_delete(f"/api/tasks/{task_id}/comments/{comment_id}")
+
+
+def _handle_add_checklist_item(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    text = _get_str(args, "text")
+    return api_post(f"/api/tasks/{task_id}/checklist", {"text": text})
+
+
+def _handle_list_checklist(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    items = api_get(f"/api/tasks/{task_id}/checklist")
+    completed = sum(1 for i in items if isinstance(i, dict) and i.get("completed"))
+    return {
+        "task_id": task_id,
+        "items": items if isinstance(items, list) else [],
+        "count": len(items) if isinstance(items, list) else 0,
+        "completed": completed,
+        "remaining": (len(items) if isinstance(items, list) else 0) - completed,
+    }
+
+
+def _handle_toggle_checklist_item(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    item_id = _get_str(args, "item_id")
+    return api_post(f"/api/tasks/{task_id}/checklist/{item_id}/toggle")
+
+
+def _handle_remove_checklist_item(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    item_id = _get_str(args, "item_id")
+    return api_delete(f"/api/tasks/{task_id}/checklist/{item_id}")
 
 
 # ── Main entry point ──────────────────────────────────────────────────

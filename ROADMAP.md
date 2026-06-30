@@ -220,6 +220,15 @@
 - [x] Enter to send, Shift+Enter for newline, avatar initials per author
 - [x] MCP tools: `kanban_add_comment`, `kanban_list_comments`, `kanban_delete_comment`
 
+## Phase 31 — Task Checklists / Subtasks ✅
+- [x] STDB: `task_checklists` table with id/task_id/text/completed/position/created_at
+- [x] STDB reducers: `add_checklist_item`, `toggle_checklist_item`, `remove_checklist_item`, `reorder_checklist_items`
+- [x] Server: Add/toggle/remove/list/reorder checklist endpoints
+- [x] Frontend: Checklist section in TaskDetailDialog with live progress counter
+- [x] Optimistic toggle with rollback on failure, Enter to add, inline delete
+- [x] MCP tools: `kanban_add_checklist_item`, `kanban_list_checklist`, `kanban_toggle_checklist_item`, `kanban_remove_checklist_item`
+- [x] Cascade cleanup — checklist items deleted when parent task is deleted
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race

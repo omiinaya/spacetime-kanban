@@ -155,6 +155,17 @@ class CommentCreate(BaseModel):
     body: str
     author: str = "web-user"
 
+class ChecklistItemOut(BaseModel):
+    id: str
+    task_id: str
+    text: str
+    completed: bool = False
+    position: int = 0
+    created_at: int = 0
+
+class ChecklistItemCreate(BaseModel):
+    text: str
+
 # ── Static file serving (SPA dashboard) ──────────────────────────────
 
 WEB_DIST = os.path.join(os.path.dirname(__file__), "..", "web", "dist")
@@ -592,6 +603,40 @@ async def delete_comment(task_id: str, comment_id: str):
     """Delete a comment from a task."""
     await _call("delete_comment", [comment_id])
     return {"status": "deleted"}
+
+# ── Task Checklists / Subtasks ──────────────────────────────────────
+
+@app.post("/api/tasks/{task_id}/checklist", status_code=201)
+async def add_checklist_item(task_id: str, body: ChecklistItemCreate):
+    """Add a checklist item to a task."""
+    item_id = f"cl_{uuid.uuid4().hex[:16]}"
+    await _call("add_checklist_item", [item_id, task_id, body.text])
+    return {"status": "created", "id": item_id}
+
+@app.get("/api/tasks/{task_id}/checklist", response_model=list[ChecklistItemOut])
+async def list_checklist(task_id: str):
+    """List all checklist items for a task, ordered by position."""
+    rows = await _sql(f"SELECT * FROM task_checklists WHERE task_id = '{task_id}'")
+    rows.sort(key=lambda r: r.get("position", 0))
+    return [ChecklistItemOut(**r) for r in rows]
+
+@app.post("/api/tasks/{task_id}/checklist/{item_id}/toggle")
+async def toggle_checklist_item(task_id: str, item_id: str):
+    """Toggle a checklist item's completed state."""
+    await _call("toggle_checklist_item", [item_id])
+    return {"status": "toggled"}
+
+@app.delete("/api/tasks/{task_id}/checklist/{item_id}")
+async def remove_checklist_item(task_id: str, item_id: str):
+    """Remove a checklist item."""
+    await _call("remove_checklist_item", [item_id])
+    return {"status": "deleted"}
+
+@app.post("/api/tasks/{task_id}/checklist/{item_id}/reorder")
+async def reorder_checklist_item(task_id: str, item_id: str, new_position: int):
+    """Reorder a checklist item."""
+    await _call("reorder_checklist_items", [item_id, new_position])
+    return {"status": "reordered"}
 
 # ── Priority Scoring / Suggestions ──────────────────────────────────
 
