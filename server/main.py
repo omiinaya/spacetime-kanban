@@ -817,6 +817,12 @@ async def delete_webhook(webhook_id: str):
     return {"status": "deleted"}
 
 
+@app.get("/api/webhooks/{webhook_id}/deliveries")
+async def get_webhook_deliveries(webhook_id: str, limit: int = 20):
+    """Get delivery history for a webhook."""
+    return webhooks.list_webhook_deliveries(webhook_id, limit)
+
+
 # ── Issue Sync ────────────────────────────────────────────────────────
 
 class IssueLinkRequest(BaseModel):

@@ -134,6 +134,17 @@ export interface Webhook {
   created_at: number
 }
 
+export interface WebhookDelivery {
+  id: string
+  webhook_id: string
+  event: string
+  url: string
+  status_code: number
+  response_body: string
+  success: boolean
+  delivered_at: number
+}
+
 export interface KanbanLabel {
   id: string
   name: string
@@ -264,6 +275,10 @@ export const api = {
       apiDelete<{ status: string }>(`/webhooks/${id}`),
     test: (id: string) =>
       apiPost<{ status: string; webhook_id: string; response_code: number }>(`/webhooks/${id}/test`),
+    deliveries: (id: string, limit?: number) => {
+      const qs = limit ? `?limit=${limit}` : ''
+      return apiGet<WebhookDelivery[]>(`/webhooks/${id}/deliveries${qs}`)
+    },
   },
   labels: {
     list: () => apiGet<KanbanLabel[]>('/labels'),

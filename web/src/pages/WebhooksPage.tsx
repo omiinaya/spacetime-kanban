@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { api, type Webhook } from '../api'
+import { api, type Webhook, type WebhookDelivery } from '../api'
 import {
   WebhookIcon, Plus, Loader2, AlertCircle, Trash2, Send,
-  CheckCircle2, XCircle, X, ExternalLink, Zap, Edit3
+  CheckCircle2, XCircle, X, ExternalLink, Zap, Edit3, History, ChevronDown, ChevronUp
 } from 'lucide-react'
 
 const WEBHOOK_TYPES = ['discord', 'slack', 'telegram', 'generic']
@@ -26,6 +26,9 @@ export default function WebhooksPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editEvents, setEditEvents] = useState<string[]>([])
   const [editLabel, setEditLabel] = useState('')
+  const [deliveries, setDeliveries] = useState<Record<string, WebhookDelivery[]>>({})
+  const [loadingDeliveries, setLoadingDeliveries] = useState<Set<string>>(new Set())
+  const [showDelivery, setShowDelivery] = useState<Set<string>>(new Set())
 
   // Create form state
   const [createUrl, setCreateUrl] = useState('')
@@ -100,6 +103,25 @@ export default function WebhooksPage() {
     } catch (e: any) {
       alert(`Update failed: ${e.message}`)
     }
+  }
+
+  const toggleDeliveries = async (id: string) => {
+    const next = new Set(showDelivery)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+      // Load deliveries if not already loaded
+      if (!deliveries[id]) {
+        setLoadingDeliveries(prev => new Set(prev).add(id))
+        try {
+          const data = await api.webhooks.deliveries(id, 10)
+          setDeliveries(prev => ({ ...prev, [id]: data }))
+        } catch {}
+        setLoadingDeliveries(prev => { const n = new Set(prev); n.delete(id); return n })
+      }
+    }
+    setShowDelivery(next)
   }
 
   const toggleEvent = (event: string, list: string[], setter: (v: string[]) => void) => {
@@ -330,6 +352,57 @@ export default function WebhooksPage() {
                   : <XCircle className="w-3.5 h-3.5" />
                 }
                 {testResults[wh.id].msg}
+              </div>
+            )}
+
+            {/* Delivery history toggle */}
+            <button onClick={() => toggleDeliveries(wh.id)}
+              className="flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+            >
+              <History className="w-3 h-3" />
+              {showDelivery.has(wh.id) ? 'Hide' : 'Show'} delivery history
+              {showDelivery.has(wh.id) ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+
+            {/* Delivery history */}
+            {showDelivery.has(wh.id) && (
+              <div className="space-y-1 border-t border-[var(--color-border)] pt-2">
+                {loadingDeliveries.has(wh.id) ? (
+                  <div className="flex items-center gap-2 py-2 text-xs text-[var(--color-muted)]">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Loading...
+                  </div>
+                ) : !deliveries[wh.id] || deliveries[wh.id].length === 0 ? (
+                  <p className="text-xs text-[var(--color-muted)] py-1">No delivery history yet.</p>
+                ) : (
+                  deliveries[wh.id].map(d => (
+                    <div key={d.id}
+                      className="flex items-start gap-2 py-1.5 text-xs border-b border-[var(--color-border)] last:border-0"
+                    >
+                      {d.success
+                        ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />
+                        : <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                      }
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${
+                            d.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                          }`}>
+                            HTTP {d.status_code || 'ERR'}
+                          </span>
+                          <span className="text-[var(--color-muted-foreground)] capitalize">{d.event}</span>
+                        </div>
+                        {d.response_body && (
+                          <p className="text-[10px] text-[var(--color-muted)] truncate mt-0.5" title={d.response_body}>
+                            {d.response_body.slice(0, 120)}
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-[var(--color-muted)] shrink-0">
+                        {new Date(d.delivered_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
