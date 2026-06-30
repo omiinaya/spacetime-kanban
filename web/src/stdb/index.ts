@@ -34,26 +34,128 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AddChecklistItemReducer from "./add_checklist_item_reducer";
+import AddCommentReducer from "./add_comment_reducer";
+import AddLabelReducer from "./add_label_reducer";
+import AddLogReducer from "./add_log_reducer";
 import AddTaskReducer from "./add_task_reducer";
+import AddWebhookSubscriptionReducer from "./add_webhook_subscription_reducer";
+import AgentHeartbeatReducer from "./agent_heartbeat_reducer";
+import AssignLabelToTaskReducer from "./assign_label_to_task_reducer";
+import BatchAssignLabelsReducer from "./batch_assign_labels_reducer";
+import BatchUnassignLabelsReducer from "./batch_unassign_labels_reducer";
 import BlockTaskReducer from "./block_task_reducer";
+import BulkReorderTasksReducer from "./bulk_reorder_tasks_reducer";
 import ClaimTaskReducer from "./claim_task_reducer";
 import CompleteTaskReducer from "./complete_task_reducer";
+import DeleteCommentReducer from "./delete_comment_reducer";
 import DeleteTaskReducer from "./delete_task_reducer";
+import LinkIssueReducer from "./link_issue_reducer";
+import LogWebhookDeliveryReducer from "./log_webhook_delivery_reducer";
+import RegisterAgentReducer from "./register_agent_reducer";
+import RemoveChecklistItemReducer from "./remove_checklist_item_reducer";
+import RemoveLabelReducer from "./remove_label_reducer";
+import RemoveWebhookSubscriptionReducer from "./remove_webhook_subscription_reducer";
+import ReorderChecklistItemsReducer from "./reorder_checklist_items_reducer";
+import ReorderTaskReducer from "./reorder_task_reducer";
 import SeedSampleTasksReducer from "./seed_sample_tasks_reducer";
+import SetAgentCapabilitiesReducer from "./set_agent_capabilities_reducer";
 import SetDependencyReducer from "./set_dependency_reducer";
+import SetTaskScoreReducer from "./set_task_score_reducer";
+import SetTaskSkillsReducer from "./set_task_skills_reducer";
+import ToggleChecklistItemReducer from "./toggle_checklist_item_reducer";
+import UnassignLabelFromTaskReducer from "./unassign_label_from_task_reducer";
 import UnclaimTaskReducer from "./unclaim_task_reducer";
+import UnlinkIssueReducer from "./unlink_issue_reducer";
+import UpdateIssueLinkStatusReducer from "./update_issue_link_status_reducer";
+import UpdateLabelReducer from "./update_label_reducer";
 import UpdateTaskReducer from "./update_task_reducer";
+import UpdateWebhookSubscriptionReducer from "./update_webhook_subscription_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import IssueLinksRow from "./issue_links_table";
+import KanbanLabelsRow from "./kanban_labels_table";
+import SwarmAgentsRow from "./swarm_agents_table";
+import TaskChecklistsRow from "./task_checklists_table";
+import TaskCommentsRow from "./task_comments_table";
+import TaskLabelAssignmentsRow from "./task_label_assignments_table";
 import TaskLogsRow from "./task_logs_table";
 import TasksRow from "./tasks_table";
+import WebhookDeliveriesRow from "./webhook_deliveries_table";
+import WebhookSubscriptionsRow from "./webhook_subscriptions_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  issue_links: __table({
+    name: 'issue_links',
+    indexes: [
+      { accessor: 'kanban_task_id', name: 'issue_links_kanban_task_id_idx_btree', algorithm: 'btree', columns: [
+        'kanbanTaskId',
+      ] },
+    ],
+    constraints: [
+      { name: 'issue_links_kanban_task_id_key', constraint: 'unique', columns: ['kanbanTaskId'] },
+    ],
+  }, IssueLinksRow),
+  kanban_labels: __table({
+    name: 'kanban_labels',
+    indexes: [
+      { accessor: 'id', name: 'kanban_labels_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'kanban_labels_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, KanbanLabelsRow),
+  swarm_agents: __table({
+    name: 'swarm_agents',
+    indexes: [
+      { accessor: 'id', name: 'swarm_agents_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'swarm_agents_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, SwarmAgentsRow),
+  task_checklists: __table({
+    name: 'task_checklists',
+    indexes: [
+      { accessor: 'id', name: 'task_checklists_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'task_checklists_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, TaskChecklistsRow),
+  task_comments: __table({
+    name: 'task_comments',
+    indexes: [
+      { accessor: 'id', name: 'task_comments_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'task_comments_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, TaskCommentsRow),
+  task_label_assignments: __table({
+    name: 'task_label_assignments',
+    indexes: [
+      { accessor: 'id', name: 'task_label_assignments_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'task_label_assignments_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, TaskLabelAssignmentsRow),
   task_logs: __table({
     name: 'task_logs',
     indexes: [
@@ -76,19 +178,69 @@ const tablesSchema = __schema({
       { name: 'tasks_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, TasksRow),
+  webhook_deliveries: __table({
+    name: 'webhook_deliveries',
+    indexes: [
+      { accessor: 'id', name: 'webhook_deliveries_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'webhook_deliveries_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, WebhookDeliveriesRow),
+  webhook_subscriptions: __table({
+    name: 'webhook_subscriptions',
+    indexes: [
+      { accessor: 'id', name: 'webhook_subscriptions_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'webhook_subscriptions_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, WebhookSubscriptionsRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("add_checklist_item", AddChecklistItemReducer),
+  __reducerSchema("add_comment", AddCommentReducer),
+  __reducerSchema("add_label", AddLabelReducer),
+  __reducerSchema("add_log", AddLogReducer),
   __reducerSchema("add_task", AddTaskReducer),
+  __reducerSchema("add_webhook_subscription", AddWebhookSubscriptionReducer),
+  __reducerSchema("agent_heartbeat", AgentHeartbeatReducer),
+  __reducerSchema("assign_label_to_task", AssignLabelToTaskReducer),
+  __reducerSchema("batch_assign_labels", BatchAssignLabelsReducer),
+  __reducerSchema("batch_unassign_labels", BatchUnassignLabelsReducer),
   __reducerSchema("block_task", BlockTaskReducer),
+  __reducerSchema("bulk_reorder_tasks", BulkReorderTasksReducer),
   __reducerSchema("claim_task", ClaimTaskReducer),
   __reducerSchema("complete_task", CompleteTaskReducer),
+  __reducerSchema("delete_comment", DeleteCommentReducer),
   __reducerSchema("delete_task", DeleteTaskReducer),
+  __reducerSchema("link_issue", LinkIssueReducer),
+  __reducerSchema("log_webhook_delivery", LogWebhookDeliveryReducer),
+  __reducerSchema("register_agent", RegisterAgentReducer),
+  __reducerSchema("remove_checklist_item", RemoveChecklistItemReducer),
+  __reducerSchema("remove_label", RemoveLabelReducer),
+  __reducerSchema("remove_webhook_subscription", RemoveWebhookSubscriptionReducer),
+  __reducerSchema("reorder_checklist_items", ReorderChecklistItemsReducer),
+  __reducerSchema("reorder_task", ReorderTaskReducer),
   __reducerSchema("seed_sample_tasks", SeedSampleTasksReducer),
+  __reducerSchema("set_agent_capabilities", SetAgentCapabilitiesReducer),
   __reducerSchema("set_dependency", SetDependencyReducer),
+  __reducerSchema("set_task_score", SetTaskScoreReducer),
+  __reducerSchema("set_task_skills", SetTaskSkillsReducer),
+  __reducerSchema("toggle_checklist_item", ToggleChecklistItemReducer),
+  __reducerSchema("unassign_label_from_task", UnassignLabelFromTaskReducer),
   __reducerSchema("unclaim_task", UnclaimTaskReducer),
+  __reducerSchema("unlink_issue", UnlinkIssueReducer),
+  __reducerSchema("update_issue_link_status", UpdateIssueLinkStatusReducer),
+  __reducerSchema("update_label", UpdateLabelReducer),
   __reducerSchema("update_task", UpdateTaskReducer),
+  __reducerSchema("update_webhook_subscription", UpdateWebhookSubscriptionReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

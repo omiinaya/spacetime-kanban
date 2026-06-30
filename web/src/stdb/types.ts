@@ -10,6 +10,38 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const IssueLink = __t.object("IssueLink", {
+  kanbanTaskId: __t.string(),
+  issueNumber: __t.u32(),
+  repo: __t.string(),
+  issueUrl: __t.string(),
+  htmlUrl: __t.string(),
+  status: __t.string(),
+  linkedAt: __t.u64(),
+});
+export type IssueLink = __Infer<typeof IssueLink>;
+
+export const KanbanLabel = __t.object("KanbanLabel", {
+  id: __t.string(),
+  name: __t.string(),
+  color: __t.string(),
+  description: __t.string(),
+  createdAt: __t.u64(),
+});
+export type KanbanLabel = __Infer<typeof KanbanLabel>;
+
+export const SwarmAgent = __t.object("SwarmAgent", {
+  id: __t.string(),
+  host: __t.string(),
+  capabilities: __t.option(__t.string()),
+  repoFocus: __t.option(__t.string()),
+  currentTaskId: __t.option(__t.string()),
+  status: __t.string(),
+  lastHeartbeat: __t.u64(),
+  firstSeen: __t.u64(),
+});
+export type SwarmAgent = __Infer<typeof SwarmAgent>;
+
 export const Task = __t.object("Task", {
   id: __t.string(),
   title: __t.string(),
@@ -26,8 +58,35 @@ export const Task = __t.object("Task", {
   dependsOn: __t.option(__t.string()),
   requiredSkills: __t.option(__t.string()),
   score: __t.u32(),
+  position: __t.option(__t.u32()),
 });
 export type Task = __Infer<typeof Task>;
+
+export const TaskChecklistItem = __t.object("TaskChecklistItem", {
+  id: __t.string(),
+  taskId: __t.string(),
+  text: __t.string(),
+  completed: __t.bool(),
+  position: __t.u32(),
+  createdAt: __t.u64(),
+});
+export type TaskChecklistItem = __Infer<typeof TaskChecklistItem>;
+
+export const TaskComment = __t.object("TaskComment", {
+  id: __t.string(),
+  taskId: __t.string(),
+  author: __t.string(),
+  body: __t.string(),
+  createdAt: __t.u64(),
+});
+export type TaskComment = __Infer<typeof TaskComment>;
+
+export const TaskLabelAssignment = __t.object("TaskLabelAssignment", {
+  id: __t.string(),
+  taskId: __t.string(),
+  labelId: __t.string(),
+});
+export type TaskLabelAssignment = __Infer<typeof TaskLabelAssignment>;
 
 export const TaskLog = __t.object("TaskLog", {
   id: __t.string(),
@@ -39,15 +98,25 @@ export const TaskLog = __t.object("TaskLog", {
 });
 export type TaskLog = __Infer<typeof TaskLog>;
 
-export const SwarmAgent = __t.object("SwarmAgent", {
+export const WebhookDelivery = __t.object("WebhookDelivery", {
   id: __t.string(),
-  host: __t.string(),
-  capabilities: __t.option(__t.string()),
-  repoFocus: __t.option(__t.string()),
-  currentTaskId: __t.option(__t.string()),
-  status: __t.string(),
-  lastHeartbeat: __t.u64(),
-  firstSeen: __t.u64(),
+  webhookId: __t.string(),
+  event: __t.string(),
+  url: __t.string(),
+  statusCode: __t.u32(),
+  responseBody: __t.string(),
+  success: __t.bool(),
+  deliveredAt: __t.u64(),
 });
-export type SwarmAgent = __Infer<typeof SwarmAgent>;
+export type WebhookDelivery = __Infer<typeof WebhookDelivery>;
+
+export const WebhookSubscription = __t.object("WebhookSubscription", {
+  id: __t.string(),
+  url: __t.string(),
+  whType: __t.string(),
+  events: __t.string(),
+  label: __t.string(),
+  createdAt: __t.u64(),
+});
+export type WebhookSubscription = __Infer<typeof WebhookSubscription>;
 

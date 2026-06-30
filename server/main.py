@@ -47,6 +47,7 @@ class TaskOut(BaseModel):
     depends_on: Optional[str] = None
     required_skills: Optional[str] = None
     score: int = 0
+    position: Optional[int] = None
 
 class TaskCreate(BaseModel):
     title: str
@@ -252,6 +253,7 @@ def _row_to_task(r: dict) -> TaskOut:
         depends_on=r.get("depends_on"),
         required_skills=r.get("required_skills"),
         score=r.get("score", 0),
+        position=r.get("position"),
     )
 
 
@@ -637,6 +639,29 @@ async def reorder_checklist_item(task_id: str, item_id: str, new_position: int):
     """Reorder a checklist item."""
     await _call("reorder_checklist_items", [item_id, new_position])
     return {"status": "reordered"}
+
+# ── Task Reorder / Position ──────────────────────────────────────────────
+
+class ReorderRequest(BaseModel):
+    task_id: str
+    position: int
+
+class BulkReorderRequest(BaseModel):
+    items: list[ReorderRequest]
+
+@app.post("/api/tasks/reorder")
+async def reorder_task(body: ReorderRequest):
+    """Set a task's position for custom ordering."""
+    await _call("reorder_task", [body.task_id, body.position])
+    return {"status": "reordered", "task_id": body.task_id, "position": body.position}
+
+@app.post("/api/tasks/bulk-reorder")
+async def bulk_reorder_tasks(body: BulkReorderRequest):
+    """Bulk-set positions for multiple tasks (e.g. drag-drop within a column)."""
+    import json
+    items_json = json.dumps([{"task_id": it.task_id, "position": it.position} for it in body.items])
+    await _call("bulk_reorder_tasks", [items_json])
+    return {"status": "reordered", "count": len(body.items)}
 
 # ── Priority Scoring / Suggestions ──────────────────────────────────
 

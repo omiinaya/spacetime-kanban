@@ -11,12 +11,6 @@ import {
 } from "spacetimedb";
 
 export default {
-  id: __t.string(),
-  title: __t.string(),
-  description: __t.string(),
-  priority: __t.u8(),
-  repo: __t.string(),
-  roadmapItem: __t.string(),
-  createdBy: __t.string(),
-  initialStatus: __t.string(),
+  taskId: __t.string(),
+  score: __t.u32(),
 };

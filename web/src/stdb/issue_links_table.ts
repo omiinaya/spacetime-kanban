@@ -10,13 +10,12 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  id: __t.string(),
-  title: __t.string(),
-  description: __t.string(),
-  priority: __t.u8(),
+export default __t.row({
+  kanbanTaskId: __t.string().primaryKey().name("kanban_task_id"),
+  issueNumber: __t.u32().name("issue_number"),
   repo: __t.string(),
-  roadmapItem: __t.string(),
-  createdBy: __t.string(),
-  initialStatus: __t.string(),
-};
+  issueUrl: __t.string().name("issue_url"),
+  htmlUrl: __t.string().name("html_url"),
+  status: __t.string(),
+  linkedAt: __t.u64().name("linked_at"),
+});
