@@ -166,6 +166,20 @@
 - [x] Esc → Progressive close (panel → filters → modals → graph → select)
 - [x] Smart suppression when typing in inputs; Esc blurs focused inputs
 
+## Phase 24 — Webhook Delivery Log ✅
+- [x] STDB: `webhook_deliveries` table with full tracking (id, webhook_id, event, url, status_code, response_body, success, delivered_at)
+- [x] Server: every webhook dispatch logs success/failure with HTTP status and response body
+- [x] Server: `GET /api/webhooks/{id}/deliveries` endpoint with limit
+- [x] Frontend: expandable delivery history per webhook — status badges, response preview, timestamps
+- [x] Lazy-loaded delivery history (fetched on expand, not on page load)
+
+## Phase 25 — Batch Label Assignment ✅
+- [x] STDB reducers: `batch_assign_labels` / `batch_unassign_labels` (comma-separated task/label IDs)
+- [x] Server: `POST /api/tasks/batch/labels` and `POST /api/tasks/batch/unlabels` endpoints
+- [x] Frontend: Labels button in bulk operations bar with label picker popover
+- [x] Color-highlighted label toggle with Assign/Remove actions
+- [x] Proper route ordering — batch routes registered before `{task_id}` routes
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race

@@ -779,6 +779,70 @@ pub fn unassign_label_from_task(
 
 // ── Webhook Delivery Log ─────────────────────────────────────────────
 
+#[reducer]
+pub fn batch_assign_labels(
+    ctx: &ReducerContext,
+    task_ids: String,
+    label_ids: String,
+) -> Result<(), String> {
+    let tasks: Vec<&str> = task_ids.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let labels: Vec<&str> = label_ids.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    if tasks.is_empty() || labels.is_empty() {
+        return Err("task_ids and label_ids must be non-empty".to_string());
+    }
+    let mut count = 0u64;
+    for task_id in &tasks {
+        let _task = find_task(ctx, task_id)
+            .ok_or_else(|| format!("Task not found: {task_id}"))?;
+        for label_id in &labels {
+            let _label = find_label(ctx, label_id)
+                .ok_or_else(|| format!("Label not found: {label_id}"))?;
+            let exists = ctx.db.task_label_assignments().iter()
+                .any(|a| a.task_id == *task_id && a.label_id == *label_id);
+            if !exists {
+                ctx.db.task_label_assignments().insert(TaskLabelAssignment {
+                    id: assignment_id(task_id, label_id),
+                    task_id: task_id.to_string(),
+                    label_id: label_id.to_string(),
+                });
+                count += 1;
+            }
+        }
+    }
+    log_action(ctx, &format!("batch_label_assign_{}", count), "batch_assign_labels", None, Some(&format!("{} tasks, {} labels: {} assignments", tasks.len(), labels.len(), count)));
+    Ok(())
+}
+
+#[reducer]
+pub fn batch_unassign_labels(
+    ctx: &ReducerContext,
+    task_ids: String,
+    label_ids: String,
+) -> Result<(), String> {
+    let tasks: Vec<&str> = task_ids.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let labels: Vec<&str> = label_ids.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    if tasks.is_empty() || labels.is_empty() {
+        return Err("task_ids and label_ids must be non-empty".to_string());
+    }
+    let mut count = 0u64;
+    for task_id in &tasks {
+        for label_id in &labels {
+            let to_remove: Vec<TaskLabelAssignment> = ctx.db.task_label_assignments().iter()
+                .filter(|a| a.task_id == *task_id && a.label_id == *label_id)
+                .map(|a| a.clone())
+                .collect();
+            for a in to_remove {
+                ctx.db.task_label_assignments().delete(a);
+                count += 1;
+            }
+        }
+    }
+    log_action(ctx, &format!("batch_label_unassign_{}", count), "batch_unassign_labels", None, Some(&format!("{} tasks, {} labels: {} removed", tasks.len(), labels.len(), count)));
+    Ok(())
+}
+
+// ── Webhook Delivery Log ─────────────────────────────────────────────
+
 #[spacetimedb::table(accessor = webhook_deliveries, public)]
 #[derive(Debug, Clone)]
 pub struct WebhookDelivery {
