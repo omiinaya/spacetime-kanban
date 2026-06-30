@@ -16,7 +16,7 @@ interface SavedFilterView {
   filterLabels: string[]
 }
 
-import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel, type IssueLink, type TaskComment } from '../api'
+import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel, type IssueLink, type TaskComment, type ChecklistItem } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
 import DependencyGraph from './DependencyGraph'
 import { Link as RouterLink } from 'react-router-dom'
@@ -1604,6 +1604,12 @@ function TaskDetailDialog({
   const [newComment, setNewComment] = useState('')
   const [sendingComment, setSendingComment] = useState(false)
 
+  // ── Checklist state ────────────────────────────────────────────────
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([])
+  const [loadingChecklist, setLoadingChecklist] = useState(true)
+  const [newChecklistText, setNewChecklistText] = useState('')
+  const [savingChecklist, setSavingChecklist] = useState(false)
+
   const task = tasks.find(t => t.id === taskId)
   const downstream = tasks.filter(t => t.dependsOn === taskId)
   const upstream = task?.dependsOn ? tasks.find(t => t.id === task.dependsOn) : null
@@ -1663,6 +1669,63 @@ function TaskDetailDialog({
       alert(`Failed to add comment: ${e.message}`)
     } finally {
       setSendingComment(false)
+    }
+  }
+
+  // Load checklist
+  useEffect(() => {
+    let cancelled = false
+    setLoadingChecklist(true)
+    api.checklist.list(taskId).then(items => {
+      if (!cancelled) { setChecklist(items); setLoadingChecklist(false) }
+    }).catch(() => { if (!cancelled) setLoadingChecklist(false) })
+    return () => { cancelled = true }
+  }, [taskId])
+
+  const handleAddChecklistItem = async () => {
+    const text = newChecklistText.trim()
+    if (!text) return
+    setSavingChecklist(true)
+    try {
+      const result = await api.checklist.add(taskId, text)
+      if (result.id) {
+        setChecklist(prev => [...prev, {
+          id: result.id,
+          task_id: taskId,
+          text,
+          completed: false,
+          position: prev.length,
+          created_at: Date.now(),
+        }])
+        setNewChecklistText('')
+      }
+    } catch (e: any) {
+      alert(`Failed to add checklist item: ${e.message}`)
+    } finally {
+      setSavingChecklist(false)
+    }
+  }
+
+  const handleToggleChecklist = async (itemId: string) => {
+    setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i))
+    try {
+      await api.checklist.toggle(taskId, itemId)
+    } catch (e: any) {
+      // Revert on failure
+      setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i))
+      alert(`Failed to toggle: ${e.message}`)
+    }
+  }
+
+  const handleRemoveChecklistItem = async (itemId: string) => {
+    if (!confirm('Remove this checklist item?')) return
+    setChecklist(prev => prev.filter(i => i.id !== itemId))
+    try {
+      await api.checklist.remove(taskId, itemId)
+    } catch (e: any) {
+      alert(`Failed to remove: ${e.message}`)
+      // Reload on failure
+      api.checklist.list(taskId).then(items => setChecklist(items))
     }
   }
 
@@ -1984,6 +2047,73 @@ function TaskDetailDialog({
               >
                 {sendingComment ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                 Send
+              </button>
+            </div>
+          </div>
+
+          {/* Checklist / Subtasks */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-2 flex items-center gap-1">
+              <CheckSquare className="w-3 h-3" /> Checklist
+              {checklist.length > 0 && (
+                <span className="text-[10px] text-[var(--color-muted)] font-normal">
+                  {checklist.filter(i => i.completed).length}/{checklist.length}
+                </span>
+              )}
+            </p>
+            {loadingChecklist ? (
+              <div className="flex items-center gap-2 text-xs text-[var(--color-muted)] py-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> Loading...
+              </div>
+            ) : (
+              <div className="space-y-1 mb-3 max-h-48 overflow-y-auto">
+                {checklist.length === 0 ? (
+                  <p className="text-xs text-[var(--color-muted)] py-1">No checklist items.</p>
+                ) : (
+                  checklist.map(item => (
+                    <div key={item.id} className="flex items-start gap-2 px-1 py-1 rounded hover:bg-white/[0.03] group">
+                      <button
+                        onClick={() => handleToggleChecklist(item.id)}
+                        className={`mt-0.5 shrink-0 rounded transition-colors ${
+                          item.completed ? 'text-emerald-400' : 'text-[var(--color-muted)] hover:text-[var(--color-foreground)]'
+                        }`}
+                      >
+                        <CheckSquare className={`w-4 h-4 ${item.completed ? 'fill-emerald-400/20' : ''}`} />
+                      </button>
+                      <span className={`flex-1 text-sm ${item.completed ? 'line-through text-[var(--color-muted)]' : 'text-[var(--color-muted-foreground)]'}`}>
+                        {item.text}
+                      </span>
+                      <button
+                        onClick={() => handleRemoveChecklistItem(item.id)}
+                        className="opacity-0 group-hover:opacity-100 text-[var(--color-muted)] hover:text-red-400 transition-all shrink-0"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                value={newChecklistText}
+                onChange={e => setNewChecklistText(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleAddChecklistItem()
+                  }
+                }}
+                placeholder="Add checklist item..."
+                className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] placeholder:text-[var(--color-muted)]"
+              />
+              <button
+                onClick={handleAddChecklistItem}
+                disabled={!newChecklistText.trim() || savingChecklist}
+                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+              >
+                {savingChecklist ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                Add
               </button>
             </div>
           </div>

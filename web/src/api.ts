@@ -161,6 +161,15 @@ export interface TaskComment {
   created_at: number
 }
 
+export interface ChecklistItem {
+  id: string
+  task_id: string
+  text: string
+  completed: boolean
+  position: number
+  created_at: number
+}
+
 export interface TaskLabelAssign {
   label_ids: string[]
 }
@@ -314,5 +323,17 @@ export const api = {
       apiPost<{ status: string; id: string }>(`/tasks/${taskId}/comments`, { body, author: author || 'web-user' }),
     remove: (taskId: string, commentId: string) =>
       apiDelete<{ status: string }>(`/tasks/${taskId}/comments/${commentId}`),
+  },
+  checklist: {
+    list: (taskId: string) =>
+      apiGet<ChecklistItem[]>(`/tasks/${taskId}/checklist`),
+    add: (taskId: string, text: string) =>
+      apiPost<{ status: string; id: string }>(`/tasks/${taskId}/checklist`, { text }),
+    toggle: (taskId: string, itemId: string) =>
+      apiPost<{ status: string }>(`/tasks/${taskId}/checklist/${itemId}/toggle`),
+    remove: (taskId: string, itemId: string) =>
+      apiDelete<{ status: string }>(`/tasks/${taskId}/checklist/${itemId}`),
+    reorder: (taskId: string, itemId: string, newPosition: number) =>
+      apiPost<{ status: string }>(`/tasks/${taskId}/checklist/${itemId}/reorder`, { new_position: newPosition }),
   },
 }

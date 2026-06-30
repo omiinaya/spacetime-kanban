@@ -287,6 +287,14 @@ pub fn delete_task(ctx: &ReducerContext, task_id: String) -> Result<(), String> 
     for a in assignments {
         ctx.db.task_label_assignments().delete(a);
     }
+    // Clean up checklist items
+    let checklist_items: Vec<TaskChecklistItem> = ctx.db.task_checklists().iter()
+        .filter(|i| i.task_id == task_id)
+        .map(|i| i.clone())
+        .collect();
+    for i in checklist_items {
+        ctx.db.task_checklists().delete(i);
+    }
     Ok(())
 }
 
@@ -931,5 +939,94 @@ pub fn delete_comment(ctx: &ReducerContext, comment_id: String) -> Result<(), St
     for c in comment {
         ctx.db.task_comments().delete(c);
     }
+    Ok(())
+}
+
+// ── Task Checklists / Subtasks ─────────────────────────────────────────
+
+#[spacetimedb::table(accessor = task_checklists, public)]
+#[derive(Debug, Clone)]
+pub struct TaskChecklistItem {
+    #[primary_key]
+    pub id: String,
+    pub task_id: String,
+    pub text: String,
+    pub completed: bool,
+    pub position: u32,
+    pub created_at: u64,
+}
+
+fn find_checklist_item(ctx: &ReducerContext, item_id: &str) -> Option<TaskChecklistItem> {
+    ctx.db.task_checklists().iter()
+        .find(|i| i.id == item_id)
+        .map(|i| i.clone())
+}
+
+#[reducer]
+pub fn add_checklist_item(
+    ctx: &ReducerContext,
+    id: String,
+    task_id: String,
+    text: String,
+) -> Result<(), String> {
+    // Verify task exists
+    let _task = find_task(ctx, &task_id)
+        .ok_or_else(|| "Task not found".to_string())?;
+    let now = now_ms(ctx);
+    let item_id = if id.is_empty() { make_id("cl", ctx) } else { id };
+    // Determine next position
+    let max_pos = ctx.db.task_checklists().iter()
+        .filter(|i| i.task_id == task_id)
+        .map(|i| i.position)
+        .max()
+        .unwrap_or(0);
+    ctx.db.task_checklists().insert(TaskChecklistItem {
+        id: item_id,
+        task_id,
+        text,
+        completed: false,
+        position: max_pos + 1,
+        created_at: now,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn toggle_checklist_item(ctx: &ReducerContext, item_id: String) -> Result<(), String> {
+    let mut item = find_checklist_item(ctx, &item_id)
+        .ok_or_else(|| "Checklist item not found".to_string())?;
+    item.completed = !item.completed;
+    let old: Vec<TaskChecklistItem> = ctx.db.task_checklists().iter()
+        .filter(|i| i.id == item.id)
+        .map(|i| i.clone())
+        .collect();
+    for i in old { ctx.db.task_checklists().delete(i); }
+    ctx.db.task_checklists().insert(item);
+    Ok(())
+}
+
+#[reducer]
+pub fn remove_checklist_item(ctx: &ReducerContext, item_id: String) -> Result<(), String> {
+    let item = find_checklist_item(ctx, &item_id)
+        .ok_or_else(|| "Checklist item not found".to_string())?;
+    ctx.db.task_checklists().delete(item);
+    Ok(())
+}
+
+#[reducer]
+pub fn reorder_checklist_items(
+    ctx: &ReducerContext,
+    item_id: String,
+    new_position: u32,
+) -> Result<(), String> {
+    let mut item = find_checklist_item(ctx, &item_id)
+        .ok_or_else(|| "Checklist item not found".to_string())?;
+    item.position = new_position;
+    let old: Vec<TaskChecklistItem> = ctx.db.task_checklists().iter()
+        .filter(|i| i.id == item.id)
+        .map(|i| i.clone())
+        .collect();
+    for i in old { ctx.db.task_checklists().delete(i); }
+    ctx.db.task_checklists().insert(item);
     Ok(())
 }
