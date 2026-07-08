@@ -887,6 +887,64 @@ async def spa_fallback(request, exc):
     return JSONResponse(status_code=404, content={"detail": "Not found"})
 
 
+# ── Dispatcher State Store ───────────────────────────────────────────
+# In-memory key-value store, persisted to disk. Replaces 5 separate
+# JSON tracker files with a single, server-managed state object.
+# The dispatcher reads/writes its entire state via REST API.
+
+_DISPATCHER_STATE: dict[str, Any] = {}
+_DISPATCHER_STATE_PATH = os.path.expanduser("~/.hermes/cron/dispatcher-state.json")
+
+def _load_dispatcher_state():
+    global _DISPATCHER_STATE
+    try:
+        with open(_DISPATCHER_STATE_PATH) as f:
+            _DISPATCHER_STATE = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        _DISPATCHER_STATE = {}
+
+def _save_dispatcher_state():
+    os.makedirs(os.path.dirname(_DISPATCHER_STATE_PATH), exist_ok=True)
+    tmp = _DISPATCHER_STATE_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(_DISPATCHER_STATE, f)
+    os.replace(tmp, _DISPATCHER_STATE_PATH)
+
+
+@app.on_event("startup")
+async def _load_dispatcher_state_on_startup():
+    _load_dispatcher_state()
+
+
+@app.get("/api/dispatcher/state")
+async def get_dispatcher_state(key: str | None = None):
+    """Get dispatcher state. If key is provided, return only that key's value."""
+    if key:
+        return {key: _DISPATCHER_STATE.get(key)}
+    return dict(_DISPATCHER_STATE)
+
+
+class DispatcherStateUpdate(BaseModel):
+    key: str
+    value: Any
+
+
+@app.post("/api/dispatcher/state")
+async def set_dispatcher_state(body: DispatcherStateUpdate):
+    """Set a single key in dispatcher state."""
+    _DISPATCHER_STATE[body.key] = body.value
+    _save_dispatcher_state()
+    return {"status": "ok", "key": body.key}
+
+
+@app.delete("/api/dispatcher/state/{key}")
+async def delete_dispatcher_state(key: str):
+    """Delete a key from dispatcher state."""
+    _DISPATCHER_STATE.pop(key, None)
+    _save_dispatcher_state()
+    return {"status": "deleted", "key": key}
+
+
 # ── Roadmap Import ─────────────────────────────────────────────────
 
 @app.post("/api/roadmap/import")
