@@ -12,14 +12,52 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
 
 from config import settings
 import webhooks
 import issue_sync
 
-app = FastAPI(title="spacetimedb-kanban", version="0.1.0")
+
+# ── Lifespan: wait for STDB before accepting requests ──────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """On startup: wait for STDB, create DB if missing."""
+    import os
+
+    max_retries = int(os.environ.get("KANBAN_STDB_RETRIES", "30"))
+    stdb_ok = False
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(
+                    f"{settings.stdb_base_url}/v1/database/{settings.stdb_db}"
+                )
+            if resp.status_code == 404:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.post(
+                        f"{settings.stdb_base_url}/v1/database",
+                        json={"name": settings.stdb_db},
+                    )
+                print(f"Created database: {settings.stdb_db} (status={resp.status_code})")
+            stdb_ok = True
+            break
+        except Exception as e:
+            if attempt < max_retries:
+                wait = min(attempt * 2, 30)
+                print(f"Waiting for STDB ({attempt}/{max_retries}): {e} — retrying in {wait}s")
+                await asyncio.sleep(wait)
+            else:
+                print(f"STDB unreachable after {max_retries} attempts: {e}")
+    if not stdb_ok:
+        print(f"CRITICAL: Could not reach SpacetimeDB at {settings.stdb_base_url} — exiting")
+        os._exit(1)
+    yield
+
+
+app = FastAPI(title='spacetimedb-kanban', version='0.1.0', lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -48,6 +86,11 @@ class TaskOut(BaseModel):
     required_skills: Optional[str] = None
     score: int = 0
     position: Optional[int] = None
+    fail_count: int = 0
+    max_attempts: int = 3
+    fail_reason: Optional[str] = None
+    subtask_of: Optional[str] = None
+    subtasks: Optional[str] = None
 
 class TaskCreate(BaseModel):
     title: str
@@ -58,6 +101,11 @@ class TaskCreate(BaseModel):
     required_skills: str = ""
     created_by: str = "web-user"
     status: str = ""
+    fail_count: int = 0
+    max_attempts: int = 3
+    fail_reason: Optional[str] = None
+    subtask_of: Optional[str] = None
+    subtasks: Optional[str] = None
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -71,6 +119,15 @@ class ClaimRequest(BaseModel):
 
 class BlockRequest(BaseModel):
     reason: str = ""
+
+class BlockWithReasonRequest(BaseModel):
+    reason: str = ""
+
+class SplitTaskRequest(BaseModel):
+    child_titles: list[str]
+
+class MaxAttemptsRequest(BaseModel):
+    max_attempts: int = 3
 
 class SetDependencyRequest(BaseModel):
     depends_on: str = ""  # empty string to clear
@@ -141,6 +198,33 @@ class LabelUpdate(BaseModel):
     name: str = ""
     color: str = ""
     description: str = ""
+
+# ── Project Models ────────────────────────────────────────────────────
+
+class ProjectOut(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    color: str = "#6b7280"
+    priority: int = 2
+    active: bool = True
+    created_at: int = 0
+    updated_at: int = 0
+
+class ProjectCreate(BaseModel):
+    id: str  # repo slug
+    name: str = ""
+    description: str = ""
+    color: str = "#0ea5e9"
+    priority: int = 2
+    active: bool = True
+
+class ProjectUpdate(BaseModel):
+    name: str = ""
+    description: str = ""
+    color: str = ""
+    priority: int = 3  # default=3 means "don't change" (0-3 range)
+    active: bool = True
 
 class TaskLabelAssign(BaseModel):
     label_ids: list[str] = []
@@ -254,6 +338,11 @@ def _row_to_task(r: dict) -> TaskOut:
         required_skills=r.get("required_skills"),
         score=r.get("score", 0),
         position=r.get("position"),
+        fail_count=r.get("fail_count", 0),
+        max_attempts=r.get("max_attempts", 3),
+        fail_reason=r.get("fail_reason"),
+        subtask_of=r.get("subtask_of"),
+        subtasks=r.get("subtasks"),
     )
 
 
@@ -273,20 +362,7 @@ def _row_to_log(r: dict) -> LogOut:
 
 # ── Helper: ensure DB identity is set ────────────────────────────────
 
-@app.on_event("startup")
-async def startup():
-    """Create the database if it doesn't exist."""
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{settings.stdb_base_url}/v1/database/{settings.stdb_db}"
-        )
-    if resp.status_code == 404:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                f"{settings.stdb_base_url}/v1/database",
-                json={"name": settings.stdb_db},
-            )
-        print(f"Created database: {settings.stdb_db} (status={resp.status_code})")
+# (lifespan moved above app definition)
 
 # ── Endpoints ────────────────────────────────────────────────────────
 
@@ -564,6 +640,31 @@ async def block_task(task_id: str, body: BlockRequest = BlockRequest()):
     if rows:
         asyncio.ensure_future(_notify("blocked", rows[0], body.reason))
     return {"status": "blocked", "task_id": task_id}
+
+@app.post("/api/tasks/{task_id}/block-with-reason")
+async def block_task_with_reason(task_id: str, body: BlockWithReasonRequest):
+    await _call("block_task_with_reason", [task_id, body.reason])
+    rows = await _sql(f"SELECT * FROM tasks WHERE id = '{task_id}'")
+    if rows:
+        asyncio.ensure_future(_notify("blocked", rows[0], body.reason))
+    return {"status": "blocked", "task_id": task_id, "reason": body.reason}
+
+@app.post("/api/tasks/{task_id}/split")
+async def split_task(task_id: str, body: SplitTaskRequest):
+    import json
+    child_titles_json = json.dumps(body.child_titles)
+    await _call("split_task", [task_id, child_titles_json])
+    return {"status": "split", "parent_task_id": task_id, "child_count": len(body.child_titles)}
+
+@app.post("/api/tasks/{task_id}/reset-fails")
+async def reset_fail_count(task_id: str):
+    await _call("reset_fail_count", [task_id])
+    return {"status": "reset", "task_id": task_id}
+
+@app.post("/api/tasks/{task_id}/max-attempts")
+async def set_max_attempts(task_id: str, body: MaxAttemptsRequest):
+    await _call("set_max_attempts", [task_id, body.max_attempts])
+    return {"status": "updated", "task_id": task_id, "max_attempts": body.max_attempts}
 
 @app.post("/api/tasks/{task_id}/dependency")
 async def set_dependency(task_id: str, body: SetDependencyRequest):
@@ -1344,7 +1445,6 @@ async def get_task_labels(task_id: str):
         SELECT l.* FROM kanban_labels l
         INNER JOIN task_label_assignments a ON l.id = a.label_id
         WHERE a.task_id = '{task_id}'
-        ORDER BY l.name
     """)
     return [LabelOut(id=r["id"], name=r["name"], color=r.get("color", "#0ea5e9"),
                      description=r.get("description", ""), created_at=r.get("created_at", 0))
@@ -1375,6 +1475,118 @@ async def set_task_labels(task_id: str, body: TaskLabelAssign):
             pass
 
     return {"status": "updated", "assigned": list(new_ids)}
+
+
+# ── Project CRUD ────────────────────────────────────────────────────
+
+
+@app.get("/api/projects", response_model=list[ProjectOut])
+async def list_projects():
+    """List all registered projects."""
+    rows = await _sql("SELECT * FROM kanban_projects")
+    return [
+        ProjectOut(
+            id=r["id"],
+            name=r.get("name", r["id"]),
+            description=r.get("description", ""),
+            color=r.get("color", "#6b7280"),
+            priority=r.get("priority", 2),
+            active=r.get("active", True),
+            created_at=r.get("created_at", 0),
+            updated_at=r.get("updated_at", 0),
+        )
+        for r in rows
+    ]
+
+
+@app.post("/api/projects", status_code=201)
+async def create_project(body: ProjectCreate):
+    """Register a new project/repo with priority."""
+    if not body.id:
+        raise HTTPException(400, "id (repo slug) is required")
+    result = await _call("add_project", [
+        body.id, body.name, body.description, body.color,
+        body.priority, body.active,
+    ])
+    rows = await _sql(f"SELECT * FROM kanban_projects WHERE id = '{body.id}'")
+    if rows:
+        r = rows[0]
+        return ProjectOut(
+            id=r["id"], name=r.get("name", r["id"]),
+            description=r.get("description", ""), color=r.get("color", "#6b7280"),
+            priority=r.get("priority", 2), active=r.get("active", True),
+            created_at=r.get("created_at", 0), updated_at=r.get("updated_at", 0),
+        )
+    return {"status": "created"}
+
+
+@app.patch("/api/projects/{project_id}")
+async def update_project(project_id: str, body: ProjectUpdate):
+    """Update a project's priority, name, colour, or active status."""
+    # priority=3 is sentinel for "don't change" (0-3 range)
+    prio = body.priority if body.priority <= 3 else 3
+    await _call("update_project", [
+        project_id, body.name, body.description, body.color,
+        prio, body.active,
+    ])
+    rows = await _sql(f"SELECT * FROM kanban_projects WHERE id = '{project_id}'")
+    if rows:
+        r = rows[0]
+        return ProjectOut(
+            id=r["id"], name=r.get("name", r["id"]),
+            description=r.get("description", ""), color=r.get("color", "#6b7280"),
+            priority=r.get("priority", 2), active=r.get("active", True),
+            created_at=r.get("created_at", 0), updated_at=r.get("updated_at", 0),
+        )
+    return {"status": "updated"}
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str):
+    """Delete a project registration."""
+    await _call("delete_project", [project_id])
+    return {"status": "deleted"}
+
+
+@app.get("/api/suggest-by-project", response_model=list[dict])
+async def suggest_by_project(limit: int = 10):
+    """Return top-N suggested tasks using project-aware scoring engine (STDB reducer)."""
+    try:
+        result = await _call("suggest_tasks_by_project", [limit])
+        if isinstance(result, dict) and "status" in result:
+            return [{"notice": "reducer returned ok — no data"}]
+        return result
+    except HTTPException:
+        pass
+    # Fallback: compute via API
+    rows = await _sql("SELECT * FROM tasks WHERE status = 'available'")
+    projects = await _sql("SELECT id, priority, active FROM kanban_projects")
+    proj_map = {p["id"]: p["priority"] for p in projects if p.get("active")}
+    now_ms = int(datetime.utcnow().timestamp() * 1000)
+    scored = []
+    for t in rows:
+        base = (4 - t.get("priority", 2)) * 10
+        repo = t.get("repo", "")
+        proj_boost = 0
+        if repo and repo in proj_map:
+            proj_boost = (4 - proj_map[repo]) * 20
+        age_hours = (now_ms - t.get("created_at", now_ms)) / 3_600_000
+        stale_bonus = min(int(age_hours), 40)
+        score = base + proj_boost + stale_bonus
+        parts = [f"score={score}", f"base={base}"]
+        if proj_boost:
+            parts.append(f"project_boost={proj_boost}")
+        if stale_bonus > 0:
+            parts.append(f"stale_bonus={stale_bonus}")
+        scored.append({
+            "task_id": t["id"],
+            "repo": repo,
+            "title": t["title"],
+            "score": score,
+            "reason": " + ".join(parts),
+        })
+    scored.sort(key=lambda x: -x["score"])
+    return scored[:limit]
 
 
 # ── Analytics ────────────────────────────────────────────────────────
@@ -1584,7 +1796,15 @@ def _auto_star(repo: str):
 # ── Main ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import uvicorn
+
     _threading.Thread(
         target=_auto_star, args=("omiinaya/spacetimedb-kanban",), daemon=True
     ).start()
-    uvicorn.run("main:app", host="0.0.0.0", port=settings.server_port, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=settings.server_port,
+        reload=False,
+        workers=1,
+    )

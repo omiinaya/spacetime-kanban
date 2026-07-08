@@ -186,6 +186,30 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="kanban_block_with_reason",
+            description="Mark a task as blocked with a persistent reason (stored in fail_reason field). Use this instead of kanban_block.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "reason": {"type": "string", "description": "Block reason (stored permanently)"},
+                },
+                "required": ["task_id", "reason"],
+            },
+        ),
+        Tool(
+            name="kanban_split_task",
+            description="Split a task into subtasks. Creates child tasks and marks the parent with subtask references.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Parent task ID to split"},
+                    "child_titles": {"type": "array", "items": {"type": "string"}, "description": "List of child task titles"},
+                },
+                "required": ["task_id", "child_titles"],
+            },
+        ),
+        Tool(
             name="kanban_unclaim",
             description="Release a task back to 'available' status.",
             inputSchema={
@@ -288,6 +312,68 @@ async def list_tools() -> list[Tool]:
                     "repo_focus": {"type": "string", "description": "Primary repo", "default": ""},
                 },
                 "required": ["agent_id", "capabilities"],
+            },
+        ),
+        # ── Project Management Tools ────────────────────────────────
+        Tool(
+            name="kanban_list_projects",
+            description="List all registered projects with their priority, colour, and active status.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        Tool(
+            name="kanban_add_project",
+            description="Register a new project/repo with a priority level for weighted task suggestion.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "Repo slug (e.g. 'sample-repo-q') — this maps to the `repo` field on tasks"},
+                    "name": {"type": "string", "description": "Display name", "default": ""},
+                    "description": {"type": "string", "description": "Project description", "default": ""},
+                    "color": {"type": "string", "description": "Hex colour e.g. '#0ea5e9'", "default": "#0ea5e9"},
+                    "priority": {"type": "integer", "description": "Priority 0-3 (0=most important, 3=least)", "default": 2},
+                    "active": {"type": "boolean", "description": "Whether to include this project in scoring", "default": True},
+                },
+                "required": ["id"],
+            },
+        ),
+        Tool(
+            name="kanban_update_project",
+            description="Update a project's priority, name, colour, or active status.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "Project/repo slug"},
+                    "name": {"type": "string", "description": "New display name", "default": ""},
+                    "description": {"type": "string", "description": "New description", "default": ""},
+                    "color": {"type": "string", "description": "New hex colour", "default": ""},
+                    "priority": {"type": "integer", "description": "Priority 0-3 (0=most important)", "default": 3},
+                    "active": {"type": "boolean", "description": "Whether this project is active in scoring", "default": True},
+                },
+                "required": ["project_id"],
+            },
+        ),
+        Tool(
+            name="kanban_delete_project",
+            description="Delete a registered project.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "Project/repo slug"},
+                },
+                "required": ["project_id"],
+            },
+        ),
+        Tool(
+            name="kanban_suggest_by_project",
+            description="Get suggested tasks prioritised by project importance. Tasks from higher-priority projects are scored higher.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Max suggestions", "default": 10},
+                },
             },
         ),
         Tool(
@@ -468,6 +554,8 @@ def _route(name: str, args: dict) -> dict:
         "kanban_claim": _handle_claim,
         "kanban_complete": _handle_complete,
         "kanban_block": _handle_block,
+        "kanban_block_with_reason": _handle_block_with_reason,
+        "kanban_split_task": _handle_split_task,
         "kanban_unclaim": _handle_unclaim,
         "kanban_delete_task": _handle_delete,
         "kanban_set_dependency": _handle_set_dependency,
@@ -490,6 +578,12 @@ def _route(name: str, args: dict) -> dict:
         "kanban_list_checklist": _handle_list_checklist,
         "kanban_toggle_checklist_item": _handle_toggle_checklist_item,
         "kanban_remove_checklist_item": _handle_remove_checklist_item,
+        # Project tools
+        "kanban_list_projects": _handle_list_projects,
+        "kanban_add_project": _handle_add_project,
+        "kanban_update_project": _handle_update_project,
+        "kanban_delete_project": _handle_delete_project,
+        "kanban_suggest_by_project": _handle_suggest_by_project,
     }
     handler = handlers.get(name)
     if not handler:
@@ -601,6 +695,20 @@ def _handle_block(args: dict) -> dict:
     task_id = _get_str(args, "task_id")
     reason = _get_str(args, "reason", "Blocked")
     return api_post(f"/api/tasks/{task_id}/block", {"reason": reason})
+
+
+def _handle_block_with_reason(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    reason = _get_str(args, "reason", "Blocked")
+    return api_post(f"/api/tasks/{task_id}/block-with-reason", {"reason": reason})
+
+
+def _handle_split_task(args: dict) -> dict:
+    task_id = _get_str(args, "task_id")
+    child_titles = args.get("child_titles", [])
+    if not child_titles:
+        return {"error": "child_titles is required and must be a non-empty list"}
+    return api_post(f"/api/tasks/{task_id}/split", {"child_titles": child_titles})
 
 
 def _handle_unclaim(args: dict) -> dict:
@@ -778,6 +886,56 @@ def _handle_remove_checklist_item(args: dict) -> dict:
     task_id = _get_str(args, "task_id")
     item_id = _get_str(args, "item_id")
     return api_delete(f"/api/tasks/{task_id}/checklist/{item_id}")
+
+
+# ── Project Tool Handlers ────────────────────────────────────────────
+
+
+def _handle_list_projects(args: dict) -> dict:
+    projects = api_get("/api/projects")
+    return {
+        "projects": projects if isinstance(projects, list) else [],
+        "count": len(projects) if isinstance(projects, list) else 0,
+    }
+
+
+def _handle_add_project(args: dict) -> dict:
+    return api_post("/api/projects", {
+        "id": _get_str(args, "id"),
+        "name": _get_str(args, "name"),
+        "description": _get_str(args, "description"),
+        "color": _get_str(args, "color", "#0ea5e9"),
+        "priority": _get_int(args, "priority", 2),
+        "active": bool(args.get("active", True)),
+    })
+
+
+def _handle_update_project(args: dict) -> dict:
+    project_id = _get_str(args, "project_id")
+    body = {}
+    n = _get_str(args, "name")
+    if n:
+        body["name"] = n
+    d = _get_str(args, "description")
+    if d:
+        body["description"] = d
+    c = _get_str(args, "color")
+    if c:
+        body["color"] = c
+    p = _get_int(args, "priority", 3)
+    if p <= 3:
+        body["priority"] = p
+    body["active"] = bool(args.get("active", True))
+    return api_patch(f"/api/projects/{project_id}", body)
+
+
+def _handle_delete_project(args: dict) -> dict:
+    return api_delete(f"/api/projects/{_get_str(args, 'project_id')}")
+
+
+def _handle_suggest_by_project(args: dict) -> dict:
+    limit = _get_int(args, "limit", 10)
+    return api_get(f"/api/suggest-by-project?limit={limit}")
 
 
 # ── Main entry point ──────────────────────────────────────────────────
