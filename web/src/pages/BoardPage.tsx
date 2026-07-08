@@ -44,7 +44,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default function BoardPage() {
-  const { tasks, connected, error: stdbError } = useRealtimeTasks()
+  const { tasks, connected, error: stdbError, loading } = useRealtimeTasks()
   const [showCreate, setShowCreate] = useState(false)
   const [claiming, setClaiming] = useState<string | null>(null)
   const [repoFilter, setRepoFilter] = useState<string>('')
@@ -1083,7 +1083,16 @@ export default function BoardPage() {
         </div>
       )}
 
-      {(stdbError || !filtered.length) && !stdbError && (
+      {/* Loading state — show spinner while initial data loads */}
+      {loading && (
+        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+          <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+          Connecting to database{stdbError ? '... (checking connection)' : '...'}
+        </div>
+      )}
+
+      {/* Empty state — only show if NOT loading */}
+      {!loading && (stdbError || !filtered.length) && !stdbError && (
         <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {searchQuery
