@@ -19,6 +19,7 @@ const POLL_INTERVAL = 10000  // 10s — always polling as safety net
 export function useRealtimeTasks() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [connected, setConnected] = useState(false)
+  const [loading, setLoading] = useState(true)  // true until first data arrives
   const [error, setError] = useState<string | null>(null)
   const connRef = useRef<DbConnection | null>(null)
   const reconnectRef = useRef(0)
@@ -55,6 +56,7 @@ export function useRealtimeTasks() {
           subtasks: d.subtasks ?? undefined,
         })) as Task[]
         setTasks(mapped)
+        setLoading(false)  // Data arrived, done loading
       }
     } catch (e: any) {
       // API might also fail — that's fine, we retry next interval
@@ -65,6 +67,7 @@ export function useRealtimeTasks() {
     try {
       const all = Array.from(conn.db.tasks.iter()) as Task[]
       setTasks(all)
+      setLoading(false)  // Data arrived from STDB
     } catch (e: any) {
       console.warn('Failed to sync from STDB cache:', e.message)
     }
@@ -78,6 +81,9 @@ export function useRealtimeTasks() {
     pollRef.current = setInterval(() => {
       syncFromApi.current()
     }, POLL_INTERVAL)
+
+    // 🚀 Fire an immediate REST fetch — don't wait 10s for first poll
+    syncFromApi.current()
 
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -161,5 +167,5 @@ export function useRealtimeTasks() {
     }
   }, [])
 
-  return { tasks, connected, error }
+  return { tasks, connected, loading, error }
 }

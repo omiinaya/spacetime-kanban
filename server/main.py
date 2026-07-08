@@ -264,7 +264,11 @@ else:
 async def serve_spa():
     index = os.path.join(WEB_DIST, "index.html")
     if os.path.isfile(index):
-        return FileResponse(index)
+        return FileResponse(index, headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        })
     return {"status": "dashboard not built — run 'npm run build' in web/"}
 
 # ── STDB helpers ─────────────────────────────────────────────────────
@@ -875,7 +879,11 @@ async def spa_fallback(request, exc):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
     index = os.path.join(WEB_DIST, "index.html")
     if os.path.isfile(index):
-        return FileResponse(index)
+        return FileResponse(index, headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        })
     return JSONResponse(status_code=404, content={"detail": "Not found"})
 
 
