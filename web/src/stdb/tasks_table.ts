@@ -27,4 +27,9 @@ export default __t.row({
   requiredSkills: __t.option(__t.string()).name("required_skills"),
   score: __t.u32(),
   position: __t.option(__t.u32()),
+  failCount: __t.u32().name("fail_count"),
+  maxAttempts: __t.u32().name("max_attempts"),
+  failReason: __t.option(__t.string()).name("fail_reason"),
+  subtaskOf: __t.option(__t.string()).name("subtask_of"),
+  subtasks: __t.option(__t.string()),
 });

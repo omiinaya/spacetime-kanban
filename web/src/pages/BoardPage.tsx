@@ -429,32 +429,35 @@ export default function BoardPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Toast notifications for live task changes
+  // Toast notifications for live task changes — single toast max, collapse burst
   useEffect(() => {
     const prev = prevTasksRef.current
     const prevMap = new Map(prev.map(t => [t.id, t]))
 
-    const added: typeof toasts = []
+    let claimed = 0, created = 0, completed = 0, blocked = 0, released = 0
     for (const t of tasks) {
       const old = prevMap.get(t.id)
       if (!old) {
-        // New task created
-        added.push({ id: ++toastIdCounter.current, emoji: '🆕', text: `"${t.title}" created` })
+        created++
       } else if (old.status !== t.status || old.assignedTo !== t.assignedTo) {
-        if (t.status === 'in_progress' && old.status === 'available') {
-          added.push({ id: ++toastIdCounter.current, emoji: '👤', text: `"${t.title}" claimed by ${t.assignedTo || 'web-user'}` })
-        } else if (t.status === 'done') {
-          added.push({ id: ++toastIdCounter.current, emoji: '✅', text: `"${t.title}" completed` })
-        } else if (t.status === 'blocked') {
-          added.push({ id: ++toastIdCounter.current, emoji: '🚧', text: `"${t.title}" blocked` })
-        } else if (t.status === 'available' && old.status !== 'available') {
-          added.push({ id: ++toastIdCounter.current, emoji: '↩️', text: `"${t.title}" released` })
-        }
+        if (t.status === 'in_progress' && old.status === 'available') claimed++
+        else if (t.status === 'done') completed++
+        else if (t.status === 'blocked') blocked++
+        else if (t.status === 'available' && old.status !== 'available') released++
       }
     }
 
-    if (added.length > 0) {
-      setToasts(prev => [...prev, ...added].slice(-5))  // max 5 visible
+    const total = claimed + created + completed + blocked + released
+    if (total > 0) {
+      const parts: string[] = []
+      if (claimed) parts.push(`${claimed} claimed`)
+      if (created) parts.push(`${created} created`)
+      if (completed) parts.push(`${completed} done`)
+      if (blocked) parts.push(`${blocked} blocked`)
+      if (released) parts.push(`${released} released`)
+      const text = parts.join(', ')
+      const emoji = completed > 0 ? '✅' : claimed > created ? '👤' : '🆕'
+      setToasts([{ id: ++toastIdCounter.current, emoji, text }])
     }
 
     prevTasksRef.current = tasks

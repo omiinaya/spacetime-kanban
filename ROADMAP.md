@@ -229,6 +229,16 @@
 - [x] MCP tools: `kanban_add_checklist_item`, `kanban_list_checklist`, `kanban_toggle_checklist_item`, `kanban_remove_checklist_item`
 - [x] Cascade cleanup — checklist items deleted when parent task is deleted
 
+## Phase 32 — Custom Task Order ✅
+- [x] STDB: `position` field (optional u32) on Task struct, null = no custom order
+- [x] STDB reducers: `reorder_task` (single), `bulk_reorder_tasks` (JSON batch)
+- [x] Server: `POST /api/tasks/reorder` and `POST /api/tasks/bulk-reorder` endpoints
+- [x] Sort: position asc (nulls last), then priority, then created date
+- [x] Within-column drag reorder — drop a card on another to reorder
+- [x] Visual feedback: primary color top border on drop target
+- [x] Sequential positions (100 spacing) for clean reorder API
+- [x] MCP tools auto-generated from STDB reducers
+
 ## Bug Fixes & Polish ✅
 - [x] PR webhook title overwrite — preserves original kanban task title on PR open/reopen
 - [x] create_task race condition — pre-generated UUID IDs eliminate skills race

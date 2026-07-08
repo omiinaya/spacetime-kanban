@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use spacetimedb::{reducer, ReducerContext, Table};
 
 #[spacetimedb::table(accessor = tasks, public)]
@@ -20,6 +22,13 @@ pub struct Task {
     pub required_skills: Option<String>,
     pub score: u32,
     pub position: Option<u32>,
+    // Failure tracking — retry limit enforcement
+    pub fail_count: u32,
+    pub max_attempts: u32,
+    pub fail_reason: Option<String>,
+    // Subtask decomposition
+    pub subtask_of: Option<String>,
+    pub subtasks: Option<String>,  // JSON array of child task IDs
 }
 
 #[spacetimedb::table(accessor = task_logs, public)]
@@ -39,10 +48,20 @@ fn now_ms(ctx: &ReducerContext) -> u64 {
 }
 
 fn make_id(prefix: &str, ctx: &ReducerContext) -> String {
+    let counter = ID_COUNTER.with(|c| {
+        let val = c.get();
+        c.set(val + 1);
+        val
+    });
     let ts = now_ms(ctx);
     let discrim = ctx.sender().to_string();
     let short = if discrim.len() > 8 { &discrim[..8] } else { &discrim };
-    format!("{}_{}_{}", prefix, ts, short)
+    format!("{}_{}_{}_{}", prefix, ts, short, counter)
+}
+
+thread_local! {
+    static LOG_COUNTER: Cell<u64> = Cell::new(0);
+    static ID_COUNTER: Cell<u64> = Cell::new(0);
 }
 
 fn log_action(
@@ -52,7 +71,12 @@ fn log_action(
     agent_id: Option<&str>,
     notes: Option<&str>,
 ) {
-    let id = make_id("log", ctx);
+    let counter = LOG_COUNTER.with(|c| {
+        let val = c.get();
+        c.set(val + 1);
+        val
+    });
+    let id = format!("log_{}_{}", now_ms(ctx), counter);
     let now = now_ms(ctx);
     ctx.db.task_logs().insert(TaskLog {
         id,
@@ -124,9 +148,155 @@ pub fn add_task(
         required_skills: None,
         score: 0,
         position: Some(now as u32),
+        fail_count: 0,
+        max_attempts: 3,
+        fail_reason: None,
+        subtask_of: None,
+        subtasks: None,
     });
 
     log_action(ctx, &task_id, "created", None, None);
+    Ok(())
+}
+
+#[reducer]
+pub fn block_task_with_reason(
+    ctx: &ReducerContext,
+    task_id: String,
+    reason: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id)
+        .ok_or_else(|| "Task not found".to_string())?;
+
+    if task.status != "in_progress" {
+        return Err(format!("Cannot block task with status: {}", task.status));
+    }
+
+    let agent = task.assigned_to.clone();
+
+    // Increment fail_count and record reason
+    task.fail_count += 1;
+    task.fail_reason = if reason.is_empty() { None } else { Some(reason.clone()) };
+
+    // If max_attempts reached, special handling — dispatcher will decide
+    if task.fail_count >= task.max_attempts {
+        task.status = "blocked".to_string();
+        task.assigned_to = None;
+    } else {
+        // Under limit: return to available for retry
+        task.status = "available".to_string();
+        task.assigned_to = None;
+    }
+
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
+
+    log_action(ctx, &task_id, "blocked", agent.as_deref(), Some(&format!(
+        "fail #{}/{}: {}", task.fail_count, task.max_attempts, reason
+    )));
+    Ok(())
+}
+
+#[reducer]
+pub fn split_task(
+    ctx: &ReducerContext,
+    parent_task_id: String,
+    child_titles_json: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut parent = find_task(ctx, &parent_task_id)
+        .ok_or_else(|| "Parent task not found".to_string())?;
+
+    if parent.status != "available" && parent.status != "blocked" {
+        return Err(format!("Cannot split task with status: {}", parent.status));
+    }
+
+    // Parse child titles from JSON array
+    let child_titles: Vec<String> = serde_json::from_str(&child_titles_json)
+        .map_err(|e| format!("Invalid child titles JSON: {}", e))?;
+
+    if child_titles.is_empty() {
+        return Err("Must specify at least one child title".to_string());
+    }
+
+    let mut child_ids = Vec::new();
+    let sender = ctx.sender().to_string();
+
+    for title in &child_titles {
+        let child_id = make_id("task", ctx);
+        child_ids.push(child_id.clone());
+        ctx.db.tasks().insert(Task {
+            id: child_id.clone(),
+            title: title.clone(),
+            description: format!("Subtask of: {} ({})", parent.title, parent_task_id),
+            priority: parent.priority,
+            status: "available".to_string(),
+            assigned_to: None,
+            repo: parent.repo.clone(),
+            branch: None,
+            roadmap_item: parent.roadmap_item.clone(),
+            created_by: sender.clone(),
+            created_at: now,
+            updated_at: now,
+            depends_on: None,
+            required_skills: parent.required_skills.clone(),
+            score: 0,
+            position: Some(now as u32),
+            fail_count: 0,
+            max_attempts: parent.max_attempts,
+            fail_reason: None,
+            subtask_of: Some(parent_task_id.clone()),
+            subtasks: None,
+        });
+        log_action(ctx, &child_id, "created_as_subtask", None, Some(&format!("parent: {}", parent_task_id)));
+    }
+
+    // Update parent with subtask list and mark as blocked (tracked by children)
+    parent.status = "blocked".to_string();
+    parent.assigned_to = None;
+    parent.updated_at = now;
+    parent.fail_reason = Some(format!(
+        "Split into {} subtask(s): {}",
+        child_titles.len(),
+        child_titles.join(", ")
+    ));
+    update_task_in_db(ctx, &parent);
+
+    log_action(ctx, &parent_task_id, "split", None, Some(&format!(
+        "{} child tasks created", child_titles.len()
+    )));
+    Ok(())
+}
+
+#[reducer]
+pub fn reset_fail_count(
+    ctx: &ReducerContext,
+    task_id: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id)
+        .ok_or_else(|| "Task not found".to_string())?;
+    task.fail_count = 0;
+    task.fail_reason = None;
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
+    log_action(ctx, &task_id, "fail_reset", task.assigned_to.as_deref(), None);
+    Ok(())
+}
+
+#[reducer]
+pub fn set_max_attempts(
+    ctx: &ReducerContext,
+    task_id: String,
+    max_attempts: u32,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id)
+        .ok_or_else(|| "Task not found".to_string())?;
+    task.max_attempts = max_attempts;
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
     Ok(())
 }
 
@@ -334,6 +504,11 @@ pub fn seed_sample_tasks(ctx: &ReducerContext) -> Result<(), String> {
             required_skills: None,
             score: 0,
             position: Some(now as u32),
+            fail_count: 0,
+            max_attempts: 3,
+            fail_reason: None,
+            subtask_of: None,
+            subtasks: None,
         });
 
         ctx.db.task_logs().insert(TaskLog {
@@ -476,6 +651,104 @@ pub fn set_task_skills(
     task.updated_at = now;
     update_task_in_db(ctx, &task);
     log_action(ctx, &task_id, "skills_set", task.assigned_to.as_deref(), Some(&skills));
+    Ok(())
+}
+
+// ── Project Table (with Priority) ────────────────────────────────────────
+// Each project is keyed by its repo slug (e.g. "sample-repo-q").
+// The `repo` field on Task maps to this project's `id`.
+// Project `priority` (0=most important, 3=lowest) is a multiplicative
+// factor in the task suggestion scoring engine.
+
+#[spacetimedb::table(accessor = kanban_projects, public)]
+#[derive(Debug, Clone)]
+pub struct KanbanProject {
+    #[primary_key]
+    pub id: String,           // repo slug — matches Task.repo
+    pub name: String,         // display name
+    pub description: String,
+    pub color: String,        // hex colour e.g. "#0ea5e9"
+    pub priority: u8,         // 0=most important … 3=lowest (same scale as Task.priority)
+    pub active: bool,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+fn find_project(ctx: &ReducerContext, project_id: &str) -> Option<KanbanProject> {
+    ctx.db.kanban_projects().iter()
+        .find(|p| p.id == project_id)
+        .map(|p| p.clone())
+}
+
+fn update_project_in_db(ctx: &ReducerContext, project: &KanbanProject) {
+    let old: Vec<KanbanProject> = ctx.db.kanban_projects().iter()
+        .filter(|p| p.id == project.id)
+        .map(|p| p.clone())
+        .collect();
+    for p in old { ctx.db.kanban_projects().delete(p); }
+    ctx.db.kanban_projects().insert(project.clone());
+}
+
+#[reducer]
+pub fn add_project(
+    ctx: &ReducerContext,
+    id: String,           // repo slug — must match Task.repo
+    name: String,
+    description: String,
+    color: String,
+    priority: u8,         // 0=most important … 3=lowest
+    active: bool,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    if id.is_empty() {
+        return Err("Project id (repo slug) is required".into());
+    }
+    if find_project(ctx, &id).is_some() {
+        return Err(format!("Project '{}' already exists", id));
+    }
+    let color = if color.is_empty() { "#6b7280" } else { &color };
+    let label = if name.is_empty() { id.clone() } else { name };
+    ctx.db.kanban_projects().insert(KanbanProject {
+        id,
+        name: label,
+        description,
+        color: color.to_string(),
+        priority: if priority > 3 { 2 } else { priority },
+        active,
+        created_at: now,
+        updated_at: now,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn update_project(
+    ctx: &ReducerContext,
+    id: String,
+    name: String,
+    description: String,
+    color: String,
+    priority: u8,
+    active: bool,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut proj = find_project(ctx, &id)
+        .ok_or_else(|| format!("Project '{}' not found", id))?;
+    if !name.is_empty() { proj.name = name; }
+    if !description.is_empty() { proj.description = description; }
+    if !color.is_empty() { proj.color = color; }
+    if priority <= 3 { proj.priority = priority; }
+    proj.active = active;
+    proj.updated_at = now;
+    update_project_in_db(ctx, &proj);
+    Ok(())
+}
+
+#[reducer]
+pub fn delete_project(ctx: &ReducerContext, id: String) -> Result<(), String> {
+    let proj = find_project(ctx, &id)
+        .ok_or_else(|| format!("Project '{}' not found", id))?;
+    ctx.db.kanban_projects().delete(proj);
     Ok(())
 }
 
