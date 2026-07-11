@@ -93,7 +93,7 @@ export function useRealtimeTasks() {
     try {
       const all = Array.from(conn.db.tasks.iter()) as Task[]
       setTasksIfChanged(all)
-      setLoading(false)  // Data arrived from STDB
+      if (all.length > 0) setLoading(false)  // Data with content arrived from STDB
     } catch (e: any) {
       console.warn('Failed to sync from STDB cache:', e.message)
     }
@@ -105,6 +105,11 @@ export function useRealtimeTasks() {
 
     // Fire an immediate REST fetch — bootstrap data while STDB connects
     syncFromApi.current()
+
+    // Loading timeout: force loading=false after 15s even if no data
+    const loadingTimeout = setTimeout(() => {
+      if (!cancelled()) setLoading(false)
+    }, 15000)
 
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
