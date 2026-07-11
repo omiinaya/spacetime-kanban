@@ -1115,8 +1115,8 @@ export default function BoardPage() {
         <KanbanBoardSkeleton />
       )}
 
-      {/* Empty state — only show if NOT loading */}
-      {!loading && (stdbError || !filtered.length) && !stdbError && (
+      {/* Empty state — only show if NOT loading and no tasks match */}
+      {!loading && !filtered.length && (
         <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {searchQuery
