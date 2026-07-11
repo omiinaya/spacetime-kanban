@@ -89,6 +89,8 @@ export function ListViewSkeleton() {
     </div>
   )
 }
+
+export function KanbanBoardSkeleton() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">

@@ -19,7 +19,7 @@ interface SavedFilterView {
 import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel, type IssueLink, type TaskComment, type ChecklistItem } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
 import { useLazyLoad } from '../hooks/useLazyLoad'
-import { KanbanBoardSkeleton, CardSkeleton, CompactCardSkeleton } from '../components/Skeleton'
+import { KanbanBoardSkeleton, ListViewSkeleton, CardSkeleton, CompactCardSkeleton } from '../components/Skeleton'
 import ListView from '../components/ListView'
 import DependencyGraph from './DependencyGraph'
 import { Link as RouterLink } from 'react-router-dom'
@@ -1110,9 +1110,9 @@ export default function BoardPage() {
         </div>
       )}
 
-      {/* Loading state — skeleton cards while initial data loads */}
+      {/* Loading state — skeleton matching current view mode */}
       {loading && (
-        <KanbanBoardSkeleton />
+        viewMode === 'list' ? <ListViewSkeleton /> : <KanbanBoardSkeleton />
       )}
 
       {/* Empty state — only show if NOT loading and no tasks match */}
@@ -1340,7 +1340,7 @@ export default function BoardPage() {
       )}
 
       {/* List View mode */}
-      {viewMode === 'list' && !loading && (() => {
+      {viewMode === 'list' && (() => {
         try {
           return (
             <ListView
