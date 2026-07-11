@@ -1340,7 +1340,7 @@ export default function BoardPage() {
       )}
 
       {/* List View mode */}
-      {viewMode === 'list' && (() => {
+      {viewMode === 'list' && !loading && (() => {
         try {
           return (
             <ListView
