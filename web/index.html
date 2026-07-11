@@ -9,7 +9,102 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Inline loading skeleton — visible immediately before JS boots -->
+      <div id="initial-skeleton" style="display:flex;min-height:100vh;background:#0a0a0a;color:#a1a1aa;font-family:Inter,system-ui,sans-serif">
+        <aside style="width:224px;border-right:1px solid #27272a;background:#171717;padding:16px;flex-shrink:0;display:none" class="sk-desktop-sidebar">
+          <div style="display:flex;align-items:center;gap:8px;padding-bottom:16px;border-bottom:1px solid #27272a;margin-bottom:16px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span style="font-weight:600;font-size:14px;color:#fafafa">Kanban</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="height:8px;width:120px;background:#262626;border-radius:4px;animation:pulse 1.5s infinite"></div>
+            <div style="height:8px;width:80px;background:#262626;border-radius:4px;animation:pulse 1.5s infinite;margin-top:8px"></div>
+            <div style="height:8px;width:100px;background:#262626;border-radius:4px;animation:pulse 1.5s infinite;margin-top:8px"></div>
+            <div style="height:8px;width:90px;background:#262626;border-radius:4px;animation:pulse 1.5s infinite;margin-top:8px"></div>
+            <div style="height:8px;width:75px;background:#262626;border-radius:4px;animation:pulse 1.5s infinite;margin-top:8px"></div>
+          </div>
+        </aside>
+        <main style="flex:1;padding:24px;max-width:100%;overflow:hidden">
+          <!-- Header skeleton -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:140px;height:24px;background:#262626;border-radius:6px;animation:pulse 1.5s infinite"></div>
+              <div style="width:48px;height:20px;background:#262626;border-radius:999px;animation:pulse 1.5s infinite"></div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <div style="width:80px;height:32px;background:#262626;border-radius:6px;animation:pulse 1.5s infinite"></div>
+              <div style="width:80px;height:32px;background:#262626;border-radius:6px;animation:pulse 1.5s infinite"></div>
+            </div>
+          </div>
+          <!-- 4-column board skeleton -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="width:80px;height:16px;background:#262626;border-radius:4px;animation:pulse 1.5s infinite"></div>
+                <div style="width:28px;height:20px;background:#262626;border-radius:999px;animation:pulse 1.5s infinite"></div>
+              </div>
+              <div style="background:#171717;border:1px solid #27272a;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:pulse 1.5s infinite">
+                <div style="display:flex;justify-content:space-between"><div style="width:64px;height:16px;background:#262626;border-radius:4px"></div><div style="width:80px;height:16px;background:#262626;border-radius:4px"></div></div>
+                <div style="width:75%;height:20px;background:#262626;border-radius:4px"></div>
+                <div style="width:100%;height:16px;background:#1f1f1f;border-radius:4px"></div>
+                <div style="display:flex;gap:8px"><div style="width:64px;height:16px;background:#262626;border-radius:4px"></div><div style="width:96px;height:16px;background:#262626;border-radius:4px"></div></div>
+              </div>
+              <div style="background:#171717;border:1px solid #27272a;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:pulse 1.5s infinite;animation-delay:0.1s">
+                <div style="display:flex;justify-content:space-between"><div style="width:48px;height:16px;background:#262626;border-radius:4px"></div><div style="width:72px;height:16px;background:#262626;border-radius:4px"></div></div>
+                <div style="width:85%;height:20px;background:#262626;border-radius:4px"></div>
+                <div style="width:60%;height:16px;background:#1f1f1f;border-radius:4px"></div>
+                <div style="display:flex;gap:8px"><div style="width:56px;height:16px;background:#262626;border-radius:4px"></div></div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="width:96px;height:16px;background:#262626;border-radius:4px;animation:pulse 1.5s infinite"></div>
+                <div style="width:28px;height:20px;background:#262626;border-radius:999px;animation:pulse 1.5s infinite"></div>
+              </div>
+              <div style="background:#171717;border:1px solid #27272a;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:pulse 1.5s infinite;animation-delay:0.15s">
+                <div style="display:flex;justify-content:space-between"><div style="width:56px;height:16px;background:#262626;border-radius:4px"></div><div style="width:64px;height:16px;background:#262626;border-radius:4px"></div></div>
+                <div style="width:70%;height:20px;background:#262626;border-radius:4px"></div>
+                <div style="width:90%;height:16px;background:#1f1f1f;border-radius:4px"></div>
+                <div style="display:flex;gap:8px"><div style="width:72px;height:16px;background:#262626;border-radius:4px"></div><div style="width:48px;height:16px;background:#262626;border-radius:4px"></div></div>
+              </div>
+              <div style="background:#171717;border:1px solid #27272a;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:pulse 1.5s infinite;animation-delay:0.25s">
+                <div style="display:flex;justify-content:space-between"><div style="width:40px;height:16px;background:#262626;border-radius:4px"></div><div style="width:56px;height:16px;background:#262626;border-radius:4px"></div></div>
+                <div style="width:65%;height:20px;background:#262626;border-radius:4px"></div>
+                <div style="width:80%;height:16px;background:#1f1f1f;border-radius:4px"></div>
+                <div style="display:flex;gap:8px"><div style="width:64px;height:16px;background:#262626;border-radius:4px"></div></div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="width:72px;height:16px;background:#262626;border-radius:4px;animation:pulse 1.5s infinite"></div>
+                <div style="width:28px;height:20px;background:#262626;border-radius:999px;animation:pulse 1.5s infinite"></div>
+              </div>
+              <div style="background:#171717;border:1px solid #27272a;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:pulse 1.5s infinite;animation-delay:0.2s">
+                <div style="width:55%;height:20px;background:#262626;border-radius:4px"></div>
+                <div style="width:100%;height:16px;background:#1f1f1f;border-radius:4px"></div>
+                <div style="width:64px;height:16px;background:#262626;border-radius:4px"></div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="width:48px;height:16px;background:#262626;border-radius:4px;animation:pulse 1.5s infinite"></div>
+                <div style="width:28px;height:20px;background:#262626;border-radius:999px;animation:pulse 1.5s infinite"></div>
+              </div>
+              <div style="background:#171717;border:1px solid #27272a;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;animation:pulse 1.5s infinite;animation-delay:0.3s">
+                <div style="width:80%;height:20px;background:#262626;border-radius:4px"></div>
+                <div style="width:100%;height:16px;background:#1f1f1f;border-radius:4px"></div>
+                <div style="width:48px;height:16px;background:#262626;border-radius:4px"></div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+      <style>
+        @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:0.8} }
+        @media (min-width:1024px) { .sk-desktop-sidebar { display:flex !important } }
+      </style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

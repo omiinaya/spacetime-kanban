@@ -82,7 +82,7 @@ export function useRealtimeTasks() {
           subtasks: d.subtasks ?? undefined,
         })) as Task[]
         setTasksIfChanged(mapped)
-        setLoading(false)  // Data arrived, done loading
+        if (mapped.length > 0) setLoading(false)  // Data with content arrived
       }
     } catch (e: any) {
       // API might also fail — that's fine, we retry next interval
