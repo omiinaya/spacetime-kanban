@@ -57,7 +57,38 @@ export function ColumnSkeleton({ count = 5 }: { count?: number }) {
   )
 }
 
-export function KanbanBoardSkeleton() {
+export function ListViewSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      {/* Toolbar skeleton */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-48 rounded bg-white/10" />
+          <div className="h-8 w-32 rounded bg-white/10" />
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-24 rounded bg-white/10" />
+          <div className="h-8 w-32 rounded bg-white/10" />
+        </div>
+      </div>
+      {/* Table header skeleton */}
+      <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
+        <div className="bg-white/[0.03] border-b border-[var(--color-border)] px-3 py-2 flex items-center gap-4">
+          <div className="h-4 w-6 rounded bg-white/10" />
+          <div className="h-4 w-16 rounded bg-white/10" />
+          <div className="h-4 w-3/12 rounded bg-white/10" />
+          <div className="h-4 w-2/12 rounded bg-white/10 ml-auto" />
+          <div className="h-4 w-2/12 rounded bg-white/10" />
+          <div className="h-4 w-2/12 rounded bg-white/10" />
+          <div className="h-4 w-16 rounded bg-white/10" />
+        </div>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <TableRowSkeleton key={i} />
+        ))}
+      </div>
+    </div>
+  )
+}
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
