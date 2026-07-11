@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Plus, Loader2 } from 'lucide-react'
 import { api } from '../api'
-import { PRIORITY_LABELS, PRIORITY_COLORS, type TaskTemplate, BUILT_IN_TEMPLATES } from './constants'
+import { PRIORITY_LABELS, type TaskTemplate, BUILT_IN_TEMPLATES } from './constants'
 
 export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null)
@@ -28,7 +28,7 @@ export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; 
     if (!title.trim()) return
     setSaving(true)
     try {
-      await api.task.insert({ title: title.trim(), description, priority, repo: repo || null, roadmap: roadmap || null, skills: skills || null, status: 'available' })
+      await api.tasks.create({ title: title.trim(), description, priority, repo: repo || undefined, roadmap_item: roadmap || undefined, required_skills: skills || undefined })
       onCreated()
       onClose()
     } catch (err) {
