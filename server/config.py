@@ -7,7 +7,6 @@ class Settings(BaseSettings):
     stdb_db: str = "kanban"
     server_port: int = 8727
     cors_origin: str = "http://localhost:5189"
-    discord_webhook_url: Optional[str] = None
     github_token: str = ""
     github_default_repo: str = ""
     api_key: str = ""  # Set API_KEY env var to require auth on mutation endpoints

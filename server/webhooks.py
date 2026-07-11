@@ -270,14 +270,10 @@ def _format_payload(wh_type: str, action: str, task: dict, extra: str = "") -> d
 # ── Dispatcher ────────────────────────────────────────────────────────
 
 
-async def notify(action: str, task: dict, extra: str = "", discord_url: str = ""):
-    """Send notification to all matching webhooks + legacy Discord URL."""
+async def notify(action: str, task: dict, extra: str = ""):
+    """Send notification to all matching webhooks."""
     webhooks = list_webhooks()
     tasks_to_send = []
-
-    # Legacy Discord webhook
-    if discord_url:
-        tasks_to_send.append(("discord", discord_url, _format_discord(action, task, extra)))
 
     # Configured webhooks matching this event
     for wh in webhooks:

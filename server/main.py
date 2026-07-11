@@ -384,7 +384,7 @@ def _row_to_task(r: dict) -> TaskOut:
 
 async def _notify(action: str, task: dict, extra: str = ""):
     """Send notifications to all configured webhooks."""
-    await webhooks.notify(action, task, extra, discord_url=settings.discord_webhook_url or "")
+    await webhooks.notify(action, task, extra)
 
 def _row_to_log(r: dict) -> LogOut:
     return LogOut(
