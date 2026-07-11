@@ -175,6 +175,17 @@ export interface TaskLabelAssign {
   label_ids: string[]
 }
 
+export interface Project {
+  id: string
+  name: string
+  description: string
+  color: string
+  priority: number
+  active: boolean
+  created_at: number
+  updated_at: number
+}
+
 export const api = {
   tasks: {
     list: (params?: { status?: string; repo?: string; label?: string }) => {
@@ -320,6 +331,16 @@ export const api = {
       apiGet<KanbanLabel[]>(`/tasks/${taskId}/labels`),
     setForTask: (taskId: string, body: TaskLabelAssign) =>
       apiPost<{ status: string; assigned: string[] }>(`/tasks/${taskId}/labels`, body),
+  },
+  projects: {
+    list: () => apiGet<Project[]>('/projects'),
+    get: (id: string) => apiGet<Project>(`/projects/${id}`),
+    create: (body: { id: string; name?: string; description?: string; color?: string; priority?: number; active?: boolean }) =>
+      apiPost<Project>('/projects', body),
+    update: (id: string, body: { name?: string; description?: string; color?: string; priority?: number; active?: boolean }) =>
+      apiPatch<Project>(`/projects/${id}`, body),
+    delete: (id: string) =>
+      apiDelete<{ status: string }>(`/projects/${id}`),
   },
   comments: {
     list: (taskId: string) =>

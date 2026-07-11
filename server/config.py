@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     discord_webhook_url: Optional[str] = None
     github_token: str = ""
     github_default_repo: str = ""
+    api_key: str = ""  # Set API_KEY env var to require auth on mutation endpoints
 
     @property
     def stdb_base_url(self) -> str:

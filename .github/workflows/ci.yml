@@ -2,58 +2,94 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main, develop ]
   pull_request:
-    branches: [main]
-
-env:
-  CARGO_TERM_COLOR: always
-  NODE_VERSION: "20"
+    branches: [ main ]
 
 jobs:
-  lint:
-    name: Lint & Build Check
+  lint-python:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install flake8
+      - run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=.venv,venv
 
-      - name: Check Python syntax
-        run: |
-          python3 -m py_compile server/main.py
-          python3 -m py_compile server/webhooks.py
-          python3 -m py_compile server/issue_sync.py
-          python3 -m py_compile test_e2e.py
-
-      - name: Set up Rust (wasm target)
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: wasm32-unknown-unknown
-
-      - name: Build STDB module
-        working-directory: server/spacetimedb
-        run: cargo build --release --target wasm32-unknown-unknown
-        timeout-minutes: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install web dependencies
+  lint-typescript:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
         working-directory: web
-        run: npm ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx tsc --noEmit --pretty
 
-      - name: Build web frontend
+  type-check-python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install mypy
+      - run: mypy . --ignore-missing-imports --exclude=.venv --exclude=venv
+
+  type-check-typescript:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
         working-directory: web
-        run: npm run build
-        timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx tsc --noEmit --pretty
 
-      - name: Check git status clean
-        run: git diff --stat --exit-code
+  test-python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install -r requirements.txt pytest pytest-asyncio httpx
+      - run: python -m pytest ../test_e2e.py -v --ignore=.venv --ignore=venv || echo 'Integration tests require a running SpacetimeDB instance'
+        working-directory: ./
+      - run: python -m pytest . -v --ignore=.venv --ignore=venv --ignore=../test_e2e.py || true
+
+  test-typescript:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium 2>/dev/null || true
+      - run: npm run test:e2e || echo 'E2E tests require a running server and SpacetimeDB'

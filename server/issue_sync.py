@@ -85,7 +85,7 @@ def _call(reducer: str, args: list) -> dict:
 
 def get_link(task_id: str) -> Optional[dict]:
     """Get the GitHub issue link for a kanban task, if any."""
-    rows = _stdb_sql(f"SELECT * FROM issue_links WHERE kanban_task_id = '{task_id}'")
+    rows = _sql_param("SELECT * FROM issue_links WHERE kanban_task_id = '{task_id}'", task_id=task_id)
     if not rows:
         return None
     r = rows[0]
@@ -148,7 +148,7 @@ def update_issue_status(task_id: str, status: str) -> Optional[dict]:
 def list_links(repo: Optional[str] = None) -> list[dict]:
     """List all linked issues, optionally filtered by repo."""
     if repo:
-        rows = _stdb_sql(f"SELECT * FROM issue_links WHERE repo = '{repo}'")
+        rows = _sql_param("SELECT * FROM issue_links WHERE repo = '{repo}'", repo=repo)
     else:
         rows = _stdb_sql("SELECT * FROM issue_links")
     results = []

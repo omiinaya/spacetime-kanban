@@ -97,7 +97,7 @@ def list_webhooks() -> list[dict]:
 
 def get_webhook(webhook_id: str) -> Optional[dict]:
     """Get a specific webhook subscription."""
-    rows = _stdb_sql(f"SELECT * FROM webhook_subscriptions WHERE id = '{webhook_id}'")
+    rows = _stdb_sql("SELECT * FROM webhook_subscriptions WHERE id = '{webhook_id}'".format(webhook_id=_sanitize(webhook_id)))
     if not rows:
         return None
     r = rows[0]
@@ -339,7 +339,7 @@ async def notify(action: str, task: dict, extra: str = "", discord_url: str = ""
 def list_webhook_deliveries(webhook_id: str, limit: int = 20) -> list[dict]:
     """Get delivery history for a specific webhook."""
     rows = _stdb_sql(
-        f"SELECT * FROM webhook_deliveries WHERE webhook_id = '{webhook_id}'"
+        "SELECT * FROM webhook_deliveries WHERE webhook_id = '{webhook_id}'".format(webhook_id=_sanitize(webhook_id))
     )
     rows.sort(key=lambda r: -(r.get("delivered_at", 0)))
     result = []
