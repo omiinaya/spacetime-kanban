@@ -1,0 +1,17 @@
+{
+  "name": "spacetimedb-kanban",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "preview": "npm run preview -w web",
+    "test:e2e": "npm run test:e2e -w web",
+    "test:e2e:ui": "npm run test:e2e:ui -w web"
+  },
+  "description": "Monorepo root — TypeScript frontend in web/",
+  "license": "MIT"
+}
