@@ -1402,3 +1402,53 @@ pub fn bulk_reorder_tasks(
     log_action(ctx, "bulk_reorder", "bulk_reordered", None, Some(&format!("{} tasks", items.len())));
     Ok(())
 }
+
+
+// ── Unit Tests ────────────────────────────────────────────────────────────
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_assignment_id() {
+        // Standard case
+        let result = assignment_id("task_123", "label_456");
+        assert_eq!(result, "task_123:label_456");
+
+        // Empty strings
+        let result = assignment_id("", "");
+        assert_eq!(result, ":");
+
+        // Special characters
+        let result = assignment_id("task:1", "label:2");
+        assert_eq!(result, "task:1:label:2");
+
+        // Very long values (just ensure no panic)
+        let long = "a".repeat(1000);
+        let result = assignment_id(&long, "b");
+        assert_eq!(result, format!("{}:b", long));
+    }
+
+    #[test]
+    fn test_assignment_id_uniqueness() {
+        // Same inputs produce same output (deterministic)
+        let a = assignment_id("x", "y");
+        let b = assignment_id("x", "y");
+        assert_eq!(a, b);
+
+        // Different task same label => different
+        let c = assignment_id("x2", "y");
+        assert_ne!(a, c);
+
+        // Same task different label => different
+        let d = assignment_id("x", "y2");
+        assert_ne!(a, d);
+    }
+
+    #[test]
+    fn test_assignment_id_format_contains_colon() {
+        let result = assignment_id("task_id", "label_id");
+        assert!(result.contains(':'));
+        assert_eq!(result.split(':').count(), 2);
+    }
+}

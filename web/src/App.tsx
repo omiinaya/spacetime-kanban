@@ -1,14 +1,15 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban } from 'lucide-react'
-import BoardPage from './pages/BoardPage'
-import LogsPage from './pages/LogsPage'
-import AnalyticsPage from './pages/AnalyticsPage'
-import IssuesPage from './pages/IssuesPage'
-import WebhooksPage from './pages/WebhooksPage'
-import AgentHealthPage from './pages/AgentHealthPage'
-import LabelsPage from './pages/LabelsPage'
-import ProjectsPage from './pages/ProjectsPage'
+
+const BoardPage = lazy(() => import('./pages/BoardPage'))
+const LogsPage = lazy(() => import('./pages/LogsPage'))
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
+const IssuesPage = lazy(() => import('./pages/IssuesPage'))
+const WebhooksPage = lazy(() => import('./pages/WebhooksPage'))
+const AgentHealthPage = lazy(() => import('./pages/AgentHealthPage'))
+const LabelsPage = lazy(() => import('./pages/LabelsPage'))
+const ProjectsPage = lazy(() => import('./pages/ProjectsPage'))
 
 const navItems = [
   { path: '/', label: 'Board', icon: KanbanSquare },
@@ -101,16 +102,22 @@ export default function App() {
           </div>
         </div>
 
-        <Routes>
-          <Route path="/" element={<BoardPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/labels" element={<LabelsPage />} />
-          <Route path="/issues" element={<IssuesPage />} />
-          <Route path="/webhooks" element={<WebhooksPage />} />
-          <Route path="/agents" element={<AgentHealthPage />} />
-          <Route path="/logs" element={<LogsPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-        </Routes>
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-64">
+            <div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+          </div>
+        }>
+          <Routes>
+            <Route path="/" element={<BoardPage />} />
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/labels" element={<LabelsPage />} />
+            <Route path="/issues" element={<IssuesPage />} />
+            <Route path="/webhooks" element={<WebhooksPage />} />
+            <Route path="/agents" element={<AgentHealthPage />} />
+            <Route path="/logs" element={<LogsPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   )
