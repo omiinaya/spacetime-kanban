@@ -205,6 +205,7 @@ export function useRealtimeTasks() {
 
     return () => {
       cancelledRef.current = true
+      clearTimeout(loadingTimeout)
       if (reconnectTimer) clearTimeout(reconnectTimer)
       stopPolling()
     }
