@@ -1,5 +1,4 @@
-import { type Task, type TaskStatus } from '../hooks/useRealtimeTasks'
-import type { KanbanLabel } from '../api'
+import { type TaskStatus } from '../hooks/useRealtimeTasks'
 
 export const PRIORITY_LABELS: Record<number, string> = {
   0: 'Urgent',
