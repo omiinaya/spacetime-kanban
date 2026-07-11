@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  spacetime:
+    image: spacetimedb/spacetimedb:latest
+    container_name: spacetimedb-kanban-db
+    ports:
+      - "3001:3001"  # HTTP API
+    volumes:
+      - stdb-data:/var/spacetime
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build: .
+    container_name: spacetimedb-kanban-backend
+    ports:
+      - "8727:8727"  # FastAPI server
+    environment:
+      - STDB_HOST=spacetime
+      - STDB_PORT=3001
+      - SERVER_PORT=8727
+      - KANBAN_STDB_RETRIES=60
+    depends_on:
+      spacetime:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  stdb-data:
