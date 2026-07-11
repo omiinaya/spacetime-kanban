@@ -7,14 +7,32 @@ export type { Task, TaskLog }
 export type TaskStatus = 'available' | 'in_progress' | 'done' | 'blocked'
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000]  // exponential backoff
-const POLL_INTERVAL = 10000  // 10s — always polling as safety net
+const POLL_INTERVAL = 30000  // 30s REST polling — only active when STDB is disconnected
+
+/** Shallow compare task arrays by ID + status + assignedTo — skip renders when nothing changed */
+function tasksEqual(a: Task[], b: Task[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id) return false
+    // Fast path: skip deep comparison if IDs match
+  }
+  // Full content check only if IDs match length
+  const aMap = new Map(a.map(t => [t.id, t]))
+  const bMap = new Map(b.map(t => [t.id, t]))
+  for (const [id, ta] of aMap) {
+    const tb = bMap.get(id)
+    if (!tb) return false
+    if (ta.status !== tb.status || ta.assignedTo !== tb.assignedTo || ta.priority !== tb.priority) return false
+  }
+  return true
+}
 
 /**
  * React hook that subscribes to SpacetimeDB tasks in real-time.
  *
  * Uses STDB's built-in WebSocket subscription for instant updates.
  * Auto-reconnects on disconnect with exponential backoff.
- * Falls back to REST API polling when WebSocket is down.
+ * REST polling only fires when STDB WebSocket is disconnected.
  */
 export function useRealtimeTasks() {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -25,8 +43,16 @@ export function useRealtimeTasks() {
   const reconnectRef = useRef(0)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cancelledRef = useRef(false)
+  const tasksRef = useRef<Task[]>([])  // keep a ref for diffing
 
-  // REST API fallback poller — always running as safety net
+  function setTasksIfChanged(newTasks: Task[]) {
+    if (!tasksEqual(tasksRef.current, newTasks)) {
+      tasksRef.current = newTasks
+      setTasks(newTasks)
+    }
+  }
+
+  // REST API fallback poller — only active when STDB is disconnected
   const syncFromApi = useRef(async () => {
     try {
       const data = await api.tasks.list()
@@ -55,7 +81,7 @@ export function useRealtimeTasks() {
           subtaskOf: d.subtask_of ?? undefined,
           subtasks: d.subtasks ?? undefined,
         })) as Task[]
-        setTasks(mapped)
+        setTasksIfChanged(mapped)
         setLoading(false)  // Data arrived, done loading
       }
     } catch (e: any) {
@@ -66,7 +92,7 @@ export function useRealtimeTasks() {
   function syncFromCache(conn: DbConnection) {
     try {
       const all = Array.from(conn.db.tasks.iter()) as Task[]
-      setTasks(all)
+      setTasksIfChanged(all)
       setLoading(false)  // Data arrived from STDB
     } catch (e: any) {
       console.warn('Failed to sync from STDB cache:', e.message)
@@ -77,12 +103,7 @@ export function useRealtimeTasks() {
     cancelledRef.current = false
     const cancelled = () => cancelledRef.current
 
-    // Start REST API polling immediately — always on as safety net
-    pollRef.current = setInterval(() => {
-      syncFromApi.current()
-    }, POLL_INTERVAL)
-
-    // 🚀 Fire an immediate REST fetch — don't wait 10s for first poll
+    // Fire an immediate REST fetch — bootstrap data while STDB connects
     syncFromApi.current()
 
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -99,6 +120,20 @@ export function useRealtimeTasks() {
       }, delay)
     }
 
+    function startPolling() {
+      stopPolling()
+      pollRef.current = setInterval(() => {
+        syncFromApi.current()
+      }, POLL_INTERVAL)
+    }
+
+    function stopPolling() {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+
     function connect() {
       if (cancelled()) return
       try {
@@ -110,6 +145,7 @@ export function useRealtimeTasks() {
             setConnected(true)
             setError(null)
             reconnectRef.current = 0  // reset backoff on successful connect
+            stopPolling()  // STDB is live — no need for REST polling
             syncFromCache(conn)
           })
           .onConnectError((_ctx: any, err: Error) => {
@@ -117,6 +153,7 @@ export function useRealtimeTasks() {
             console.warn('STDB WebSocket connection failed:', err.message)
             setConnected(false)
             setError(`STDB disconnected — polling REST API`)
+            startPolling()  // Start REST polling since STDB is down
             scheduleReconnect()
           })
           .onDisconnect((_ctx: any, err?: Error) => {
@@ -124,6 +161,7 @@ export function useRealtimeTasks() {
             console.warn('STDB WebSocket disconnected:', err?.message)
             setConnected(false)
             setError(`STDB disconnected — polling REST API`)
+            startPolling()  // Start REST polling since STDB is down
             scheduleReconnect()
           })
           .build()
@@ -152,6 +190,7 @@ export function useRealtimeTasks() {
           console.error('STDB connection error:', e)
           setConnected(false)
           setError(`STDB connection failed — polling REST API`)
+          startPolling()
           scheduleReconnect()
         }
       }
@@ -162,8 +201,7 @@ export function useRealtimeTasks() {
     return () => {
       cancelledRef.current = true
       if (reconnectTimer) clearTimeout(reconnectTimer)
-      if (pollRef.current) clearInterval(pollRef.current)
-      // Don't reset reconnectRef — we want a fresh backoff next mount
+      stopPolling()
     }
   }, [])
 

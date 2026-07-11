@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
   Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
@@ -18,6 +18,9 @@ interface SavedFilterView {
 
 import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel, type IssueLink, type TaskComment, type ChecklistItem } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
+import { useLazyLoad } from '../hooks/useLazyLoad'
+import { KanbanBoardSkeleton, CardSkeleton, CompactCardSkeleton } from '../components/Skeleton'
+import ListView from '../components/ListView'
 import DependencyGraph from './DependencyGraph'
 import { Link as RouterLink } from 'react-router-dom'
 
@@ -70,6 +73,7 @@ export default function BoardPage() {
   const [quickAddTitle, setQuickAddTitle] = useState('')
   const quickAddRef = useRef<HTMLInputElement>(null)
   const [compactMode, setCompactMode] = useState(false)
+  const [viewMode, setViewMode] = useState<'board' | 'list'>('list')
   const [showFilters, setShowFilters] = useState(false)
   const [filterPriorities, setFilterPriorities] = useState<Set<number>>(new Set())
   const [filterAssignees, setFilterAssignees] = useState<Set<string>>(new Set())
@@ -368,9 +372,10 @@ export default function BoardPage() {
     }
   }
 
-  // Load suggestions and agents periodically
+  // Load suggestions and agents periodically — pause when tab hidden
   useEffect(() => {
     const load = async () => {
+      if (document.hidden) return
       try {
         const [s, a] = await Promise.all([
           api.suggest.list({ limit: 3 }),
@@ -382,39 +387,21 @@ export default function BoardPage() {
     }
     load()
     const interval = setInterval(load, 30000)
-    return () => clearInterval(interval)
+    const onVis = () => { if (document.hidden) clearInterval(interval) }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVis) }
   }, [])
 
-  // Load labels and task-label assignments
+  // Load labels once (they rarely change)
   useEffect(() => {
-    const load = async () => {
-      try {
-        const lbls = await api.labels.list()
-        setAllLabels(lbls)
-
-        // Build label map: for each label, find which tasks use it
-        const map = new Map<string, KanbanLabel[]>()
-        await Promise.all(lbls.map(async (lbl) => {
-          try {
-            const labelTasks = await api.tasks.list({ label: lbl.id })
-            for (const t of labelTasks) {
-              const existing = map.get(t.id) || []
-              existing.push(lbl)
-              map.set(t.id, existing)
-            }
-          } catch {}
-        }))
-        setTaskLabelMap(map)
-      } catch {}
-    }
-    load()
-    const interval = setInterval(load, 60000)
-    return () => clearInterval(interval)
+    api.labels.list().then(setAllLabels).catch(() => {})
   }, [])
 
-  // Load issue links for board badges
+  // Load issue links for board badges — 30s polling, skip when tab hidden
   useEffect(() => {
+    const controller = new AbortController()
     const load = async () => {
+      if (document.hidden) return
       try {
         const links = await api.issues.list()
         const map: Record<string, IssueLink> = {}
@@ -426,7 +413,7 @@ export default function BoardPage() {
     }
     load()
     const interval = setInterval(load, 30000)
-    return () => clearInterval(interval)
+    return () => { clearInterval(interval); controller.abort() }
   }, [])
 
   // Toast notifications for live task changes — single toast max, collapse burst
@@ -501,7 +488,15 @@ export default function BoardPage() {
           break
         case 'c':
           e.preventDefault()
-          setCompactMode(prev => !prev)
+          // Cycle: board(detailed) → board(compact) → list → board(detailed)
+          if (viewMode === 'board' && !compactMode) {
+            setCompactMode(true)
+          } else if (viewMode === 'board' && compactMode) {
+            setViewMode('list')
+          } else {
+            setViewMode('board')
+            setCompactMode(false)
+          }
           break
         case 'f':
           e.preventDefault()
@@ -783,41 +778,53 @@ export default function BoardPage() {
   }
 
   // Sort: position asc (nulls last), then priority asc, then createdAt desc
-  const sorted = [...tasks].sort((a, b) => {
-    const posA = a.position ?? 999999
-    const posB = b.position ?? 999999
-    return posA - posB || a.priority - b.priority || Number(b.createdAt - a.createdAt)
-  })
+  const sorted = useMemo(() =>
+    [...tasks].sort((a, b) => {
+      const posA = a.position ?? 999999
+      const posB = b.position ?? 999999
+      return posA - posB || a.priority - b.priority || Number(b.createdAt - a.createdAt)
+    }),
+    [tasks]
+  )
   // Filter: repo
-  const repoFiltered = repoFilter ? sorted.filter(t => t.repo === repoFilter) : sorted
+  const repoFiltered = useMemo(() =>
+    repoFilter ? sorted.filter(t => t.repo === repoFilter) : sorted,
+    [sorted, repoFilter]
+  )
   // Filter: search text
-  const searchFiltered = searchQuery
-    ? repoFiltered.filter(t =>
-        t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.requiredSkills?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.repo?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.id.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : repoFiltered
+  const searchFiltered = useMemo(() =>
+    searchQuery
+      ? repoFiltered.filter(t =>
+          t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          t.requiredSkills?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          t.repo?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          t.id.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : repoFiltered,
+    [repoFiltered, searchQuery]
+  )
   // Filter: priority + assignee + labels
-  const filtered = searchFiltered.filter(t => {
-    if (filterPriorities.size > 0 && !filterPriorities.has(t.priority)) return false
-    if (filterAssignees.size > 0) {
-      const taskAssignee = t.assignedTo || 'unassigned'
-      if (!filterAssignees.has(taskAssignee)) return false
-    }
-    if (filterLabels.size > 0) {
-      const taskLabels = taskLabelMap.get(t.id) || []
-      const taskLabelIds = new Set(taskLabels.map(l => l.id))
-      let hasMatch = false
-      for (const lid of filterLabels) {
-        if (taskLabelIds.has(lid)) { hasMatch = true; break }
+  const filtered = useMemo(() =>
+    searchFiltered.filter(t => {
+      if (filterPriorities.size > 0 && !filterPriorities.has(t.priority)) return false
+      if (filterAssignees.size > 0) {
+        const taskAssignee = t.assignedTo || 'unassigned'
+        if (!filterAssignees.has(taskAssignee)) return false
       }
-      if (!hasMatch) return false
-    }
-    return true
-  })
+      if (filterLabels.size > 0) {
+        const taskLabels = taskLabelMap.get(t.id) || []
+        const taskLabelIds = new Set(taskLabels.map(l => l.id))
+        let hasMatch = false
+        for (const lid of filterLabels) {
+          if (taskLabelIds.has(lid)) { hasMatch = true; break }
+        }
+        if (!hasMatch) return false
+      }
+      return true
+    }),
+    [searchFiltered, filterPriorities, filterAssignees, filterLabels, taskLabelMap]
+  )
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
@@ -896,12 +903,32 @@ export default function BoardPage() {
               selectMode ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10'
             }`}
           ><CheckSquare className="w-3 h-3" /> Select</button>
-          <button onClick={() => setCompactMode(!compactMode)}
-            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors hidden sm:inline-flex"
-            title={compactMode ? 'Detailed view' : 'Compact view'}
-          >
-            {compactMode ? <LayoutGrid className="w-3 h-3" /> : <List className="w-3 h-3" />}
-          </button>
+          <div className="flex items-center gap-0.5 bg-white/5 rounded-lg p-0.5 hidden sm:inline-flex">
+            <button onClick={() => { setViewMode('board'); setCompactMode(false) }}
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors ${
+                viewMode === 'board' && !compactMode
+                  ? 'bg-[var(--color-card)] text-[var(--color-foreground)] shadow-sm'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-foreground)]'
+              }`}
+              title="Card view (detailed)"
+            ><LayoutGrid className="w-3 h-3" /></button>
+            <button onClick={() => { setViewMode('board'); setCompactMode(true) }}
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors ${
+                viewMode === 'board' && compactMode
+                  ? 'bg-[var(--color-card)] text-[var(--color-foreground)] shadow-sm'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-foreground)]'
+              }`}
+              title="Card view (compact)"
+            ><List className="w-3 h-3" /></button>
+            <button onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-[var(--color-card)] text-[var(--color-foreground)] shadow-sm'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-foreground)]'
+              }`}
+              title="Table / list view"
+            ><span className="text-[11px] font-mono font-bold">≡</span></button>
+          </div>
           <button onClick={() => setShowGraph(true)}
             className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-violet-500/15 text-violet-400 hover:bg-violet-500/30 transition-colors"
           ><span className="text-sm">🗺️</span> Graph</button>
@@ -1083,12 +1110,9 @@ export default function BoardPage() {
         </div>
       )}
 
-      {/* Loading state — show spinner while initial data loads */}
+      {/* Loading state — skeleton cards while initial data loads */}
       {loading && (
-        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
-          <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
-          Connecting to database{stdbError ? '... (checking connection)' : '...'}
-        </div>
+        <KanbanBoardSkeleton />
       )}
 
       {/* Empty state — only show if NOT loading */}
@@ -1230,81 +1254,147 @@ export default function BoardPage() {
       )}
 
       {/* Kanban Columns — single for mobile, 2 for tablet, 4 for desktop */}
-      <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {STATUS_COLUMNS.map((status) => {
-          const colTasks = filtered.filter((t) => t.status === status)
-          const isOver = dragOverColumn === status && draggedTaskId !== null
-          return (
-            <div key={status} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-                  {STATUS_LABELS[status]}
-                </h2>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setQuickAddStatus(quickAddStatus === status ? null : status)}
-                    className="p-0.5 rounded hover:bg-white/10 text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
-                    title={`Add task to ${STATUS_LABELS[status]}`}
-                  ><Plus className="w-3.5 h-3.5" /></button>
-                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--color-card)] text-[var(--color-muted)]">
-                    {colTasks.length}
-                  </span>
+      {viewMode === 'board' && (
+        <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {STATUS_COLUMNS.map((status) => {
+            const colTasks = filtered.filter((t) => t.status === status)
+            const isOver = dragOverColumn === status && draggedTaskId !== null
+            const { sentinelRef, count, hasMore } = useLazyLoad(colTasks.length, 15, 12)
+            const shownTasks = colTasks.slice(0, count)
+            return (
+              <div key={status} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                    {STATUS_LABELS[status]}
+                  </h2>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setQuickAddStatus(quickAddStatus === status ? null : status)}
+                      className="p-0.5 rounded hover:bg-white/10 text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+                      title={`Add task to ${STATUS_LABELS[status]}`}
+                    ><Plus className="w-3.5 h-3.5" /></button>
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--color-card)] text-[var(--color-muted)]">
+                      {shownTasks.length}/{colTasks.length}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              {quickAddStatus === status && (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    ref={quickAddRef}
-                    value={quickAddTitle}
-                    onChange={e => setQuickAddTitle(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') handleQuickAdd(status)
-                      if (e.key === 'Escape') { setQuickAddStatus(null); setQuickAddTitle('') }
-                    }}
-                    placeholder="Task title..."
-                    className="flex-1 px-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-background)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-primary)]"
-                  />
-                  <button
-                    onClick={() => handleQuickAdd(status)}
-                    disabled={!quickAddTitle.trim()}
-                    className="px-2 py-1 text-xs rounded bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
-                  >Add</button>
-                </div>
-              )}
-              <div
-                className={`space-y-2 min-h-[120px] rounded-lg transition-colors ${
-                  isOver ? 'bg-white/5 ring-2 ring-[var(--color-primary)] border-2 border-dashed border-[var(--color-primary)]' : ''
-                }`}
-                onDragOver={(e) => { e.preventDefault(); setDragOverColumn(status) }}
-                onDragEnter={(e) => { e.preventDefault(); setDragOverColumn(status) }}
-                onDragLeave={() => setDragOverColumn(null)}
-                onDrop={() => handleDropOnColumn(status)}
-              >
-                {colTasks.map(renderTaskCard)}
-                {colTasks.length === 0 && (
-                  <div className={`text-center py-6 text-xs border border-dashed rounded-lg transition-colors ${
-                    isOver
-                      ? 'text-[var(--color-primary)] border-[var(--color-primary)] bg-white/5'
-                      : 'text-[var(--color-muted)] border-[var(--color-border)]'
-                  }`}>
-                    {isOver ? 'Drop here' : 'Empty'}
+                {quickAddStatus === status && (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      ref={quickAddRef}
+                      value={quickAddTitle}
+                      onChange={e => setQuickAddTitle(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleQuickAdd(status)
+                        if (e.key === 'Escape') { setQuickAddStatus(null); setQuickAddTitle('') }
+                      }}
+                      placeholder="Task title..."
+                      className="flex-1 px-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-background)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-primary)]"
+                    />
+                    <button
+                      onClick={() => handleQuickAdd(status)}
+                      disabled={!quickAddTitle.trim()}
+                      className="px-2 py-1 text-xs rounded bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+                    >Add</button>
                   </div>
                 )}
+                <div
+                  className={`space-y-2 min-h-[120px] rounded-lg transition-colors ${
+                    isOver ? 'bg-white/5 ring-2 ring-[var(--color-primary)] border-2 border-dashed border-[var(--color-primary)]' : ''
+                  }`}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverColumn(status) }}
+                  onDragEnter={(e) => { e.preventDefault(); setDragOverColumn(status) }}
+                  onDragLeave={() => setDragOverColumn(null)}
+                  onDrop={() => handleDropOnColumn(status)}
+                >
+                  {shownTasks.map(renderTaskCard)}
+                  {shownTasks.length === 0 && colTasks.length === 0 && (
+                    <div className={`text-center py-6 text-xs border border-dashed rounded-lg transition-colors ${
+                      isOver
+                        ? 'text-[var(--color-primary)] border-[var(--color-primary)] bg-white/5'
+                        : 'text-[var(--color-muted)] border-[var(--color-border)]'
+                    }`}>
+                      {isOver ? 'Drop here' : 'Empty'}
+                    </div>
+                  )}
+                  {/* Lazy loading sentinel — triggers infinite scroll */}
+                  {hasMore && (
+                    <>
+                      <div ref={sentinelRef} className="h-4" />
+                      {compactMode
+                        ? Array.from({ length: 3 }).map((_, i) => <CompactCardSkeleton key={i} />)
+                        : Array.from({ length: 2 }).map((_, i) => <CardSkeleton key={i} />)
+                      }
+                    </>
+                  )}
+                  {!hasMore && shownTasks.length > 0 && colTasks.length > 15 && (
+                    <div className="text-center py-2 text-[10px] text-[var(--color-muted)]">
+                      All {colTasks.length} tasks loaded
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
 
-      {/* Mobile: single column for selected status */}
+      {/* List View mode */}
+      {viewMode === 'list' && !loading && (() => {
+        try {
+          return (
+            <ListView
+              tasks={filtered}
+              loading={loading}
+              selectedIds={selectedIds}
+              selectMode={selectMode}
+              taskLabelMap={taskLabelMap}
+              issueLinks={issueLinks}
+              allLabels={allLabels}
+              onToggleSelect={toggleSelect}
+              onClaim={(id) => handleClaim(id, 'web-user')}
+              onComplete={handleComplete}
+              onBlock={handleBlock}
+              onUnclaim={handleUnclaim}
+              onDelete={handleDelete}
+              onClick={(id) => setDetailTaskId(id)}
+            />
+          )
+        } catch (e: any) {
+          console.error('ListView crash:', e)
+          return <div className="p-4 text-red-400 text-sm">List view error: {e.message}</div>
+        }
+      })()}
+
+      {/* Mobile: single column for selected status — also lazy loaded */}
       <div className="sm:hidden space-y-2">
-        {filtered.filter(t => t.status === mobileStatusTab).map(renderTaskCard)}
-        {filtered.filter(t => t.status === mobileStatusTab).length === 0 && (
-          <div className="text-center py-12 text-sm text-[var(--color-muted)]">
-            No {STATUS_LABELS[mobileStatusTab].toLowerCase()} tasks
-            {repoFilter ? ` in ${repoFilter}` : ''}
-          </div>
-        )}
+        {(() => {
+          const mobileTasks = filtered.filter(t => t.status === mobileStatusTab)
+          const { sentinelRef, count, hasMore } = useLazyLoad(mobileTasks.length, 10, 8)
+          const shownMobile = mobileTasks.slice(0, count)
+          return (
+            <>
+              {shownMobile.map(renderTaskCard)}
+              {shownMobile.length === 0 && (
+                <div className="text-center py-12 text-sm text-[var(--color-muted)]">
+                  No {STATUS_LABELS[mobileStatusTab].toLowerCase()} tasks
+                  {repoFilter ? ` in ${repoFilter}` : ''}
+                </div>
+              )}
+              {hasMore && (
+                <>
+                  <div ref={sentinelRef} className="h-4" />
+                  {Array.from({ length: 2 }).map((_, i) => <CompactCardSkeleton key={i} />)}
+                </>
+              )}
+              {!hasMore && shownMobile.length > 0 && mobileTasks.length > 10 && (
+                <div className="text-center py-2 text-[10px] text-[var(--color-muted)]">
+                  All {mobileTasks.length} tasks loaded
+                </div>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       {/* Dependency Graph Overlay */}
