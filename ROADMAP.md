@@ -248,3 +248,33 @@
 - [x] Auto-refresh: Analytics, Issues, Activity Log pages refresh every 30s
 - [x] Activity log timestamps — each entry now shows HH:MM when it occurred
 - [x] Live toast notifications — popups for claim/complete/block/release via STDB subscriptions
+
+---
+
+## 📊 Codebase Health Assessment — Jul 10 2026
+
+**Overall: ~75%** — Features are broad and most are wired end-to-end, but testing and code quality fundamentals need significant investment.
+
+### By Category
+
+| Category | % | Assessment |
+|----------|---|------------|
+| Core Features (task CRUD, state machine, swarm, labels, comments, checklists, ordering) | 95% | All phases implemented and connected. Edge cases untested. |
+| Frontend UX | 90% | 7 pages, DnD, keyboard shortcuts, bulk ops, templates, filters, saved views, mobile-responsive. Minor polish items remain. |
+| Integrations (webhooks 4-provider, GitHub sync, MCP 27 tools, CLI) | 85% | All wired. MCP error handling uses `{"error":...}` dicts instead of proper exceptions. |
+| **Test Coverage** | **30%** | **Zero unit tests.** Python `server/tests/` dir doesn't exist despite Makefile `make test` target. Only 9 E2E smoke tests in `test_e2e.py` + 4 Playwright specs. CI builds but doesn't run tests. |
+| Code Organization & Maintainability | 40% | Two 1400+ line single files (lib.rs, main.py). No module separation. |
+| STDB Best Practices | 60% | Delete-then-insert pattern in ALL reducers (data-loss risk if insert fails after delete). O(n) linear scans instead of primary-key lookup. Thread-local counters fragile under parallel exec. |
+| CI/CD Maturity | 50% | CI checks syntax + builds but never deploys STDB or runs a single test. No deployment pipeline. |
+| Security | 50% | No auth (by design). **SQL injection vectors in Python** — user strings interpolated into SQL queries in `webhooks.py` and `main.py`. |
+
+### Critical Issues (Priority Order)
+
+1. **⚠️ SQL injection in Python queries** — `webhooks.py:100` and `main.py` use f-string SQL interpolation: `f"SELECT * FROM webhook_subscriptions WHERE id = '{webhook_id}'"`. Child's play to fix.
+2. **⚠️ Delete-then-insert in ALL STDB reducers** — Every update does `.iter().filter().collect()` then `delete(old)` then `insert(new)`. If insert fails after delete, data is lost. STDB v2.4+ supports row-level updates.
+3. **⚠️ Zero unit tests** — No pytest tests, no Rust `#[test]`, no coverage. `server/tests/` doesn't exist. Makefile test targets are broken.
+4. **⚠️ O(n) linear table scans** — `find_task()` iterates entire table instead of using primary-key access. Fine for hundreds of tasks, degrades at thousands.
+5. **⚠️ Single-file monoliths** — `main.py` (1870 lines), `lib.rs` (1404 lines). Both need module separation.
+6. **⚠️ MCP error handling** — Returns `{"error": ...}` dicts instead of distinguishable exception types.
+7. **⚠️ CI doesn't run tests** — Pipeline passes green with broken tests. Must deploy STDB and run E2E.
+8. **⚠️ No schema migrations** — Adding a field = rebuild + redeploy. No version tracking.

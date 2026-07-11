@@ -67,7 +67,7 @@ export default function AgentHealthPage() {
 
   if (loading) return (
     <div className="p-8 flex items-center justify-center gap-2 text-[var(--color-muted)]">
-      <Loader2 className="w-4 h-4 animate-spin" /> Loading agent health...
+      <Loader2 className="w-4 h-4 animate-spin" /> Loading agents...
     </div>
   )
 
@@ -77,7 +77,7 @@ export default function AgentHealthPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Activity className="w-5 h-5 text-[var(--color-primary)]" />
-          <h1 className="text-lg sm:text-xl font-semibold">Agent Health</h1>
+          <h1 className="text-lg sm:text-xl font-semibold">Agents</h1>
         </div>
         <button
           onClick={handleRefresh}

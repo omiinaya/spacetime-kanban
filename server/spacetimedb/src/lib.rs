@@ -668,7 +668,7 @@ pub struct KanbanProject {
     pub name: String,         // display name
     pub description: String,
     pub color: String,        // hex colour e.g. "#0ea5e9"
-    pub priority: u8,         // 0=most important … 3=lowest (same scale as Task.priority)
+    pub priority: u8,         // 0=most important … 255=lowest (same scale as Task.priority)
     pub active: bool,
     pub created_at: u64,
     pub updated_at: u64,
@@ -696,7 +696,7 @@ pub fn add_project(
     name: String,
     description: String,
     color: String,
-    priority: u8,         // 0=most important … 3=lowest
+    priority: u8,         // 0=most important … 255=lowest
     active: bool,
 ) -> Result<(), String> {
     let now = now_ms(ctx);
@@ -713,7 +713,7 @@ pub fn add_project(
         name: label,
         description,
         color: color.to_string(),
-        priority: if priority > 3 { 2 } else { priority },
+        priority,
         active,
         created_at: now,
         updated_at: now,
@@ -737,7 +737,7 @@ pub fn update_project(
     if !name.is_empty() { proj.name = name; }
     if !description.is_empty() { proj.description = description; }
     if !color.is_empty() { proj.color = color; }
-    if priority <= 3 { proj.priority = priority; }
+    proj.priority = priority;
     proj.active = active;
     proj.updated_at = now;
     update_project_in_db(ctx, &proj);
@@ -1125,6 +1125,60 @@ pub fn batch_unassign_labels(
         }
     }
     log_action(ctx, &format!("batch_label_unassign_{}", count), "batch_unassign_labels", None, Some(&format!("{} tasks, {} labels: {} removed", tasks.len(), labels.len(), count)));
+    Ok(())
+}
+
+// ── Dispatcher State (STDB-backed key-value store) ────────────────────
+// Replaces JSON-tracker files with STDB persistence.
+// Each row is a single key → JSON-serialized value.
+
+#[spacetimedb::table(accessor = dispatcher_state, public)]
+#[derive(Debug, Clone)]
+pub struct DispatcherStateRow {
+    #[primary_key]
+    pub key: String,
+    pub value: String,  // JSON-serialized value
+    pub updated_at: u64,
+}
+
+#[reducer]
+pub fn set_dispatcher_state(
+    ctx: &ReducerContext,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    // Delete existing row for this key
+    let old: Vec<DispatcherStateRow> = ctx.db.dispatcher_state().iter()
+        .filter(|r| r.key == key)
+        .map(|r| r.clone())
+        .collect();
+    for r in old {
+        ctx.db.dispatcher_state().delete(r);
+    }
+    ctx.db.dispatcher_state().insert(DispatcherStateRow {
+        key,
+        value,
+        updated_at: now,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn delete_dispatcher_state_row(
+    ctx: &ReducerContext,
+    key: String,
+) -> Result<(), String> {
+    let old: Vec<DispatcherStateRow> = ctx.db.dispatcher_state().iter()
+        .filter(|r| r.key == key)
+        .map(|r| r.clone())
+        .collect();
+    if old.is_empty() {
+        return Err("Key not found".to_string());
+    }
+    for r in old {
+        ctx.db.dispatcher_state().delete(r);
+    }
     Ok(())
 }
 
