@@ -19,20 +19,9 @@ import webhooks
 
 
 # ── Auth dependency ───────────────────────────────────────────────────
-
-async def verify_auth(authorization: str = Header(None), x_api_key: str = Header(None, alias="X-API-Key")):
-    """Require API key for mutation endpoints. If API_KEY is not set, auth is disabled."""
-    if not settings.api_key:
-        return True  # Auth disabled
-    # Check X-API-Key header
-    if x_api_key and secrets.compare_digest(x_api_key, settings.api_key):
-        return True
-    # Check Authorization: Bearer <token>
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization[7:]
-        if secrets.compare_digest(token, settings.api_key):
-            return True
-    raise HTTPException(status_code=401, detail="Invalid or missing API key")
+# verify_auth has been moved to auth.py. Import from there:
+#   from auth import verify_auth
+# Or keep using:  from shared import verify_auth  (re-exported below)
 
 
 # ── Pydantic models ──────────────────────────────────────────────────
@@ -529,65 +518,6 @@ async def _call(reducer: str, args: list) -> dict:
     return {"status": "ok"}
 
 
-def _row_to_task(r: dict) -> TaskOut:
-    return TaskOut(
-        id=r["id"],
-        title=r["title"],
-        description=r.get("description", ""),
-        priority=r.get("priority", 2),
-        status=r["status"],
-        assigned_to=r.get("assigned_to"),
-        repo=r.get("repo", ""),
-        branch=r.get("branch"),
-        roadmap_item=r.get("roadmap_item", ""),
-        created_by=r.get("created_by", ""),
-        created_at=r.get("created_at", 0),
-        updated_at=r.get("updated_at", 0),
-        depends_on=r.get("depends_on"),
-        required_skills=r.get("required_skills"),
-        score=r.get("score", 0),
-        position=r.get("position"),
-        fail_count=r.get("fail_count", 0),
-        max_attempts=r.get("max_attempts", 3),
-        fail_reason=r.get("fail_reason"),
-        subtask_of=r.get("subtask_of"),
-        subtasks=r.get("subtasks"),
-        due_by=r.get("due_by"),
-        sprint=r.get("sprint"),
-        archived=r.get("archived", False),
-        estimated_hours=r.get("estimated_hours"),
-        spent_hours=r.get("spent_hours"),
-    )
-
-
-def _row_to_log(r: dict) -> LogOut:
-    return LogOut(
-        id=r["id"],
-        task_id=r["task_id"],
-        action=r["action"],
-        agent_id=r.get("agent_id"),
-        notes=r.get("notes"),
-        timestamp=r.get("timestamp", 0),
-    )
-
-
-def _row_to_template(r: dict) -> TemplateOut:
-    return TemplateOut(
-        id=r["id"],
-        title=r["title"],
-        description=r.get("description", ""),
-        priority=r.get("priority", 2),
-        repo=r.get("repo", ""),
-        roadmap_item=r.get("roadmap_item", ""),
-        required_skills=r.get("required_skills"),
-        cron_schedule=r.get("cron_schedule", ""),
-        created_by=r.get("created_by", ""),
-        created_at=r.get("created_at", 0),
-        last_triggered_at=r.get("last_triggered_at", 0),
-        active=r.get("active", True),
-    )
-
-
 async def _compute_score(task: dict, agent_capabilities: str | None = None) -> tuple[int, str]:
     """Compute a priority score for a task. Higher = more recommended.
     Priority is u8 (0=urgent … 255=lowest). Maps to 100-0 range."""
@@ -630,3 +560,13 @@ async def _compute_score(task: dict, agent_capabilities: str | None = None) -> t
 async def _notify(action: str, task: dict, extra: str = ""):
     """Send notifications to all configured webhooks."""
     await webhooks.notify(action, task, extra)
+
+
+# ── Re-exports for backward compatibility ────────────────────────────
+# These functions were moved to auth.py and responses.py but are
+# re-exported here so that existing imports like:
+#   from shared import verify_auth, _row_to_task
+# continue to work without modifying every route file.
+
+from auth import verify_auth  # noqa: E402, F401
+from responses import _row_to_task, _row_to_log, _row_to_template  # noqa: E402, F401

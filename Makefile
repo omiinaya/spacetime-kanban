@@ -11,7 +11,21 @@ help:  ## Show available targets
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # ── Backend (FastAPI) ───────────────────────────────────────────────────
-build:  ## Build frontend production bundle
+test-python: test  ## alias for test
+	@true
+
+test-rust:  ## Run Rust STDB module tests (native target, not wasm)
+	cd server/spacetimedb && cargo test 2>&1
+
+test-all: test test-rust test-frontend  ## Run all test suites
+
+build-stdb:  ## Build the STDB wasm module
+	cd server/spacetimedb && cargo build --release --target wasm32-unknown-unknown
+
+publish-stdb: build-stdb  ## Build and publish STDB module to local server
+	cd server/spacetimedb && spacetime publish -b target/wasm32-unknown-unknown/release/spacetimedb_kanban.wasm -s http://localhost:3001 --yes kanban 2>&1
+
+build-frontend:  ## Build frontend production bundle
 	cd web && npm install && npm run build
 
 test:  ## Run backend tests

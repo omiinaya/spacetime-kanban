@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, Response
 
 from shared import (
     _call,
+    _compute_score,
     _notify,
     _row_to_task,
     _sanitize,
@@ -36,58 +37,18 @@ from shared import (
     SetDependencyRequest,
     SetSkillsRequest,
     SplitTaskRequest,
+    SprintRequest,
     SuggestResult,
     TaskCreate,
     TaskLabelAssign,
     TaskOut,
+    TaskRelationCreate,
+    TaskRelationOut,
     TaskUpdate,
+    TimeEstimatesRequest,
 )
 
 router = APIRouter()
-
-
-# ── Helper: priority scoring engine ───────────────────────────────────
-
-
-async def _compute_score(task: dict, agent_capabilities: str | None = None) -> tuple[int, str]:
-    """Compute a priority score for a task. Higher = more recommended.
-    Priority is u8 (0=urgent … 255=lowest). Maps to 100-0 range."""
-    import time
-
-    base = max(100 - task.get("priority", 128), 0)  # 0→100, 128→~50, 255→0
-    reasons = []
-
-    # Time bonus: +5 per hour available, capped at +30
-    now_ms = int(time.time() * 1000)
-    age_hours = (now_ms - task.get("created_at", now_ms)) / 3_600_000
-    time_bonus = min(int(age_hours * 5), 30)
-    if time_bonus > 0:
-        reasons.append(f"+{time_bonus} stale ({(age_hours):.1f}h old)")
-
-    # Dependency bonus: +10 per task that depends on this one (unblock value)
-    try:
-        all_tasks = await _sql("SELECT id, depends_on FROM tasks WHERE depends_on IS NOT NULL")
-        blocker_count = sum(1 for t in all_tasks if t.get("depends_on") == task["id"])
-        blocker_bonus = min(blocker_count * 10, 30)
-        if blocker_bonus > 0:
-            reasons.append(f"+{blocker_bonus} unblocks {blocker_count} task(s)")
-    except Exception:
-        blocker_bonus = 0
-
-    # Skill match bonus: +15 per matching skill tag, capped at +30
-    skill_bonus = 0
-    task_skills = task.get("required_skills") or ""
-    if agent_capabilities and task_skills:
-        agent_tags = {t.strip().lower() for t in agent_capabilities.split(",") if t.strip()}
-        task_tags = {t.strip().lower() for t in task_skills.split(",") if t.strip()}
-        matched = agent_tags & task_tags
-        skill_bonus = min(len(matched) * 15, 30)
-        if skill_bonus > 0:
-            reasons.append(f"+{skill_bonus} skill match ({', '.join(matched)})")
-
-    total = base + time_bonus + blocker_bonus + skill_bonus
-    reason_str = "; ".join(reasons) if reasons else "base score"
-    return total, reason_str
 
 
 # ── Task Suggestion (MUST be before /api/tasks/{task_id}) ─────────────
@@ -345,6 +306,23 @@ async def patch_task(task_id: str, body: TaskUpdate):
     elif "due_by" in body.model_dump(exclude_unset=True):
         # User explicitly set due_by to null — clear it
         await _call("set_due_by", [task_id, 0])
+    # Handle sprint
+    if body.sprint is not None:
+        await _call("set_sprint", [task_id, body.sprint])
+    elif "sprint" in body.model_dump(exclude_unset=True):
+        # User explicitly set sprint to null — clear it
+        await _call("set_sprint", [task_id, ""])
+    # Handle archived
+    if body.archived is not None:
+        if body.archived:
+            await _call("archive_task", [task_id])
+        else:
+            await _call("unarchive_task", [task_id])
+    # Handle time estimates
+    if body.estimated_hours is not None or body.spent_hours is not None:
+        est = body.estimated_hours if body.estimated_hours is not None else t.get("estimated_hours") or 0
+        spent = body.spent_hours if body.spent_hours is not None else t.get("spent_hours") or 0
+        await _call("set_time_estimates", [task_id, est, spent])
     return {"status": "updated"}
 
 
@@ -473,6 +451,90 @@ async def set_dependency(task_id: str, body: SetDependencyRequest):
 async def set_task_skills(task_id: str, body: SetSkillsRequest):
     await _call("set_task_skills", [task_id, body.skills])
     return {"status": "updated", "task_id": task_id, "skills": body.skills or None}
+
+
+# ── Archive / Unarchive ────────────────────────────────────────────────
+
+
+@router.post("/api/tasks/{task_id}/archive", dependencies=[Depends(verify_auth)])
+async def archive_task(task_id: str):
+    """Toggle archive on a task (calls toggle_archive reducer)."""
+    await _call("toggle_archive", [task_id])
+    return {"status": "toggled", "task_id": task_id}
+
+
+@router.post("/api/tasks/{task_id}/unarchive", dependencies=[Depends(verify_auth)])
+async def unarchive_task(task_id: str):
+    """Unarchive a task (calls unarchive_task reducer)."""
+    await _call("unarchive_task", [task_id])
+    return {"status": "unarchived", "task_id": task_id}
+
+
+# ── Sprint Management ─────────────────────────────────────────────────
+
+
+@router.post("/api/tasks/{task_id}/sprint", dependencies=[Depends(verify_auth)])
+async def set_task_sprint(task_id: str, body: SprintRequest):
+    """Set a task's sprint assignment."""
+    await _call("set_sprint", [task_id, body.sprint])
+    return {"status": "updated", "task_id": task_id, "sprint": body.sprint}
+
+
+# ── Time Estimates ────────────────────────────────────────────────────
+
+
+@router.post("/api/tasks/{task_id}/time-estimates", dependencies=[Depends(verify_auth)])
+async def set_task_time_estimates(task_id: str, body: TimeEstimatesRequest):
+    """Set estimated and spent hours on a task."""
+    await _call("set_time_estimates", [task_id, body.estimated_hours, body.spent_hours])
+    return {
+        "status": "updated",
+        "task_id": task_id,
+        "estimated_hours": body.estimated_hours,
+        "spent_hours": body.spent_hours,
+    }
+
+
+# ── Task Relations ────────────────────────────────────────────────────
+
+
+@router.get("/api/tasks/{task_id}/relations", response_model=list[TaskRelationOut])
+async def list_task_relations(task_id: str):
+    """List all relations for a task."""
+    rows = await _sql_param(
+        "SELECT * FROM task_relations WHERE task_id = '{task_id}'",
+        task_id=task_id,
+    )
+    # Also return relations where this task is the related_task_id
+    reverse_rows = await _sql_param(
+        "SELECT * FROM task_relations WHERE related_task_id = '{task_id}'",
+        task_id=task_id,
+    )
+    all_rows = rows + reverse_rows
+    return [
+        TaskRelationOut(
+            id=r["id"],
+            task_id=r["task_id"],
+            related_task_id=r["related_task_id"],
+            relation_type=r["relation_type"],
+            created_at=r.get("created_at", 0),
+        )
+        for r in all_rows
+    ]
+
+
+@router.post("/api/tasks/{task_id}/relations", dependencies=[Depends(verify_auth)])
+async def add_task_relation(task_id: str, body: TaskRelationCreate):
+    """Add a relation between two tasks."""
+    await _call("add_task_relation", [task_id, body.related_task_id, body.relation_type])
+    return {"status": "created", "task_id": task_id, "related_task_id": body.related_task_id}
+
+
+@router.delete("/api/tasks/{task_id}/relations/{relation_id}", dependencies=[Depends(verify_auth)])
+async def remove_task_relation(task_id: str, relation_id: str):
+    """Remove a task relation."""
+    await _call("remove_task_relation", [relation_id])
+    return {"status": "deleted"}
 
 
 # ── Task Comments ──────────────────────────────────────────────────────
