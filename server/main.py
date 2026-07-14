@@ -258,7 +258,7 @@ async def clear_all_tasks():
                 await _call("delete_task", [tid])
                 deleted += 1
             except Exception as e:
-                print(f"[warn] Failed to delete task {tid}: {e}
+                print(f"[warn] Failed to delete task {tid}: {e}")
     return {"status": "cleared", "deleted": deleted}
 
 
@@ -432,17 +432,18 @@ async def _sync_to_github(task_id: str, event: str, notes: str = ""):
             if notes:
                 try:
                     issue_sync.add_issue_comment(token, repo, issue_number, f"✅ Kanban task completed: {notes}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[warn] Failed to add comment for issue {issue_number}: {e}")
         elif event == "unclaimed":
             issue_sync.reopen_issue(token, repo, issue_number)
             issue_sync.update_issue_status(task_id, "open")
             if notes:
                 try:
                     issue_sync.add_issue_comment(token, repo, issue_number, f"🔄 Kanban task reopened: {notes}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[warn] Failed to add reopen comment for issue {issue_number}: {e}")
     except Exception as e:
+        print(f"[warn] Issue sync error: {e}")
         import logging
         logging.getLogger(__name__).warning(f"Failed to sync task {task_id} to GitHub: {e}")
 
@@ -983,8 +984,8 @@ async def create_issue_from_task(body: IssueCreateRequest):
     # Add activity log
     try:
         await _call("add_log", [body.task_id, "github_issue_created", "", f"Issue #{result['issue_number']}: {result['html_url']}"])
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[warn] Failed to log GitHub issue creation: {e}")
 
     return {
         "status": "created",
@@ -1080,8 +1081,8 @@ async def github_webhook(request: Request):
                     await _call("unclaim_task", [task_id])
                     try:
                         await _call("add_log", [task_id, "unclaimed", "github-webhook", f"Issue #{issue_number} reopened"])
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"[warn] Failed to log webhook reopen: {e}")
                     issue_sync.update_issue_status(task_id, "open")
                     asyncio.ensure_future(_notify("unclaimed", rows[0], f"Issue #{issue_number} reopened"))
                     return {"status": "reopened", "task_id": task_id}
@@ -1117,6 +1118,7 @@ async def github_webhook(request: Request):
         try:
             await _call("update_task", [task_id, original_title, f"PR: {pr_url}", 2, branch])
         except HTTPException:
+            # Expected: task not found or not actionable — not an error
             pass  # Task may not exist yet
         asyncio.ensure_future(_notify("linked", {
             "id": task_id,
@@ -1143,6 +1145,7 @@ async def github_webhook(request: Request):
                 asyncio.ensure_future(_notify("completed", t, notes))
                 return {"status": "completed", "task_id": task_id}
         except HTTPException:
+            # Expected: task not found or not actionable — not an error
             pass
         return {"status": "ignored", "reason": "task not found or not actionable"}
 
@@ -1324,16 +1327,16 @@ async def set_task_labels(task_id: str, body: TaskLabelAssign):
     for lid in to_remove:
         try:
             await _call("unassign_label_from_task", [task_id, lid])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[warn] Failed to unassign label {lid} from task {task_id}: {e}")
 
     # Add any labels not already assigned
     to_add = new_ids - current_ids
     for lid in to_add:
         try:
             await _call("assign_label_to_task", [task_id, lid])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[warn] Failed to assign label {lid} to task {task_id}: {e}")
 
     return {"status": "updated", "assigned": list(new_ids)}
 
