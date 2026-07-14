@@ -150,14 +150,14 @@ export default function KanbanColumn({
                 </span>
               )
             })()}
-            {task.dueBy && (() => {
+            {task.dueBy != null && (() => {
               const now = Date.now()
-              const overdue = now > task.dueBy && task.status !== 'done'
+              const overdue = now > Number(task.dueBy) && task.status !== 'done'
               return (
                 <span className={`text-[10px] px-1 py-0.5 rounded font-medium flex-shrink-0 ${
                   overdue ? 'bg-red-500/20 text-red-400' : 'bg-white/8 text-[var(--color-muted)]'
-                }`} title={new Date(task.dueBy).toLocaleString()}>
-                  📅 {new Date(task.dueBy).toLocaleDateString()}
+                }`} title={new Date(Number(task.dueBy)).toLocaleString()}>
+                  📅 {new Date(Number(task.dueBy)).toLocaleDateString()}
                 </span>
               )
             })()}
@@ -260,14 +260,14 @@ export default function KanbanColumn({
               </a>
             )
           })()}
-          {task.dueBy && (() => {
+          {task.dueBy != null && (() => {
             const now = Date.now()
-            const overdue = now > task.dueBy && task.status !== 'done'
+            const overdue = now > Number(task.dueBy) && task.status !== 'done'
             return (
               <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                 overdue ? 'bg-red-500/20 text-red-400' : 'bg-white/8 text-[var(--color-muted)]'
-              }`} title={new Date(task.dueBy).toLocaleString()}>
-                📅 {new Date(task.dueBy).toLocaleDateString()}
+              }`} title={new Date(Number(task.dueBy)).toLocaleString()}>
+                📅 {new Date(Number(task.dueBy)).toLocaleDateString()}
               </span>
             )
           })()}

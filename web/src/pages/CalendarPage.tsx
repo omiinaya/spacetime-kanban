@@ -229,7 +229,7 @@ export default function CalendarPage() {
                 )}
                 <div className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
                   <span>ID: <code className="text-[10px] font-mono">{selectedTask.id.slice(0, 20)}...</code></span>
-                  {selectedTask.assignedTo && <span>· Agent: {selectedTask.assignedTo}</span>}
+                  {selectedTask.assigned_to && <span>· Agent: {selectedTask.assigned_to}</span>}
                 </div>
               </div>
             </div>
