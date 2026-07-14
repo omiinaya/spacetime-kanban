@@ -1090,7 +1090,7 @@ export default function BoardPage() {
               >
                 <KanbanColumn
                   key={status}
-                  status={status}
+                  status={status as TaskStatus}
                   tasks={colTasks}
                   compactMode={compactMode}
                   selectMode={selectMode}
@@ -1165,6 +1165,8 @@ export default function BoardPage() {
           draggedTaskId={draggedTaskId}
           dragOverColumn={dragOverColumn}
           dropOnTaskId={dropOnTaskId}
+          collapsed={false}
+          onToggleCollapse={() => {}}
           onToggleSelect={toggleSelect}
           onClaim={handleClaim}
           onComplete={handleComplete}

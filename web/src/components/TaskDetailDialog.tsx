@@ -365,7 +365,7 @@ export function TaskDetailDialog({
             </div>
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Due Date</p>
-              <DueDateEditor taskId={task.id} dueBy={task.dueBy} taskStatus={task.status} />
+              <DueDateEditor taskId={task.id} dueBy={task.dueBy != null ? Number(task.dueBy) : null} taskStatus={task.status} />
             </div>
             {task.requiredSkills && (
               <div className="col-span-2">

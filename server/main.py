@@ -185,8 +185,8 @@ async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
             agent_rows = await _sql_param("SELECT capabilities FROM swarm_agents WHERE id = '{id}'", id=agent_id)
             if agent_rows:
                 agent_caps = agent_rows[0].get("capabilities")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[warn] Failed to get agent capabilities: {e}")
 
     results = []
     for r in rows:
@@ -257,8 +257,8 @@ async def clear_all_tasks():
             try:
                 await _call("delete_task", [tid])
                 deleted += 1
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[warn] Failed to delete task {tid}: {e}
     return {"status": "cleared", "deleted": deleted}
 
 
