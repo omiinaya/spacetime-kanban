@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban } from 'lucide-react'
+import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban, LayoutDashboard, CalendarDays, Key } from 'lucide-react'
 
 const BoardPage = lazy(() => import('./pages/BoardPage'))
 const LogsPage = lazy(() => import('./pages/LogsPage'))
@@ -10,6 +10,9 @@ const WebhooksPage = lazy(() => import('./pages/WebhooksPage'))
 const AgentHealthPage = lazy(() => import('./pages/AgentHealthPage'))
 const LabelsPage = lazy(() => import('./pages/LabelsPage'))
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'))
+const CrossProjectPage = lazy(() => import('./pages/CrossProjectPage'))
+const CalendarPage = lazy(() => import('./pages/CalendarPage'))
+const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'))
 
 const navItems = [
   { path: '/', label: 'Board', icon: KanbanSquare },
@@ -20,6 +23,9 @@ const navItems = [
   { path: '/agents', label: 'Agents', icon: Activity },
   { path: '/logs', label: 'Activity Log', icon: Clock },
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { path: '/cross-project', label: 'Cross-Project', icon: LayoutDashboard },
+  { path: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { path: '/api-keys', label: 'API Keys', icon: Key },
 ]
 
 export default function App() {
@@ -116,6 +122,9 @@ export default function App() {
             <Route path="/agents" element={<AgentHealthPage />} />
             <Route path="/logs" element={<LogsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/cross-project" element={<CrossProjectPage />} />
+            <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/api-keys" element={<ApiKeysPage />} />
           </Routes>
         </Suspense>
       </main>

@@ -28,7 +28,19 @@ pub struct Task {
     pub subtask_of: Option<String>,
     pub subtasks: Option<String>, // JSON array of child task IDs
     // Deadline / due date — epoch ms, None = no deadline
+    #[default(None::<u64>)]
     pub due_by: Option<u64>,
+    // Sprint tracking (#17)
+    #[default(None::<String>)]
+    pub sprint: Option<String>,
+    // Soft-delete archiving (#19)
+    #[default(false)]
+    pub archived: bool,
+    // Time estimates (#20)
+    #[default(None::<u32>)]
+    pub estimated_hours: Option<u32>,
+    #[default(None::<u32>)]
+    pub spent_hours: Option<u32>,
 }
 
 // ── Task Log ────────────────────────────────────────────────────────
@@ -201,5 +213,84 @@ pub struct TaskTemplate {
     pub created_by: String,
     pub created_at: u64,
     pub last_triggered_at: u64,
+    pub active: bool,
+}
+
+// ── Task Relation (Related Task Links) ─────────────────────────────
+
+#[spacetimedb::table(accessor = task_relations, public)]
+#[derive(Debug, Clone)]
+pub struct TaskRelation {
+    #[primary_key]
+    pub id: String,
+    pub task_id: String,
+    pub related_task_id: String,
+    pub relation_type: String, // "blocks", "blocked_by", "relates_to", "duplicates", "is_duplicated_by"
+    pub created_at: u64,
+}
+
+// ── Automation Rule ─────────────────────────────────────────────────
+
+#[spacetimedb::table(accessor = automation_rules, public)]
+#[derive(Debug, Clone)]
+pub struct AutomationRule {
+    #[primary_key]
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub trigger_event: String, // "task_created", "task_completed", "task_blocked", "task_claimed", etc.
+    pub condition: Option<String>,  // JSON filter expression, None = always
+    pub action_type: String,   // "move_to_column", "assign_to", "add_label", "notify_webhook"
+    pub action_config: String, // JSON config for the action
+    pub repo: Option<String>,  // scope to a repo, None = global
+    pub active: bool,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+// ── Automation Rule Execution Log ───────────────────────────────────
+
+#[spacetimedb::table(accessor = automation_rule_logs, public)]
+#[derive(Debug, Clone)]
+pub struct AutomationRuleLog {
+    #[primary_key]
+    pub id: String,
+    pub rule_id: String,
+    pub rule_name: String,
+    pub trigger_event: String,
+    pub task_id: String,
+    pub action_type: String,
+    pub result: String, // "fired", "condition_failed", "error"
+    pub error_message: Option<String>,
+    pub fired_at: u64,
+}
+
+// ── Schema Migration Tracking ───────────────────────────────────────
+
+#[spacetimedb::table(accessor = schema_migrations, public)]
+#[derive(Debug, Clone)]
+pub struct SchemaMigration {
+    #[primary_key]
+    pub version: String,    // e.g. "2026-07-14-01-add-sprint-and-archive"
+    pub description: String,
+    pub applied_at: u64,
+    pub applied_by: String,
+    pub checksum: Option<String>,
+}
+
+// ── API Key (for external programmatic access) ──────────────────────
+
+#[spacetimedb::table(accessor = api_keys, public)]
+#[derive(Debug, Clone)]
+pub struct ApiKey {
+    #[primary_key]
+    pub id: String,          // unique key ID
+    pub key_hash: String,    // SHA-256 hash of the actual key
+    pub name: String,        // human label, e.g. "CI pipeline key"
+    pub repo_scope: Option<String>, // None = all repos
+    pub permissions: String, // comma-separated: "read", "write", "admin"
+    pub created_by: String,
+    pub created_at: u64,
+    pub last_used_at: u64,
     pub active: bool,
 }

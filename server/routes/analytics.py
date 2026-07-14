@@ -5,8 +5,7 @@ import time
 
 from fastapi import APIRouter
 
-from shared import _sql
-
+from shared import _sql, _row_to_task
 router = APIRouter()
 
 
@@ -240,3 +239,68 @@ async def analytics_agents():
             "last_heartbeat": a.get("last_heartbeat", 0),
         })
     return result
+
+
+@router.get("/api/analytics/cross-project")
+async def analytics_cross_project():
+    """Cross-project dashboard data: per-repo status, priority, sprints."""
+    tasks = await _sql("SELECT * FROM tasks")
+    projects = await _sql("SELECT * FROM projects")
+    project_map = {p["id"]: p for p in projects}
+
+    repos = {}
+    for t in tasks:
+        r = t.get("repo") or "none"
+        if r not in repos:
+            repos[r] = {
+                "project": project_map.get(r, {}),
+                "total": 0, "by_status": {}, "by_priority": {},
+                "sprints": set(),
+            }
+        repos[r]["total"] += 1
+        s = t.get("status", "unknown")
+        repos[r]["by_status"][s] = repos[r]["by_status"].get(s, 0) + 1
+        p = t.get("priority", 2)
+        repos[r]["by_priority"][p] = repos[r]["by_priority"].get(p, 0) + 1
+        sprint = t.get("sprint") or t.get("roadmap_item", "")
+        if sprint:
+            repos[r]["sprints"].add(sprint)
+
+    # Convert sets to lists for JSON
+    result = {}
+    for r, data in repos.items():
+        data["sprints"] = sorted(data["sprints"])
+        result[r] = data
+
+    return result
+
+
+@router.get("/api/analytics/calendar")
+async def analytics_calendar(year: int = 0, month: int = 0):
+    """Tasks with due_by dates for calendar view. If year/month not specified, uses current."""
+    import calendar as cal_mod
+    now = int(time.time() * 1000)
+    if not year:
+        year = datetime.utcfromtimestamp(now / 1000).year
+    if not month:
+        month = datetime.utcfromtimestamp(now / 1000).month
+
+    tasks = await _sql("SELECT * FROM tasks WHERE due_by IS NOT NULL AND due_by > 0")
+
+    # Filter to tasks in the requested month
+    month_start = int(datetime(year, month, 1).timestamp() * 1000)
+    _, last_day = cal_mod.monthrange(year, month)
+    month_end = int(datetime(year, month, last_day, 23, 59, 59).timestamp() * 1000)
+
+    month_tasks = []
+    for t in tasks:
+        due = t.get("due_by", 0)
+        if month_start <= due <= month_end:
+            task_out = _row_to_task(t)
+            month_tasks.append(task_out.model_dump())
+
+    return {
+        "year": year,
+        "month": month,
+        "tasks": month_tasks,
+    }

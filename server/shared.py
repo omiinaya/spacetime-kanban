@@ -60,6 +60,10 @@ class TaskOut(BaseModel):
     subtask_of: Optional[str] = None
     subtasks: Optional[str] = None
     due_by: Optional[int] = None
+    sprint: Optional[str] = None
+    archived: bool = False
+    estimated_hours: Optional[int] = None
+    spent_hours: Optional[int] = None
 
 
 class TaskCreate(BaseModel):
@@ -86,6 +90,10 @@ class TaskUpdate(BaseModel):
     branch: Optional[str] = None
     required_skills: Optional[str] = None
     due_by: Optional[int] = None
+    sprint: Optional[str] = None
+    archived: Optional[bool] = None
+    estimated_hours: Optional[int] = None
+    spent_hours: Optional[int] = None
 
 
 class ClaimRequest(BaseModel):
@@ -346,6 +354,113 @@ class DispatcherStateUpdate(BaseModel):
     value: Any
 
 
+# ── Task Sprint ─────────────────────────────────────────────────────
+
+class SprintRequest(BaseModel):
+    sprint: str  # sprint name
+
+
+# ── Time Estimates ──────────────────────────────────────────────────
+
+class TimeEstimatesRequest(BaseModel):
+    estimated_hours: int = 0
+    spent_hours: int = 0
+
+
+# ── Task Relations ──────────────────────────────────────────────────
+
+class TaskRelationCreate(BaseModel):
+    related_task_id: str
+    relation_type: str  # "blocks", "blocked_by", "relates_to", "duplicates", "is_duplicated_by"
+
+
+class TaskRelationOut(BaseModel):
+    id: str
+    task_id: str
+    related_task_id: str
+    relation_type: str
+    created_at: int
+
+
+# ── Automation Rules ────────────────────────────────────────────────
+
+class AutomationRuleOut(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    trigger_event: str
+    condition: Optional[str] = None
+    action_type: str
+    action_config: str
+    repo: Optional[str] = None
+    active: bool = True
+    created_at: int = 0
+    updated_at: int = 0
+
+
+class AutomationRuleCreate(BaseModel):
+    id: str = ""
+    name: str
+    description: str = ""
+    trigger_event: str
+    condition: str = ""
+    action_type: str
+    action_config: str
+    repo: str = ""
+    active: bool = True
+
+
+class AutomationRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    trigger_event: Optional[str] = None
+    condition: Optional[str] = None
+    action_type: Optional[str] = None
+    action_config: Optional[str] = None
+    repo: Optional[str] = None
+    active: Optional[bool] = None
+
+
+# ── API Keys ────────────────────────────────────────────────────────
+
+class ApiKeyOut(BaseModel):
+    id: str
+    key_hash: str
+    name: str
+    repo_scope: Optional[str] = None
+    permissions: str
+    created_by: str
+    created_at: int = 0
+    last_used_at: int = 0
+    active: bool = True
+
+
+class ApiKeyCreate(BaseModel):
+    id: str = ""
+    key_hash: str
+    name: str
+    repo_scope: str = ""
+    permissions: str = "read"
+    created_by: str = "web-user"
+
+
+# ── Schema Migrations ───────────────────────────────────────────────
+
+class MigrationOut(BaseModel):
+    version: str
+    description: str = ""
+    applied_at: int = 0
+    applied_by: str = ""
+    checksum: Optional[str] = None
+
+
+class MigrationCreate(BaseModel):
+    version: str
+    description: str = ""
+    applied_by: str = "web-user"
+    checksum: str = ""
+
+
 # ── STDB helpers ─────────────────────────────────────────────────────
 
 def _sanitize(val: str) -> str:
@@ -438,6 +553,10 @@ def _row_to_task(r: dict) -> TaskOut:
         subtask_of=r.get("subtask_of"),
         subtasks=r.get("subtasks"),
         due_by=r.get("due_by"),
+        sprint=r.get("sprint"),
+        archived=r.get("archived", False),
+        estimated_hours=r.get("estimated_hours"),
+        spent_hours=r.get("spent_hours"),
     )
 
 
