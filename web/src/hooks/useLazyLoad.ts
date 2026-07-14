@@ -9,8 +9,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
  *
  * Features:
  * - Configurable initial render count and step
- * - Negative step for virtualization (unload items above viewport) — optional
- * - Resets when total changes (e.g., after filter change)
+ * - Resets when total decreases (filter applied) but NOT when total grows (WS update)
+ * - Tracks sentinel element lifecycle — re-observes if sentinel is unmounted/remounted
  * - Call `reset()` to manually restart lazy loading
  */
 export function useLazyLoad(
@@ -23,16 +23,36 @@ export function useLazyLoad(
   hasMore: boolean
   reset: () => void
 } {
-  const sentinelElRef = useRef<HTMLDivElement | null>(null)
   const [count, setCount] = useState(initial)
+  const prevTotalRef = useRef(total)
+  const sentinelElRef = useRef<HTMLDivElement | null>(null)
+  const observerRef = useRef<IntersectionObserver | null>(null)
   const hasMore = count < total
 
-  // Reset when total items change (e.g., filter applied)
+  // Store latest deps in refs so the observer callback always has fresh values
+  const stepRef = useRef(step)
+  stepRef.current = step
+  const totalRef = useRef(total)
+  totalRef.current = total
+
+  // Reset when total decreases (user applied stricter filter).
+  // Do NOT reset when total grows (new tasks via WS) — preserves scroll position.
   useEffect(() => {
-    setCount(initial)
+    if (total < prevTotalRef.current) {
+      setCount(initial)
+    }
+    prevTotalRef.current = total
   }, [total, initial])
 
-  useEffect(() => {
+  // Connect/disconnect the IntersectionObserver.
+  // Runs whenever hasMore changes, OR the sentinel element (via the ref callback calling this).
+  const connectObserver = useCallback(() => {
+    // Clean up previous observer
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+      observerRef.current = null
+    }
+
     if (!hasMore) return
 
     const sentinel = sentinelElRef.current
@@ -42,19 +62,33 @@ export function useLazyLoad(
       (entries) => {
         const entry = entries[0]
         if (entry?.isIntersecting) {
-          setCount((prev) => Math.min(prev + step, total))
+          setCount((prev) => Math.min(prev + stepRef.current, totalRef.current))
         }
       },
       { rootMargin: '200px 0px' },
     )
 
     observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [hasMore, step, total])
+    observerRef.current = observer
+  }, [hasMore])
 
+  // Callback ref — called by React when the sentinel mounts/unmounts
   const sentinelRef: React.RefCallback<HTMLDivElement> = useCallback((el) => {
     sentinelElRef.current = el
-  }, [])
+    // Trigger observer setup with the fresh element reference
+    connectObserver()
+  }, [connectObserver])
+
+  // Re-connect observer when hasMore changes (e.g., all loaded, then new items arrive)
+  useEffect(() => {
+    connectObserver()
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect()
+        observerRef.current = null
+      }
+    }
+  }, [connectObserver])
 
   const reset = useCallback(() => {
     setCount(initial)

@@ -1,27 +1,82 @@
 import asyncio
+import csv
+import io
 import json
 import os
 import re
 import time
-from datetime import datetime
 import uuid
+from datetime import datetime
 from typing import Any, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Depends, Header
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pydantic import BaseModel
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import secrets
-
 
 from config import settings
 import webhooks
 import issue_sync
+
+from shared import (
+    # Helpers
+    _call,
+    _compute_score,
+    _notify,
+    _row_to_log,
+    _row_to_task,
+    _row_to_template,
+    _sanitize,
+    _sql,
+    _sql_param,
+    verify_auth,
+    # Models
+    AddLogRequest,
+    AgentCapabilitiesRequest,
+    AgentHeartbeatRequest,
+    AgentOut,
+    AgentRegisterRequest,
+    BatchLabelsRequest,
+    BlockRequest,
+    BlockWithReasonRequest,
+    BulkReorderRequest,
+    ChecklistItemCreate,
+    ChecklistItemOut,
+    ClaimRequest,
+    CommentCreate,
+    CommentOut,
+    CompleteRequest,
+    DispatcherStateUpdate,
+    IssueCreateRequest,
+    IssueLinkRequest,
+    LabelCreate,
+    LabelOut,
+    LabelUpdate,
+    LogOut,
+    MaxAttemptsRequest,
+    ProjectCreate,
+    ProjectOut,
+    ProjectUpdate,
+    ReorderRequest,
+    RoadmapImportRequest,
+    SetDependencyRequest,
+    SetSkillsRequest,
+    SplitTaskRequest,
+    SuggestResult,
+    TaskCreate,
+    TaskLabelAssign,
+    TaskOut,
+    TaskUpdate,
+    TemplateCreate,
+    TemplateOut,
+    TemplateUpdate,
+    WebhookCreateRequest,
+    WebhookUpdateRequest,
+)
 
 
 # ── Lifespan: wait for STDB before accepting requests ──────────────
@@ -61,7 +116,14 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title='spacetimedb-kanban', version='0.1.0', lifespan=lifespan)
+app = FastAPI(
+    title='spacetimedb-kanban',
+    version='0.1.0',
+    lifespan=lifespan,
+    docs_url='/docs',
+    redoc_url='/redoc',
+    openapi_url='/openapi.json',
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -72,208 +134,7 @@ app.add_middleware(
 )
 
 
-# ── Auth dependency ───────────────────────────────────────────────────
-
-async def verify_auth(authorization: str = Header(None), x_api_key: str = Header(None, alias="X-API-Key")):
-    """Require API key for mutation endpoints. If API_KEY is not set, auth is disabled."""
-    if not settings.api_key:
-        return True  # Auth disabled
-    # Check X-API-Key header
-    if x_api_key and secrets.compare_digest(x_api_key, settings.api_key):
-        return True
-    # Check Authorization: Bearer <token>
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization[7:]
-        if secrets.compare_digest(token, settings.api_key):
-            return True
-    raise HTTPException(status_code=401, detail="Invalid or missing API key")
-
-
-# ── Pydantic models ──────────────────────────────────────────────────
-
-class TaskOut(BaseModel):
-    id: str
-    title: str
-    description: str
-    priority: int
-    status: str
-    assigned_to: Optional[str] = None
-    repo: str
-    branch: Optional[str] = None
-    roadmap_item: str
-    created_by: str
-    created_at: int
-    updated_at: int
-    depends_on: Optional[str] = None
-    required_skills: Optional[str] = None
-    score: int = 0
-    position: Optional[int] = None
-    fail_count: int = 0
-    max_attempts: int = 3
-    fail_reason: Optional[str] = None
-    subtask_of: Optional[str] = None
-    subtasks: Optional[str] = None
-
-class TaskCreate(BaseModel):
-    title: str
-    description: str = ""
-    priority: int = 2
-    repo: str = ""
-    roadmap_item: str = ""
-    required_skills: str = ""
-    created_by: str = "web-user"
-    status: str = ""
-    fail_count: int = 0
-    max_attempts: int = 3
-    fail_reason: Optional[str] = None
-    subtask_of: Optional[str] = None
-    subtasks: Optional[str] = None
-
-class TaskUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    priority: Optional[int] = None
-    branch: Optional[str] = None
-    required_skills: Optional[str] = None
-
-class ClaimRequest(BaseModel):
-    agent_id: str
-
-class BlockRequest(BaseModel):
-    reason: str = ""
-
-class BlockWithReasonRequest(BaseModel):
-    reason: str = ""
-
-class SplitTaskRequest(BaseModel):
-    child_titles: list[str]
-
-class MaxAttemptsRequest(BaseModel):
-    max_attempts: int = 3
-
-class SetDependencyRequest(BaseModel):
-    depends_on: str = ""  # empty string to clear
-
-class SetSkillsRequest(BaseModel):
-    skills: str = ""
-
-class AgentRegisterRequest(BaseModel):
-    agent_id: str
-    host: str = ""
-    capabilities: str = ""
-    repo_focus: str = ""
-
-class AgentHeartbeatRequest(BaseModel):
-    agent_id: str
-    status: str = "online"
-    current_task_id: str = ""
-
-class AgentCapabilitiesRequest(BaseModel):
-    capabilities: str = ""
-    repo_focus: str = ""
-
-class CompleteRequest(BaseModel):
-    result_notes: str = ""
-
-class RoadmapImportRequest(BaseModel):
-    content: str  # Raw ROADMAP.md content
-    repo: str = ""  # Default repo slug for imported tasks
-    created_by: str = "roadmap-import"
-
-class LogOut(BaseModel):
-    id: str
-    task_id: str
-    action: str
-    agent_id: Optional[str] = None
-    notes: Optional[str] = None
-    timestamp: int
-
-class AgentOut(BaseModel):
-    id: str
-    host: str = ""
-    capabilities: Optional[str] = None
-    repo_focus: Optional[str] = None
-    current_task_id: Optional[str] = None
-    status: str = "offline"
-    last_heartbeat: int = 0
-    first_seen: int = 0
-
-class SuggestResult(BaseModel):
-    task: TaskOut
-    score: int
-    reason: str = ""
-
-class LabelOut(BaseModel):
-    id: str
-    name: str
-    color: str
-    description: str = ""
-    created_at: int = 0
-
-class LabelCreate(BaseModel):
-    id: str = ""
-    name: str
-    color: str = "#0ea5e9"
-    description: str = ""
-
-class LabelUpdate(BaseModel):
-    name: str = ""
-    color: str = ""
-    description: str = ""
-
-# ── Project Models ────────────────────────────────────────────────────
-
-class ProjectOut(BaseModel):
-    id: str
-    name: str
-    description: str = ""
-    color: str = "#6b7280"
-    priority: int = 2
-    active: bool = True
-    created_at: int = 0
-    updated_at: int = 0
-
-class ProjectCreate(BaseModel):
-    id: str  # repo slug
-    name: str = ""
-    description: str = ""
-    color: str = "#0ea5e9"
-    priority: int = 2
-    active: bool = True
-
-class ProjectUpdate(BaseModel):
-    name: str = ""
-    description: str = ""
-    color: str = ""
-    priority: Optional[int] = None  # None = don't change
-    active: bool = True
-
-class TaskLabelAssign(BaseModel):
-    label_ids: list[str] = []
-
-class CommentOut(BaseModel):
-    id: str
-    task_id: str
-    author: str
-    body: str
-    created_at: int
-
-class CommentCreate(BaseModel):
-    body: str
-    author: str = "web-user"
-
-class ChecklistItemOut(BaseModel):
-    id: str
-    task_id: str
-    text: str
-    completed: bool = False
-    position: int = 0
-    created_at: int = 0
-
-class ChecklistItemCreate(BaseModel):
-    text: str
-
-# ── Static file serving (SPA dashboard) ──────────────────────────────
+# ── Endpoints ────────────────────────────────────────────────────────
 
 WEB_DIST = os.path.join(os.path.dirname(__file__), "..", "web", "dist")
 if os.path.isdir(WEB_DIST):
@@ -293,156 +154,11 @@ async def serve_spa():
         })
     return {"status": "dashboard not built — run 'npm run build' in web/"}
 
-# ── STDB helpers ─────────────────────────────────────────────────────
-
-def _sanitize(val: str) -> str:
-    """Escape single quotes to prevent SQL injection."""
-    return val.replace("'", "''")
-
-async def _sql(query: str) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            settings.stdb_sql_url,
-            content=query,
-            headers={"Content-Type": "application/sql"},
-        )
-    if resp.status_code >= 400:
-        raise HTTPException(502, f"SQL query failed: {resp.text[:300]}")
-    return _parse_sats_rows(resp.json())
-
-async def _sql_param(query_template: str, **params: str) -> list[dict[str, Any]]:
-    """Safe SQL query with named parameters — escapes all string values."""
-    escaped = {k: _sanitize(str(v)) for k, v in params.items()}
-    query = query_template.format(**escaped)
-    return await _sql(query)
-
-def _parse_sats_rows(resp_json: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    if not resp_json:
-        return []
-    entry = resp_json[0]
-    schema = entry.get("schema", {})
-    elements = schema.get("elements", [])
-    col_names: list[str] = []
-    for el in elements:
-        name = el.get("name", {})
-        if isinstance(name, dict):
-            name = name.get("some", name)
-        col_names.append(str(name) if name else "?")
-    rows = entry.get("rows", [])
-    result: list[dict[str, Any]] = []
-    for row in rows:
-        row_dict = {}
-        for i, val in enumerate(row):
-            key = col_names[i] if i < len(col_names) else f"col_{i}"
-            if isinstance(val, list) and len(val) == 2:
-                if val[0] == 0:
-                    val = val[1] if val[1] and val[1] != [] else None
-                else:
-                    val = None
-            row_dict[key] = val
-        result.append(row_dict)
-    return result
-
-async def _call(reducer: str, args: list) -> dict:
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{settings.stdb_base_url}/v1/database/{settings.stdb_db}/call/{reducer}",
-            json=args,
-        )
-    if resp.status_code >= 400:
-        raise HTTPException(409, f"Reducer failed: {resp.text[:300]}")
-    text = resp.text.strip()
-    if text:
-        return resp.json()
-    return {"status": "ok"}
-
-def _row_to_task(r: dict) -> TaskOut:
-    return TaskOut(
-        id=r["id"],
-        title=r["title"],
-        description=r.get("description", ""),
-        priority=r.get("priority", 2),
-        status=r["status"],
-        assigned_to=r.get("assigned_to"),
-        repo=r.get("repo", ""),
-        branch=r.get("branch"),
-        roadmap_item=r.get("roadmap_item", ""),
-        created_by=r.get("created_by", ""),
-        created_at=r.get("created_at", 0),
-        updated_at=r.get("updated_at", 0),
-        depends_on=r.get("depends_on"),
-        required_skills=r.get("required_skills"),
-        score=r.get("score", 0),
-        position=r.get("position"),
-        fail_count=r.get("fail_count", 0),
-        max_attempts=r.get("max_attempts", 3),
-        fail_reason=r.get("fail_reason"),
-        subtask_of=r.get("subtask_of"),
-        subtasks=r.get("subtasks"),
-    )
-
-
-async def _notify(action: str, task: dict, extra: str = ""):
-    """Send notifications to all configured webhooks."""
-    await webhooks.notify(action, task, extra)
-
-def _row_to_log(r: dict) -> LogOut:
-    return LogOut(
-        id=r["id"],
-        task_id=r["task_id"],
-        action=r["action"],
-        agent_id=r.get("agent_id"),
-        notes=r.get("notes"),
-        timestamp=r.get("timestamp", 0),
-    )
-
-# ── Helper: ensure DB identity is set ────────────────────────────────
-
-# (lifespan moved above app definition)
-
-# ── Endpoints ────────────────────────────────────────────────────────
+# ── Endpoints start here ──────────────────────────────────────────────
 
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
-
-async def _compute_score(task: dict, agent_capabilities: str | None = None) -> tuple[int, str]:
-    """Compute a priority score for a task. Higher = more recommended.
-    Priority is u8 (0=urgent … 255=lowest). Maps to 100-0 range."""
-    base = max(100 - task.get("priority", 128), 0)  # 0→100, 128→~50, 255→0
-    reasons = []
-
-    # Time bonus: +5 per hour available, capped at +30
-    now_ms = int(time.time() * 1000)
-    age_hours = (now_ms - task.get("created_at", now_ms)) / 3_600_000
-    time_bonus = min(int(age_hours * 5), 30)
-    if time_bonus > 0:
-        reasons.append(f"+{time_bonus} stale ({(age_hours):.1f}h old)")
-
-    # Dependency bonus: +10 per task that depends on this one (unblock value)
-    try:
-        all_tasks = await _sql("SELECT id, depends_on FROM tasks WHERE depends_on IS NOT NULL")
-        blocker_count = sum(1 for t in all_tasks if t.get("depends_on") == task["id"])
-        blocker_bonus = min(blocker_count * 10, 30)
-        if blocker_bonus > 0:
-            reasons.append(f"+{blocker_bonus} unblocks {blocker_count} task(s)")
-    except Exception:
-        blocker_bonus = 0
-
-    # Skill match bonus: +15 per matching skill tag, capped at +30
-    skill_bonus = 0
-    task_skills = task.get("required_skills") or ""
-    if agent_capabilities and task_skills:
-        agent_tags = {t.strip().lower() for t in agent_capabilities.split(",") if t.strip()}
-        task_tags = {t.strip().lower() for t in task_skills.split(",") if t.strip()}
-        matched = agent_tags & task_tags
-        skill_bonus = min(len(matched) * 15, 30)
-        if skill_bonus > 0:
-            reasons.append(f"+{skill_bonus} skill match ({', '.join(matched)})")
-
-    total = base + time_bonus + blocker_bonus + skill_bonus
-    reason_str = "; ".join(reasons) if reasons else "base score"
-    return total, reason_str
 
 
 # Priority scoring route must be BEFORE /api/tasks/{task_id} to avoid shadowing
@@ -471,7 +187,12 @@ async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
     return results[:limit]
 
 @app.get("/api/tasks", response_model=list[TaskOut])
-async def list_tasks(status: Optional[str] = None, repo: Optional[str] = None, label: Optional[str] = None):
+async def list_tasks(
+    status: Optional[str] = None,
+    repo: Optional[str] = None,
+    label: Optional[str] = None,
+    search: Optional[str] = None,
+):
     # If label filter provided, first get task IDs with that label
     label_task_ids: set[str] | None = None
     if label:
@@ -480,16 +201,31 @@ async def list_tasks(status: Optional[str] = None, repo: Optional[str] = None, l
 
     sql = "SELECT * FROM tasks"
     filters = []
+    params: dict[str, str] = {}
     if status:
-        filters.append(f"status = '{status}'")
+        filters.append("status = '{status}'")
+        params["status"] = status
     if repo:
-        filters.append(f"repo = '{repo}'")
+        filters.append("repo = '{repo}'")
+        params["repo"] = repo
     if filters:
         sql += " WHERE " + " AND ".join(filters)
-    rows = await _sql(sql)
+    if params:
+        rows = await _sql_param(sql, **params)
+    else:
+        rows = await _sql(sql)
     tasks = [_row_to_task(r) for r in rows]
     if label_task_ids is not None:
         tasks = [t for t in tasks if t.id in label_task_ids]
+    # Apply client-side search filter
+    if search:
+        q = search.lower()
+        tasks = [t for t in tasks if
+                 q in t.title.lower() or
+                 q in t.description.lower() or
+                 q in t.repo.lower() or
+                 (t.assigned_to and q in t.assigned_to.lower()) or
+                 q in t.id.lower()]
     tasks.sort(key=lambda t: (t.priority, -t.created_at))
     return tasks
 
@@ -498,6 +234,21 @@ async def seed_tasks():
     """Seed sample tasks into the database."""
     await _call("seed_sample_tasks", [])
     return {"status": "seeded"}
+
+@app.post("/api/tasks/clear", dependencies=[Depends(verify_auth)])
+async def clear_all_tasks():
+    """Delete ALL tasks via the delete_task reducer. Board reset."""
+    rows = await _sql("SELECT id FROM tasks")
+    deleted = 0
+    for row in rows:
+        tid = row.get("id")
+        if tid:
+            try:
+                await _call("delete_task", [tid])
+                deleted += 1
+            except Exception:
+                pass
+    return {"status": "cleared", "deleted": deleted}
 
 
 import csv
@@ -509,13 +260,19 @@ async def export_tasks(format: str = "json", status: str = "", repo: str = ""):
     """Export tasks as CSV or JSON with optional filters."""
     sql = "SELECT * FROM tasks"
     filters = []
+    params: dict[str, str] = {}
     if status:
-        filters.append(f"status = '{status}'")
+        filters.append("status = '{status}'")
+        params["status"] = status
     if repo:
-        filters.append(f"repo = '{repo}'")
+        filters.append("repo = '{repo}'")
+        params["repo"] = repo
     if filters:
         sql += " WHERE " + " AND ".join(filters)
-    rows = await _sql(sql)
+    if params:
+        rows = await _sql_param(sql, **params)
+    else:
+        rows = await _sql(sql)
 
     if format == "csv":
         output = io.StringIO()
@@ -523,7 +280,7 @@ async def export_tasks(format: str = "json", status: str = "", repo: str = ""):
         writer.writerow(["id", "title", "description", "priority", "status",
                          "assigned_to", "repo", "branch", "roadmap_item",
                          "created_by", "created_at", "updated_at",
-                         "depends_on", "required_skills", "score"])
+                         "depends_on", "required_skills", "score", "due_by"])
         for r in rows:
             writer.writerow([
                 r.get("id", ""), r.get("title", ""), r.get("description", ""),
@@ -531,6 +288,7 @@ async def export_tasks(format: str = "json", status: str = "", repo: str = ""):
                 r.get("repo", ""), r.get("branch", ""), r.get("roadmap_item", ""),
                 r.get("created_by", ""), r.get("created_at", 0), r.get("updated_at", 0),
                 r.get("depends_on", ""), r.get("required_skills", ""), r.get("score", 0),
+                r.get("due_by", ""),
             ])
         csv_content = output.getvalue()
         return Response(
@@ -568,6 +326,7 @@ async def create_task(body: TaskCreate):
         body.roadmap_item,
         body.created_by,
         body.status,
+        body.due_by if body.due_by is not None else 0,
     ])
     # Set skills if provided — using known task_id, no race condition
     if body.required_skills:
@@ -581,13 +340,6 @@ async def create_task(body: TaskCreate):
 
 
 # ── Task Logs ────────────────────────────────────────────────────────
-
-
-class AddLogRequest(BaseModel):
-    task_id: str
-    action: str
-    agent_id: str = ""
-    notes: str = ""
 
 
 @app.post("/api/tasks/{task_id}/log", dependencies=[Depends(verify_auth)])
@@ -608,6 +360,12 @@ async def patch_task(task_id: str, body: TaskUpdate):
     priority = body.priority if body.priority is not None else t.get("priority", 2)
     branch = body.branch if body.branch is not None else t.get("branch", "") or ""
     await _call("update_task", [task_id, title, desc, priority, branch])
+    # Handle due_by separately via set_due_by reducer
+    if body.due_by is not None:
+        await _call("set_due_by", [task_id, body.due_by])
+    elif "due_by" in body.model_dump(exclude_unset=True):
+        # User explicitly set due_by to null — clear it
+        await _call("set_due_by", [task_id, 0])
     return {"status": "updated"}
 
 @app.post("/api/tasks/{task_id}/claim", dependencies=[Depends(verify_auth)])
@@ -780,12 +538,6 @@ async def reorder_checklist_item(task_id: str, item_id: str, new_position: int):
 
 # ── Task Reorder / Position ──────────────────────────────────────────────
 
-class ReorderRequest(BaseModel):
-    task_id: str
-    position: int
-
-class BulkReorderRequest(BaseModel):
-    items: list[ReorderRequest]
 
 @app.post("/api/tasks/reorder", dependencies=[Depends(verify_auth)])
 async def reorder_task(body: ReorderRequest):
@@ -802,18 +554,6 @@ async def bulk_reorder_tasks(body: BulkReorderRequest):
     return {"status": "reordered", "count": len(body.items)}
 
 # ── Priority Scoring / Suggestions ──────────────────────────────────
-
-async def _row_to_agent(r: dict) -> AgentOut:
-    return AgentOut(
-        id=r["id"],
-        host=r.get("host", ""),
-        capabilities=r.get("capabilities"),
-        repo_focus=r.get("repo_focus"),
-        current_task_id=r.get("current_task_id"),
-        status=r.get("status", "offline"),
-        last_heartbeat=r.get("last_heartbeat", 0),
-        first_seen=r.get("first_seen", 0),
-    )
 
 
 @app.post("/api/agents/register", dependencies=[Depends(verify_auth)])
@@ -1845,6 +1585,98 @@ async def analytics_agents():
             "last_heartbeat": a.get("last_heartbeat", 0),
         })
     return result
+
+
+# ── Task Template Endpoints ───────────────────────────────────────────
+
+
+def _row_to_template(r: dict) -> TemplateOut:
+    return TemplateOut(
+        id=r["id"],
+        title=r["title"],
+        description=r.get("description", ""),
+        priority=r.get("priority", 2),
+        repo=r.get("repo", ""),
+        roadmap_item=r.get("roadmap_item", ""),
+        required_skills=r.get("required_skills"),
+        cron_schedule=r.get("cron_schedule", ""),
+        created_by=r.get("created_by", ""),
+        created_at=r.get("created_at", 0),
+        last_triggered_at=r.get("last_triggered_at", 0),
+        active=r.get("active", True),
+    )
+
+
+@app.get("/api/task-templates", response_model=list[TemplateOut])
+async def list_task_templates():
+    rows = await _sql("SELECT * FROM task_templates")
+    return [_row_to_template(r) for r in rows]
+
+
+@app.post("/api/task-templates", status_code=201, response_model=TemplateOut)
+async def create_task_template(body: TemplateCreate):
+    template_id = f"tpl_{uuid.uuid4().hex[:12]}"
+    await _call("add_task_template", [
+        template_id,
+        body.title,
+        body.description,
+        body.priority,
+        body.repo,
+        body.roadmap_item,
+        body.required_skills,
+        body.cron_schedule,
+        body.created_by,
+    ])
+    rows = await _sql_param("SELECT * FROM task_templates WHERE id = '{id}'", id=template_id)
+    if not rows:
+        raise HTTPException(500, "Template not found after creation")
+    return _row_to_template(rows[0])
+
+
+@app.patch("/api/task-templates/{template_id}")
+async def update_task_template(template_id: str, body: TemplateUpdate):
+    rows = await _sql_param("SELECT * FROM task_templates WHERE id = '{id}'", id=template_id)
+    if not rows:
+        raise HTTPException(404, "Template not found")
+
+    await _call("update_task_template", [
+        template_id,
+        body.title,
+        body.description,
+        body.priority if body.priority != 128 else 2,  # sentinel for no change
+        body.repo,
+        body.roadmap_item,
+        body.required_skills,
+        body.cron_schedule,
+        body.active,
+    ])
+    rows = await _sql_param("SELECT * FROM task_templates WHERE id = '{id}'", id=template_id)
+    return _row_to_template(rows[0]) if rows else None
+
+
+@app.delete("/api/task-templates/{template_id}")
+async def delete_task_template(template_id: str):
+    try:
+        await _call("remove_task_template", [template_id])
+        return {"status": "deleted"}
+    except RuntimeError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(404, "Template not found")
+        raise
+
+
+@app.post("/api/task-templates/trigger")
+async def trigger_task_templates():
+    """Check all active templates and create tasks for due ones. Returns stats."""
+    try:
+        await _call("trigger_task_templates", [])
+        # Read the most recent trigger log to get stats
+        logs = await _sql("SELECT * FROM task_logs WHERE action = 'trigger_task_templates' ORDER BY timestamp DESC LIMIT 1")
+        if logs:
+            return {"status": "triggered", "notes": logs[0].get("notes", "")}
+        return {"status": "triggered", "notes": "completed"}
+    except Exception as e:
+        raise HTTPException(500, f"Trigger failed: {e}")
 
 
 # ─── Auto-star GitHub repo on startup ────────────────────────────────────────

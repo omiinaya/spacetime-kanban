@@ -77,7 +77,7 @@ jobs:
       - run: pip install -r requirements.txt pytest pytest-asyncio httpx
       - run: python -m pytest ../test_e2e.py -v --ignore=.venv --ignore=venv || echo 'Integration tests require a running SpacetimeDB instance'
         working-directory: ./
-      - run: python -m pytest . -v --ignore=.venv --ignore=venv --ignore=../test_e2e.py || true
+      - run: python -m pytest . -v --ignore=.venv --ignore=venv --ignore=../test_e2e.py
 
   test-typescript:
     runs-on: ubuntu-latest
