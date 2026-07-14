@@ -59,11 +59,12 @@ export const Task = __t.object("Task", {
   requiredSkills: __t.option(__t.string()),
   score: __t.u32(),
   position: __t.option(__t.u32()),
-  failCount: __t.u32().name("fail_count"),
-  maxAttempts: __t.u32().name("max_attempts"),
-  failReason: __t.option(__t.string()).name("fail_reason"),
-  subtaskOf: __t.option(__t.string()).name("subtask_of"),
+  failCount: __t.u32(),
+  maxAttempts: __t.u32(),
+  failReason: __t.option(__t.string()),
+  subtaskOf: __t.option(__t.string()),
   subtasks: __t.option(__t.string()),
+  dueBy: __t.option(__t.u64()),
 });
 export type Task = __Infer<typeof Task>;
 
