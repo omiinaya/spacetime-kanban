@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react'
 import {
   Play, CheckCircle2, Ban, RotateCcw, Trash2, Link, Cpu,
-  Github, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  ArrowUpDown, ArrowUp, ArrowDown, CheckSquare, Square, Tag,
+  Github, CheckSquare, Square, Tag, Loader2,
+  ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react'
 import type { KanbanLabel, IssueLink } from '../api'
 import type { Task } from '../hooks/useRealtimeTasks'
-import { usePagination } from '../hooks/useLazyLoad'
+import { useLazyLoad } from '../hooks/useLazyLoad'
 import { TableRowSkeleton } from './Skeleton'
 
 interface ListViewProps {
@@ -100,9 +100,9 @@ export default function ListView({
     return copy
   }, [tasks, sortField, sortDir])
 
-  const pagination = usePagination(sorted.length, 30)
+  const { sentinelRef, count, hasMore } = useLazyLoad(sorted.length, 30, 20)
 
-  const pageTasks = sorted.slice(pagination.offset, pagination.offset + pagination.limit)
+  const displayedTasks = sorted.slice(0, count)
 
   return (
     <div className="space-y-3">
@@ -177,14 +177,14 @@ export default function ListView({
             {loading && tasks.length === 0 ? (
               // Skeleton rows during initial load
               Array.from({ length: 8 }).map((_, i) => <TableRowSkeleton key={i} />)
-            ) : pageTasks.length === 0 ? (
+            ) : displayedTasks.length === 0 ? (
               <tr>
                 <td colSpan={selectMode ? 9 : 8} className="py-8 text-center text-sm text-[var(--color-muted)]">
                   No tasks match the current filters
                 </td>
               </tr>
             ) : (
-              pageTasks.map((task) => (
+              displayedTasks.map((task) => (
                 <tr
                   key={task.id}
                   onClick={() => onClick(task.id)}
@@ -348,50 +348,21 @@ export default function ListView({
         </table>
       </div>
 
-      {/* Pagination bar */}
+      {/* Infinite scroll sentinel */}
       {!loading && sorted.length > 0 && (
-        <div className="flex items-center justify-between text-xs text-[var(--color-muted)]">
-          <span>
-            Showing {pagination.showingFrom}–{pagination.showingTo} of {sorted.length}
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => pagination.goTo(0)}
-              disabled={!pagination.hasPrev}
-              className="p-1 rounded hover:bg-white/10 transition-colors disabled:opacity-30"
-              title="First page"
-            >
-              <ChevronsLeft className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={pagination.goPrev}
-              disabled={!pagination.hasPrev}
-              className="p-1 rounded hover:bg-white/10 transition-colors disabled:opacity-30"
-              title="Previous page"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <span className="px-2 py-0.5 rounded bg-[var(--color-card)] border border-[var(--color-border)] font-mono text-[11px] tabular-nums">
-              {pagination.page + 1} / {pagination.totalPages}
-            </span>
-            <button
-              onClick={pagination.goNext}
-              disabled={!pagination.hasNext}
-              className="p-1 rounded hover:bg-white/10 transition-colors disabled:opacity-30"
-              title="Next page"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => pagination.goTo(pagination.totalPages - 1)}
-              disabled={!pagination.hasNext}
-              className="p-1 rounded hover:bg-white/10 transition-colors disabled:opacity-30"
-              title="Last page"
-            >
-              <ChevronsRight className="w-3.5 h-3.5" />
-            </button>
+        <>
+          <div className="text-xs text-[var(--color-muted)] px-1">
+            Showing {displayedTasks.length} of {sorted.length} tasks
           </div>
-        </div>
+          {hasMore && (
+            <div
+              ref={sentinelRef}
+              className="flex items-center justify-center py-4 text-[var(--color-muted)]"
+            >
+              <Loader2 className="w-4 h-4 animate-spin" />
+            </div>
+          )}
+        </>
       )}
     </div>
   )

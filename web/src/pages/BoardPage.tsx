@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
   Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
@@ -18,11 +18,10 @@ interface SavedFilterView {
 
 import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel, type IssueLink, type TaskComment, type ChecklistItem } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
-import { useLazyLoad } from '../hooks/useLazyLoad'
-import { KanbanBoardSkeleton, ListViewSkeleton, CardSkeleton, CompactCardSkeleton } from '../components/Skeleton'
+import KanbanColumn from '../components/KanbanColumn'
+import { KanbanBoardSkeleton, ListViewSkeleton } from '../components/Skeleton'
 import ListView from '../components/ListView'
 import DependencyGraph from './DependencyGraph'
-import { Link as RouterLink } from 'react-router-dom'
 import { PRIORITY_LABELS, PRIORITY_COLORS, STATUS_COLUMNS, STATUS_LABELS, type TaskTemplate, BUILT_IN_TEMPLATES } from '../components/constants'
 import { CreateTaskDialog } from '../components/CreateTaskDialog'
 import { TaskDetailDialog } from '../components/TaskDetailDialog'
@@ -50,10 +49,30 @@ export default function BoardPage() {
   const [batchProcessing, setBatchProcessing] = useState(false)
   const [showLabelPicker, setShowLabelPicker] = useState(false)
   const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set())
-  const [quickAddStatus, setQuickAddStatus] = useState<string | null>(null)
-  const [quickAddTitle, setQuickAddTitle] = useState('')
-  const quickAddRef = useRef<HTMLInputElement>(null)
+  // quick-add state moved to KanbanColumn component
   const [compactMode, setCompactMode] = useState(false)
+
+  // Column collapse/expand state (stored per-column key in localStorage)
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('kanban_collapsed_columns') || '[]')
+      return new Set(stored)
+    } catch { return new Set() }
+  })
+
+  // Column ordering state (stored in localStorage)
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('kanban_column_order') || 'null')
+      if (Array.isArray(stored) && stored.length === STATUS_COLUMNS.length &&
+          stored.every((s: string) => STATUS_COLUMNS.includes(s as any)))
+        return stored
+    } catch {}
+    return [...STATUS_COLUMNS]
+  })
+
+  // Column drag-reorder state
+  const [draggedColumnIdx, setDraggedColumnIdx] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<'board' | 'list'>('list')
   const [showFilters, setShowFilters] = useState(false)
   const [filterPriorities, setFilterPriorities] = useState<Set<number>>(new Set())
@@ -75,6 +94,16 @@ export default function BoardPage() {
   useEffect(() => {
     localStorage.setItem('kanban_saved_views', JSON.stringify(savedViews))
   }, [savedViews])
+
+  // Persist collapsed columns to localStorage
+  useEffect(() => {
+    localStorage.setItem('kanban_collapsed_columns', JSON.stringify([...collapsedColumns]))
+  }, [collapsedColumns])
+
+  // Persist column order to localStorage
+  useEffect(() => {
+    localStorage.setItem('kanban_column_order', JSON.stringify(columnOrder))
+  }, [columnOrder])
 
   const saveCurrentView = () => {
     const name = saveViewName.trim()
@@ -304,21 +333,18 @@ export default function BoardPage() {
     setBatchProcessing(false)
   }
 
-  const handleQuickAdd = async (status: string) => {
-    const title = quickAddTitle.trim()
-    if (!title) { setQuickAddStatus(null); return }
+  const handleQuickAdd = async (status: string, title: string) => {
+    const trimmed = title.trim()
+    if (!trimmed) return
     try {
       if (status === 'in_progress') {
-        // Create as available, then claim
-        const result = await api.tasks.create({ title })
+        const result = await api.tasks.create({ title: trimmed })
         if (result.id) {
           await api.tasks.claim(result.id, 'web-user')
         }
       } else {
-        await api.tasks.create({ title, status })
+        await api.tasks.create({ title: trimmed, status })
       }
-      setQuickAddStatus(null)
-      setQuickAddTitle('')
     } catch (e: any) {
       alert(`Create failed: ${e.message}`)
     }
@@ -351,6 +377,37 @@ export default function BoardPage() {
     } catch (e: any) {
       alert(`Set skills failed: ${e.message}`)
     }
+  }
+
+  // Toggle column collapse/expand
+  const toggleCollapse = (status: string) => {
+    setCollapsedColumns(prev => {
+      const next = new Set(prev)
+      if (next.has(status)) next.delete(status)
+      else next.add(status)
+      return next
+    })
+  }
+
+  // Column drag reorder handlers
+  const handleColumnDragStart = (idx: number) => {
+    setDraggedColumnIdx(idx)
+  }
+
+  const handleColumnDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault()
+    if (draggedColumnIdx === null || draggedColumnIdx === idx) return
+    setColumnOrder(prev => {
+      const next = [...prev]
+      const [removed] = next.splice(draggedColumnIdx, 1)
+      next.splice(idx, 0, removed)
+      return next
+    })
+    setDraggedColumnIdx(idx)
+  }
+
+  const handleColumnDragEnd = () => {
+    setDraggedColumnIdx(null)
   }
 
   // Load suggestions and agents periodically — pause when tab hidden
@@ -438,12 +495,6 @@ export default function BoardPage() {
     return () => clearTimeout(timer)
   }, [toasts])
 
-  // Auto-focus quick-add input
-  useEffect(() => {
-    if (quickAddStatus && quickAddRef.current) {
-      quickAddRef.current.focus()
-    }
-  }, [quickAddStatus])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -542,219 +593,6 @@ export default function BoardPage() {
       <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400/80 font-medium truncate max-w-[180px]" title={depId}>
         ⬆ {depTitle || depId}
       </span>
-    )
-  }
-
-  const renderTaskCard = (task: Task) => {
-    const priorityColor = ({0: 'border-l-red-500', 1: 'border-l-orange-400', 2: 'border-l-blue-400', 3: 'border-l-slate-400'} as Record<number, string>)[task.priority] || 'border-l-slate-400'
-
-    if (compactMode) {
-      // Compact card: minimal info, colored left border, title only
-      return (
-        <div key={task.id}
-          draggable
-          onDragStart={() => handleDragStart(task.id)}
-          onDragEnd={handleDragEnd}
-          onDragOver={(e) => { e.preventDefault(); setDropOnTaskId(task.id) }}
-          onDragLeave={() => setDropOnTaskId(prev => prev === task.id ? null : prev)}
-          onDrop={() => handleDropOnTask(task.id)}
-          onClick={() => setDetailTaskId(task.id)}
-          className={`bg-[var(--color-card)] rounded border-l-4 border border-[var(--color-border)] py-1.5 px-2 cursor-pointer hover:border-[var(--color-ring)] transition-colors flex items-center gap-2 ${
-            priorityColor
-          } ${
-            draggedTaskId === task.id ? 'opacity-50' : ''
-          } ${
-            dropOnTaskId === task.id ? 'border-t-2 border-t-[var(--color-primary)]' : ''
-          }`}
-        >
-          {selectMode && (
-            <button
-              onClick={(e) => { e.stopPropagation(); toggleSelect(task.id) }}
-              className="flex-shrink-0 text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
-            >
-              {selectedIds.has(task.id)
-                ? <CheckSquare className="w-3.5 h-3.5 text-[var(--color-primary)]" />
-                : <Square className="w-3.5 h-3.5" />
-              }
-            </button>
-          )}
-          <div className="min-w-0 flex-1 flex items-center gap-2">
-            <span className="text-sm font-medium truncate">{task.title}</span>
-            {task.assignedTo && (
-              <span className="text-[10px] text-[var(--color-muted)] flex-shrink-0">@{task.assignedTo}</span>
-            )}
-            {task.repo && (
-              <span className="text-[10px] px-1 py-0.5 rounded bg-white/8 text-[var(--color-muted)] font-medium flex-shrink-0">{task.repo}</span>
-            )}
-            {renderDependencyBadge(task.dependsOn)}
-            {/* Label dots on compact cards */}
-            {(taskLabelMap.get(task.id) || []).map(lbl => (
-              <span key={lbl.id} className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: lbl.color }} title={lbl.name} />
-            ))}
-            {/* Issue badge on compact card */}
-            {issueLinks[task.id] && (() => {
-              const link = issueLinks[task.id]
-              const closed = link.html_url?.includes('closed') || link.status === 'closed'
-              return (
-                <span className={`text-[10px] px-1 py-0.5 rounded font-medium flex-shrink-0 ${closed ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                  #{link.issue_number}
-                </span>
-              )
-            })()}
-          </div>
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            {task.status === 'available' && (
-              <button onClick={(e) => { e.stopPropagation(); handleClaim(task.id, 'web-user') }}
-                className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors">Claim</button>
-            )}
-            {task.status === 'in_progress' && (
-              <>
-                <button onClick={(e) => { e.stopPropagation(); handleComplete(task.id) }}
-                  className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors">Done</button>
-                <button onClick={(e) => { e.stopPropagation(); handleBlock(task.id) }}
-                  className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors">Block</button>
-              </>
-            )}
-            {task.status === 'blocked' && (
-              <button onClick={(e) => { e.stopPropagation(); handleUnclaim(task.id) }}
-                className="text-xs px-1.5 py-0.5 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors">Release</button>
-            )}
-            {task.status === 'done' && (
-              <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id) }}
-                className="text-xs px-1.5 py-0.5 rounded text-red-400 hover:bg-red-500/20 transition-colors">Del</button>
-            )}
-          </div>
-        </div>
-      )
-    }
-
-    // Detailed card (default)
-    return (
-    <div key={task.id}
-      draggable
-      onDragStart={() => handleDragStart(task.id)}
-      onDragEnd={handleDragEnd}
-      onDragOver={(e) => { e.preventDefault(); setDropOnTaskId(task.id) }}
-      onDragLeave={() => setDropOnTaskId(prev => prev === task.id ? null : prev)}
-      onDrop={() => handleDropOnTask(task.id)}
-      onClick={() => setDetailTaskId(task.id)}
-      className={`bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] p-3 space-y-2 cursor-pointer hover:border-[var(--color-ring)] transition-colors ${
-        draggedTaskId === task.id ? 'opacity-50 ring-2 ring-[var(--color-primary)]' : ''
-      } ${
-        dropOnTaskId === task.id ? 'border-t-2 border-t-[var(--color-primary)]' : ''
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          {selectMode && (
-            <button
-              onClick={(e) => { e.stopPropagation(); toggleSelect(task.id) }}
-              className="flex-shrink-0 text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
-            >
-              {selectedIds.has(task.id)
-                ? <CheckSquare className="w-4 h-4 text-[var(--color-primary)]" />
-                : <Square className="w-4 h-4" />
-              }
-            </button>
-          )}
-          <span className={`text-xs px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${PRIORITY_COLORS[task.priority] || ''}`}>
-            {PRIORITY_LABELS[task.priority] || task.priority}
-          </span>
-        </div>
-        {task.assignedTo && (
-          <span className="text-xs text-[var(--color-muted)] truncate max-w-[100px]">
-            {task.assignedTo}
-          </span>
-        )}
-      </div>
-
-      <p className="text-sm font-medium leading-snug">{task.title}</p>
-
-      {task.description && (
-        <p className="text-xs text-[var(--color-muted-foreground)] line-clamp-2">{task.description}</p>
-      )}
-
-      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-        {task.repo && (
-          <span className="px-1.5 py-0.5 rounded bg-white/8 text-[var(--color-muted)] font-medium">
-            {task.repo}
-          </span>
-        )}
-        {task.branch && <span className="text-blue-400 truncate max-w-[120px]">:{task.branch}</span>}
-        {task.roadmapItem && <span className="text-purple-400/70 truncate">{task.roadmapItem}</span>}
-        {renderDependencyBadge(task.dependsOn)}
-        {task.requiredSkills && (
-          <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400/80 font-medium truncate max-w-[140px]" title={`Skills: ${task.requiredSkills}`}>
-            <Cpu className="w-3 h-3 inline mr-0.5" />{task.requiredSkills}
-          </span>
-        )}
-        {/* Issue badge on detailed card */}
-        {issueLinks[task.id] && (() => {
-          const link = issueLinks[task.id]
-          const closed = link.html_url?.includes('closed') || link.status === 'closed'
-          return (
-            <a href={link.html_url} target="_blank" rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium hover:opacity-80 transition-opacity ${
-                closed ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'
-              }`}
-            >
-              <Github className="w-2.5 h-2.5" /> {link.repo.split('/').pop()}#{link.issue_number}
-            </a>
-          )
-        })()}
-        {/* Label badges */}
-        {(taskLabelMap.get(task.id) || []).map(lbl => (
-          <span key={lbl.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-[100px]"
-            style={{ backgroundColor: lbl.color + '20', color: lbl.color, border: `1px solid ${lbl.color}40` }}>
-            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: lbl.color }} />
-            {lbl.name}
-          </span>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-1 pt-1 border-t border-[var(--color-border)]">
-        {task.status === 'available' && (
-          <>
-            <button onClick={() => handleClaim(task.id, 'web-user')}
-              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
-            ><Play className="w-3 h-3" /> Claim</button>
-            <button onClick={() => handleSetDependency(task.id)}
-              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-amber-500/15 text-amber-400 hover:bg-amber-500/30 transition-colors"
-            ><Link className="w-3 h-3" /> Dep</button>
-            <button onClick={() => handleSetSkills(task.id)}
-              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
-            ><Cpu className="w-3 h-3" /> Skills</button>
-            <button onClick={() => handleDelete(task.id)}
-              className="text-xs px-2 py-1 rounded text-red-400 hover:bg-red-500/20 transition-colors ml-auto"
-            ><Trash2 className="w-3 h-3" /></button>
-          </>
-        )}
-        {task.status === 'in_progress' && (
-          <>
-            <button onClick={() => handleComplete(task.id)}
-              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
-            ><CheckCircle2 className="w-3 h-3" /> Done</button>
-            <button onClick={() => handleBlock(task.id)}
-              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors"
-            ><Ban className="w-3 h-3" /> Block</button>
-            <button onClick={() => handleUnclaim(task.id)}
-              className="flex items-center gap-1 text-xs px-2 py-1 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors ml-auto"
-            ><RotateCcw className="w-3 h-3" /></button>
-          </>
-        )}
-        {task.status === 'blocked' && (
-          <button onClick={() => handleUnclaim(task.id)}
-            className="flex items-center gap-1 text-xs px-2 py-1 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors"
-          ><RotateCcw className="w-3 h-3" /> Release</button>
-        )}
-        {task.status === 'done' && (
-          <button onClick={() => handleDelete(task.id)}
-            className="flex items-center gap-1 text-xs px-2 py-1 rounded text-red-400 hover:bg-red-500/20 transition-colors ml-auto"
-          ><Trash2 className="w-3 h-3" /> Delete</button>
-        )}
-      </div>
-    </div>
     )
   }
 
@@ -1234,86 +1072,52 @@ export default function BoardPage() {
         />
       )}
 
-      {/* Kanban Columns — single for mobile, 2 for tablet, 4 for desktop */}
+      {/* Kanban Columns — each column is its own component for stable hooks */}
       {viewMode === 'board' && (
-        <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {STATUS_COLUMNS.map((status) => {
+        <div className="flex gap-4 h-full overflow-x-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+          {columnOrder.map((status, idx) => {
             const colTasks = filtered.filter((t) => t.status === status)
-            const isOver = dragOverColumn === status && draggedTaskId !== null
-            const { sentinelRef, count, hasMore } = useLazyLoad(colTasks.length, 15, 12)
-            const shownTasks = colTasks.slice(0, count)
+            const isCollapsed = collapsedColumns.has(status)
             return (
-              <div key={status} className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-                    {STATUS_LABELS[status]}
-                  </h2>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setQuickAddStatus(quickAddStatus === status ? null : status)}
-                      className="p-0.5 rounded hover:bg-white/10 text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
-                      title={`Add task to ${STATUS_LABELS[status]}`}
-                    ><Plus className="w-3.5 h-3.5" /></button>
-                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--color-card)] text-[var(--color-muted)]">
-                      {shownTasks.length}/{colTasks.length}
-                    </span>
-                  </div>
-                </div>
-                {quickAddStatus === status && (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      ref={quickAddRef}
-                      value={quickAddTitle}
-                      onChange={e => setQuickAddTitle(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') handleQuickAdd(status)
-                        if (e.key === 'Escape') { setQuickAddStatus(null); setQuickAddTitle('') }
-                      }}
-                      placeholder="Task title..."
-                      className="flex-1 px-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-background)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-primary)]"
-                    />
-                    <button
-                      onClick={() => handleQuickAdd(status)}
-                      disabled={!quickAddTitle.trim()}
-                      className="px-2 py-1 text-xs rounded bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
-                    >Add</button>
-                  </div>
-                )}
-                <div
-                  className={`space-y-2 min-h-[120px] rounded-lg transition-colors ${
-                    isOver ? 'bg-white/5 ring-2 ring-[var(--color-primary)] border-2 border-dashed border-[var(--color-primary)]' : ''
-                  }`}
-                  onDragOver={(e) => { e.preventDefault(); setDragOverColumn(status) }}
-                  onDragEnter={(e) => { e.preventDefault(); setDragOverColumn(status) }}
-                  onDragLeave={() => setDragOverColumn(null)}
-                  onDrop={() => handleDropOnColumn(status)}
-                >
-                  {shownTasks.map(renderTaskCard)}
-                  {shownTasks.length === 0 && colTasks.length === 0 && (
-                    <div className={`text-center py-6 text-xs border border-dashed rounded-lg transition-colors ${
-                      isOver
-                        ? 'text-[var(--color-primary)] border-[var(--color-primary)] bg-white/5'
-                        : 'text-[var(--color-muted)] border-[var(--color-border)]'
-                    }`}>
-                      {isOver ? 'Drop here' : 'Empty'}
-                    </div>
-                  )}
-                  {/* Lazy loading sentinel — triggers infinite scroll */}
-                  {hasMore && (
-                    <>
-                      <div ref={sentinelRef} className="h-4" />
-                      {compactMode
-                        ? Array.from({ length: 3 }).map((_, i) => <CompactCardSkeleton key={i} />)
-                        : Array.from({ length: 2 }).map((_, i) => <CardSkeleton key={i} />)
-                      }
-                    </>
-                  )}
-                  {!hasMore && shownTasks.length > 0 && colTasks.length > 15 && (
-                    <div className="text-center py-2 text-[10px] text-[var(--color-muted)]">
-                      All {colTasks.length} tasks loaded
-                    </div>
-                  )}
-                </div>
+              <div
+                key={status}
+                draggable
+                onDragStart={() => handleColumnDragStart(idx)}
+                onDragOver={(e) => handleColumnDragOver(e, idx)}
+                onDragEnd={handleColumnDragEnd}
+                className={`${isCollapsed ? 'flex-[0_0_60px] min-w-[60px] max-w-[60px]' : 'flex-[1_1_0] min-w-0'} ${draggedColumnIdx === idx ? 'opacity-50' : ''}`}
+              >
+                <KanbanColumn
+                  key={status}
+                  status={status}
+                  tasks={colTasks}
+                  compactMode={compactMode}
+                  selectMode={selectMode}
+                  selectedIds={selectedIds}
+                  taskLabelMap={taskLabelMap}
+                  issueLinks={issueLinks}
+                  draggedTaskId={draggedTaskId}
+                  dragOverColumn={dragOverColumn}
+                  dropOnTaskId={dropOnTaskId}
+                  collapsed={isCollapsed}
+                  onToggleCollapse={toggleCollapse}
+                  onToggleSelect={toggleSelect}
+                  onClaim={handleClaim}
+                  onComplete={handleComplete}
+                  onBlock={handleBlock}
+                  onUnclaim={handleUnclaim}
+                  onDelete={handleDelete}
+                  onClick={(id) => setDetailTaskId(id)}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onDropOnColumn={handleDropOnColumn}
+                  onDropOnTask={handleDropOnTask}
+                  onSetDependency={handleSetDependency}
+                  onSetSkills={handleSetSkills}
+                  onQuickAdd={handleQuickAdd}
+                  setDragOverColumn={setDragOverColumn}
+                  setDropOnTaskId={setDropOnTaskId}
+                />
               </div>
             )
           })}
@@ -1347,35 +1151,36 @@ export default function BoardPage() {
         }
       })()}
 
-      {/* Mobile: single column for selected status — also lazy loaded */}
-      <div className="sm:hidden space-y-2">
-        {(() => {
-          const mobileTasks = filtered.filter(t => t.status === mobileStatusTab)
-          const { sentinelRef, count, hasMore } = useLazyLoad(mobileTasks.length, 10, 8)
-          const shownMobile = mobileTasks.slice(0, count)
-          return (
-            <>
-              {shownMobile.map(renderTaskCard)}
-              {shownMobile.length === 0 && (
-                <div className="text-center py-12 text-sm text-[var(--color-muted)]">
-                  No {STATUS_LABELS[mobileStatusTab].toLowerCase()} tasks
-                  {repoFilter ? ` in ${repoFilter}` : ''}
-                </div>
-              )}
-              {hasMore && (
-                <>
-                  <div ref={sentinelRef} className="h-4" />
-                  {Array.from({ length: 2 }).map((_, i) => <CompactCardSkeleton key={i} />)}
-                </>
-              )}
-              {!hasMore && shownMobile.length > 0 && mobileTasks.length > 10 && (
-                <div className="text-center py-2 text-[10px] text-[var(--color-muted)]">
-                  All {mobileTasks.length} tasks loaded
-                </div>
-              )}
-            </>
-          )
-        })()}
+      {/* Mobile: single column for selected status using KanbanColumn (proper component = stable hooks) */}
+      <div className="sm:hidden">
+        <KanbanColumn
+          status={mobileStatusTab}
+          tasks={filtered.filter(t => t.status === mobileStatusTab)}
+          compactMode={compactMode}
+          selectMode={selectMode}
+          selectedIds={selectedIds}
+          taskLabelMap={taskLabelMap}
+          issueLinks={issueLinks}
+          draggedTaskId={draggedTaskId}
+          dragOverColumn={dragOverColumn}
+          dropOnTaskId={dropOnTaskId}
+          onToggleSelect={toggleSelect}
+          onClaim={handleClaim}
+          onComplete={handleComplete}
+          onBlock={handleBlock}
+          onUnclaim={handleUnclaim}
+          onDelete={handleDelete}
+          onClick={(id) => setDetailTaskId(id)}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDropOnColumn={handleDropOnColumn}
+          onDropOnTask={handleDropOnTask}
+          onSetDependency={handleSetDependency}
+          onSetSkills={handleSetSkills}
+          onQuickAdd={handleQuickAdd}
+          setDragOverColumn={setDragOverColumn}
+          setDropOnTaskId={setDropOnTaskId}
+        />
       </div>
 
       {/* Dependency Graph Overlay */}

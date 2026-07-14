@@ -15,6 +15,8 @@ interface Overview {
 interface ThroughputPoint { date: string; completed: number }
 interface CycleTime { repo: string; count: number; avg_hours: number; min_hours: number; max_hours: number }
 interface AgentStat { id: string; status: string; completed: number; blocked: number; capabilities: string | null; repo_focus: string | null; last_heartbeat: number }
+interface BurndownDay { date: string; open: number; completed: number; ideal: number }
+interface BurndownData { days: BurndownDay[]; total_open_start: number; total_completed: number; total_remaining: number; days_total: number }
 
 const STATUS_COLORS: Record<string, string> = {
   available: '#3b82f6',
@@ -28,22 +30,25 @@ export default function AnalyticsPage() {
   const [throughput, setThroughput] = useState<ThroughputPoint[]>([])
   const [cycleTimes, setCycleTimes] = useState<CycleTime[]>([])
   const [agentStats, setAgentStats] = useState<AgentStat[]>([])
+  const [burndown, setBurndown] = useState<BurndownData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [ov, tp, ct, as] = await Promise.all([
+        const [ov, tp, ct, as, bd] = await Promise.all([
           api.analytics.overview(),
           api.analytics.throughput(14),
           api.analytics.cycleTimes(),
           api.analytics.agents(),
+          api.analytics.burndown(30),
         ])
         setOverview(ov)
         setThroughput(tp)
         setCycleTimes(ct)
         setAgentStats(as)
+        setBurndown(bd)
       } catch (e: any) {
         setError(e.message)
       } finally {
@@ -175,6 +180,76 @@ export default function AnalyticsPage() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Burndown SVG chart */}
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4 space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">Burndown (last 30 days)</h3>
+        {!burndown || burndown.days.length === 0 ? (
+          <p className="text-xs text-[var(--color-muted)]">No data yet.</p>
+        ) : (() => {
+          const W = 600, H = 300, ML = 55, MR = 20, MT = 25, MB = 45
+          const PW = W - ML - MR, PH = H - MT - MB
+          const days = burndown.days
+          const maxVal = Math.max(...days.map(d => d.open), burndown.total_open_start, 1)
+          const xScale = (i: number) => ML + (i / Math.max(days.length - 1, 1)) * PW
+          const yScale = (v: number) => MT + PH - (v / maxVal) * PH
+
+          // Compute cumulative completed
+          let cum = 0
+          const cumCompleted = days.map(d => { cum += d.completed; return cum })
+
+          // Build SVG path strings
+          const openPath = days.map((d, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(d.open).toFixed(1)}`).join(' ')
+          const completedPath = days.map((d, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(cumCompleted[i]).toFixed(1)}`).join(' ')
+          const idealPath = days.map((d, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(d.ideal).toFixed(1)}`).join(' ')
+
+          // Y-axis ticks (5 ticks)
+          const yTicks = Array.from({ length: 5 }, (_, i) => Math.round((maxVal / 4) * i))
+
+          // X-axis labels — show ~6 labels evenly spaced
+          const xLabelStep = Math.max(1, Math.floor(days.length / 6))
+          const xLabels = days.filter((_, i) => i % xLabelStep === 0 || i === days.length - 1)
+
+          return (
+            <div className="overflow-x-auto">
+              <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[600px] h-auto" xmlns="http://www.w3.org/2000/svg">
+                {/* Grid lines (horizontal) */}
+                {yTicks.map(v => (
+                  <line key={v} x1={ML} y1={yScale(v)} x2={ML + PW} y2={yScale(v)} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+                ))}
+                {/* Y-axis */}
+                <line x1={ML} y1={MT} x2={ML} y2={MT + PH} stroke="rgba(255,255,255,0.15)" strokeWidth={1} />
+                {yTicks.map(v => (
+                  <text key={v} x={ML - 8} y={yScale(v) + 4} textAnchor="end" fill="rgba(255,255,255,0.4)" fontSize={10}>
+                    {v}
+                  </text>
+                ))}
+                {/* X-axis */}
+                <line x1={ML} y1={MT + PH} x2={ML + PW} y2={MT + PH} stroke="rgba(255,255,255,0.15)" strokeWidth={1} />
+                {xLabels.map((d, i) => (
+                  <text key={i} x={xScale(days.indexOf(d))} y={MT + PH + 18} textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize={9}>
+                    {d.date.slice(5)}
+                  </text>
+                ))}
+                {/* Ideal line (dashed gray) */}
+                <path d={idealPath} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5,4" />
+                {/* Open line (blue) */}
+                <path d={openPath} fill="none" stroke="#3b82f6" strokeWidth={2} />
+                {/* Completed line (green) */}
+                <path d={completedPath} fill="none" stroke="#22c55e" strokeWidth={2} />
+                {/* Legend */}
+                <rect x={ML + 8} y={MT - 18} rx={4} ry={4} fill="rgba(0,0,0,0.35)" width={250} height={16} />
+                <line x1={ML + 14} y1={MT - 10} x2={ML + 24} y2={MT - 10} stroke="#3b82f6" strokeWidth={2} />
+                <text x={ML + 28} y={MT - 6} fill="#3b82f6" fontSize={9}>Open</text>
+                <line x1={ML + 76} y1={MT - 10} x2={ML + 86} y2={MT - 10} stroke="#22c55e" strokeWidth={2} />
+                <text x={ML + 90} y={MT - 6} fill="#22c55e" fontSize={9}>Completed</text>
+                <line x1={ML + 164} y1={MT - 10} x2={ML + 174} y2={MT - 10} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="3,3" />
+                <text x={ML + 178} y={MT - 6} fill="#94a3b8" fontSize={9}>Ideal</text>
+              </svg>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Cycle times + Agent stats */}

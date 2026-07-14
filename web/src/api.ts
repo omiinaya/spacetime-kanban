@@ -15,6 +15,7 @@ export interface Task {
   required_skills: string | null
   score: number
   position: number | null
+  due_by: number | null
 }
 
 export interface LogEntry {
@@ -197,9 +198,9 @@ export const api = {
       return apiGet<Task[]>(`/tasks${q ? `?${q}` : ''}`)
     },
     get: (id: string) => apiGet<Task>(`/tasks/${id}`),
-    create: (body: { title: string; description?: string; priority?: number; repo?: string; roadmap_item?: string; required_skills?: string; status?: string }) =>
+    create: (body: { title: string; description?: string; priority?: number; repo?: string; roadmap_item?: string; required_skills?: string; status?: string; due_by?: number | null }) =>
       apiPost<Task>('/tasks', body),
-    update: (id: string, body: { title?: string; description?: string; priority?: number; branch?: string }) =>
+    update: (id: string, body: { title?: string; description?: string; priority?: number; branch?: string; due_by?: number | null }) =>
       apiPatch<Task>(`/tasks/${id}`, body),
     claim: (id: string, agent_id: string) =>
       apiPost<{ status: string; task_id: string; assigned_to: string }>(`/tasks/${id}/claim`, { agent_id }),
@@ -287,6 +288,13 @@ export const api = {
     throughput: (days?: number) => apiGet<{ date: string; completed: number }[]>(`/analytics/throughput${days ? `?days=${days}` : ''}`),
     cycleTimes: () => apiGet<{ repo: string; count: number; avg_hours: number; min_hours: number; max_hours: number }[]>('/analytics/cycle-times'),
     agents: () => apiGet<{ id: string; status: string; completed: number; blocked: number; capabilities: string | null; repo_focus: string | null; last_heartbeat: number }[]>('/analytics/agents'),
+    burndown: (days?: number) => apiGet<{
+      days: { date: string; open: number; completed: number; ideal: number }[]
+      total_open_start: number
+      total_completed: number
+      total_remaining: number
+      days_total: number
+    }>(`/analytics/burndown${days ? `?days=${days}` : ''}`),
   },
   issues: {
     list: (repo?: string) => {

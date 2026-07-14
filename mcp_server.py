@@ -8,6 +8,7 @@ Transport: stdio (for Hermes native MCP client).
 """
 
 import json
+import os
 import sys
 import urllib.request
 import urllib.error
@@ -16,24 +17,32 @@ from urllib.parse import quote, urljoin
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 
-API_BASE = "http://localhost:8727"
+API_BASE = os.environ.get("KANBAN_API", "http://localhost:8728")
 app = Server("spacetimedb-kanban")
 
 
+class KanbanAPIError(Exception):
+    """Raised when the kanban API returns an HTTP error or is unreachable."""
+    def __init__(self, message: str, status_code: int = 0):
+        self.status_code = status_code
+        super().__init__(message)
+
+
 def api_get(path: str) -> list | dict:
-    """GET from the kanban API."""
+    """GET from the kanban API. Raises KanbanAPIError on failure."""
     url = urljoin(API_BASE, quote(path, safe='/:?=&'))
     try:
         resp = urllib.request.urlopen(url, timeout=15)
         return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
-        return {"error": f"HTTP {e.code}: {e.read().decode()[:200]}"}
+        body = e.read().decode()[:200]
+        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code)
     except Exception as e:
-        return {"error": str(e)}
+        raise KanbanAPIError(str(e))
 
 
 def api_post(path: str, body: dict | None = None) -> dict:
-    """POST to the kanban API."""
+    """POST to the kanban API. Raises KanbanAPIError on failure."""
     url = urljoin(API_BASE, quote(path, safe='/:?=&'))
     data = json.dumps(body or {}).encode() if body else None
     req = urllib.request.Request(url, data=data, method="POST")
@@ -43,13 +52,14 @@ def api_post(path: str, body: dict | None = None) -> dict:
         text = resp.read().decode()
         return json.loads(text) if text else {"status": "ok"}
     except urllib.error.HTTPError as e:
-        return {"error": f"HTTP {e.code}: {e.read().decode()[:200]}"}
+        body = e.read().decode()[:200]
+        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code)
     except Exception as e:
-        return {"error": str(e)}
+        raise KanbanAPIError(str(e))
 
 
 def api_patch(path: str, body: dict) -> dict:
-    """PATCH the kanban API."""
+    """PATCH the kanban API. Raises KanbanAPIError on failure."""
     url = urljoin(API_BASE, quote(path, safe='/:?=&'))
     data = json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, method="PATCH")
@@ -58,13 +68,14 @@ def api_patch(path: str, body: dict) -> dict:
         resp = urllib.request.urlopen(req, timeout=15)
         return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
-        return {"error": f"HTTP {e.code}: {e.read().decode()[:200]}"}
+        body = e.read().decode()[:200]
+        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code)
     except Exception as e:
-        return {"error": str(e)}
+        raise KanbanAPIError(str(e))
 
 
 def api_put(path: str, body: dict) -> dict:
-    """PUT to the kanban API."""
+    """PUT to the kanban API. Raises KanbanAPIError on failure."""
     url = urljoin(API_BASE, quote(path, safe='/:?=&'))
     data = json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, method="PUT")
@@ -73,22 +84,24 @@ def api_put(path: str, body: dict) -> dict:
         resp = urllib.request.urlopen(req, timeout=15)
         return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
-        return {"error": f"HTTP {e.code}: {e.read().decode()[:200]}"}
+        body = e.read().decode()[:200]
+        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code)
     except Exception as e:
-        return {"error": str(e)}
+        raise KanbanAPIError(str(e))
 
 
 def api_delete(path: str) -> dict:
-    """DELETE from the kanban API."""
+    """DELETE from the kanban API. Raises KanbanAPIError on failure."""
     url = urljoin(API_BASE, quote(path, safe='/:?=&'))
     req = urllib.request.Request(url, method="DELETE")
     try:
         resp = urllib.request.urlopen(req, timeout=15)
         return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
-        return {"error": f"HTTP {e.code}: {e.read().decode()[:200]}"}
+        body = e.read().decode()[:200]
+        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code)
     except Exception as e:
-        return {"error": str(e)}
+        raise KanbanAPIError(str(e))
 
 # ── Tool: list_tasks ─────────────────────────────────────────────────
 
@@ -540,8 +553,18 @@ async def list_tools() -> list[Tool]:
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     """Route tool calls to the kanban API."""
-    result = _route(name, arguments)
-    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+    try:
+        result = _route(name, arguments)
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+    except KanbanAPIError as e:
+        return [TextContent(
+            type="text",
+            text=json.dumps({
+                "error": str(e),
+                "status_code": e.status_code,
+                "tool": name,
+            }, indent=2),
+        )]
 
 
 def _route(name: str, args: dict) -> dict:
@@ -587,7 +610,7 @@ def _route(name: str, args: dict) -> dict:
     }
     handler = handlers.get(name)
     if not handler:
-        return {"error": f"Unknown tool: {name}"}
+        raise KanbanAPIError(f"Unknown tool: {name}", status_code=400)
     return handler(args)
 
 
@@ -620,8 +643,6 @@ def _handle_list_tasks(args: dict) -> dict:
 def _handle_get_task(args: dict) -> dict:
     task_id = _get_str(args, "task_id")
     task = api_get(f"/api/tasks/{task_id}")
-    if isinstance(task, dict) and "error" in task:
-        return task
     # Enrich with logs
     logs = api_get(f"/api/tasks/{task_id}/logs")
     # Find downstream blockers (tasks that depend on this one)
@@ -651,7 +672,7 @@ def _handle_create_task(args: dict) -> dict:
     result = api_post("/api/tasks", body)
     # Set skills if provided
     skills = _get_str(args, "required_skills")
-    if skills and isinstance(result, dict) and "error" not in result:
+    if skills:
         # Find the task we just created
         tasks = api_get("/api/tasks")
         if isinstance(tasks, list) and tasks:
@@ -675,7 +696,7 @@ def _handle_update_task(args: dict) -> dict:
     if args.get("branch"):
         body["branch"] = _get_str(args, "branch")
     if not body:
-        return {"error": "No fields to update"}
+        raise KanbanAPIError("No fields to update", status_code=400)
     return api_patch(f"/api/tasks/{task_id}", body)
 
 
@@ -707,7 +728,7 @@ def _handle_split_task(args: dict) -> dict:
     task_id = _get_str(args, "task_id")
     child_titles = args.get("child_titles", [])
     if not child_titles:
-        return {"error": "child_titles is required and must be a non-empty list"}
+        raise KanbanAPIError("child_titles is required and must be a non-empty list", status_code=400)
     return api_post(f"/api/tasks/{task_id}/split", {"child_titles": child_titles})
 
 

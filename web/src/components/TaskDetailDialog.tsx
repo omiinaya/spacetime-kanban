@@ -10,6 +10,98 @@ import { type Task, type TaskStatus } from '../hooks/useRealtimeTasks'
 import { Link as RouterLink } from 'react-router-dom'
 import { PRIORITY_LABELS, PRIORITY_COLORS, STATUS_LABELS } from './constants'
 
+/** Convert epoch ms to YYYY-MM-DD for a date input. */
+function epochMsToDateInput(ms: number | null | undefined): string {
+  if (!ms) return ''
+  const d = new Date(ms)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** Convert YYYY-MM-DD from a date input to epoch ms (start of that day in local timezone). */
+function dateInputToEpochMs(val: string): number | null {
+  if (!val) return null
+  const d = new Date(val + 'T00:00:00')
+  return d.getTime()
+}
+
+function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: number | null; taskStatus: string }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(epochMsToDateInput(dueBy))
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const ms = dateInputToEpochMs(value)
+      await api.tasks.update(taskId, { due_by: ms ?? null })
+      setEditing(false)
+    } catch (e: any) {
+      alert(`Failed to update due date: ${e.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleClear = async () => {
+    setSaving(true)
+    try {
+      await api.tasks.update(taskId, { due_by: null })
+      setValue('')
+      setEditing(false)
+    } catch (e: any) {
+      alert(`Failed to clear due date: ${e.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input type="date" value={value} onChange={e => setValue(e.target.value)}
+          className="w-full px-1.5 py-1 text-xs rounded bg-[var(--color-background)] border border-[var(--color-border)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ring)]"
+          autoFocus
+        />
+        <button onClick={handleSave} disabled={saving}
+          className="text-[10px] px-1.5 py-1 rounded bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+        >{saving ? '...' : '✓'}</button>
+        <button onClick={() => { setEditing(false); setValue(epochMsToDateInput(dueBy)) }}
+          className="text-[10px] px-1.5 py-1 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors"
+        >✕</button>
+      </div>
+    )
+  }
+
+  if (!dueBy) {
+    return (
+      <button onClick={() => setEditing(true)}
+        className="text-xs text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+      >+ Set due date</button>
+    )
+  }
+
+  const now = Date.now()
+  const overdue = now > dueBy && taskStatus !== 'done'
+
+  return (
+    <div className="flex items-center gap-1">
+      <span className={`text-xs ${overdue ? 'text-red-400 font-medium' : 'text-[var(--color-muted-foreground)]'}`}
+        title={new Date(dueBy).toLocaleString()}>
+        📅 {new Date(dueBy).toLocaleDateString()}
+      </span>
+      <button onClick={() => { setEditing(true); setValue(epochMsToDateInput(dueBy)) }}
+        className="text-[10px] text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+      >✏️</button>
+      <button onClick={handleClear} disabled={saving}
+        className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
+      >✕</button>
+    </div>
+  )
+}
+
 export function TaskDetailDialog({
   taskId, tasks, taskTitleMap, onClose,
   onClaim, onUnclaim, onComplete, onBlock, onDelete,
@@ -270,6 +362,10 @@ export function TaskDetailDialog({
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Updated</p>
               <p className="text-xs text-[var(--color-muted-foreground)]">{new Date(Number(task.updatedAt)).toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Due Date</p>
+              <DueDateEditor taskId={task.id} dueBy={task.dueBy} taskStatus={task.status} />
             </div>
             {task.requiredSkills && (
               <div className="col-span-2">

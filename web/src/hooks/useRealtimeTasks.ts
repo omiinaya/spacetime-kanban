@@ -80,6 +80,7 @@ export function useRealtimeTasks() {
           failReason: d.fail_reason ?? undefined,
           subtaskOf: d.subtask_of ?? undefined,
           subtasks: d.subtasks ?? undefined,
+          dueBy: d.due_by ?? undefined,
         })) as Task[]
         setTasksIfChanged(mapped)
         if (mapped.length > 0) setLoading(false)  // Data with content arrived
@@ -144,7 +145,7 @@ export function useRealtimeTasks() {
       try {
         const conn = DbConnection.builder()
           .withUri(`ws://${window.location.hostname}:3001`)
-          .withDatabaseName('spacetimedb-kanban')
+          .withDatabaseName('kanban')
           .onConnect(() => {
             if (cancelled()) return
             setConnected(true)

@@ -13,6 +13,19 @@ import httpx
 
 from config import settings
 
+
+def _sanitize(val: str) -> str:
+    """Escape single quotes to prevent SQL injection."""
+    return val.replace("'", "''")
+
+
+def _sql_param(query_template: str, **params) -> list[dict]:
+    """Safe SQL query with named parameters — escapes all values."""
+    escaped = {k: _sanitize(str(v)) for k, v in params.items()}
+    query = query_template.format(**escaped)
+    return _stdb_sql(query)
+
+
 STDB_SQL_URL = f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/sql"
 STDB_CALL_URL = f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/call"
 
@@ -97,7 +110,7 @@ def list_webhooks() -> list[dict]:
 
 def get_webhook(webhook_id: str) -> Optional[dict]:
     """Get a specific webhook subscription."""
-    rows = _stdb_sql("SELECT * FROM webhook_subscriptions WHERE id = '{webhook_id}'".format(webhook_id=_sanitize(webhook_id)))
+    rows = _sql_param("SELECT * FROM webhook_subscriptions WHERE id = '{webhook_id}'", webhook_id=webhook_id)
     if not rows:
         return None
     r = rows[0]
@@ -267,6 +280,35 @@ def _format_payload(wh_type: str, action: str, task: dict, extra: str = "") -> d
     return formatter(action, task, extra)
 
 
+# Retry config
+MAX_RETRIES = 3
+BASE_DELAY = 1.0  # seconds
+
+
+def _deliver_with_retry(wh_type: str, url: str, payload: dict, max_retries: int = MAX_RETRIES) -> tuple[int, str, bool]:
+    """Send a webhook with exponential backoff retry."""
+    import time
+    last_error = ""
+    for attempt in range(max_retries):
+        try:
+            if wh_type == "telegram":
+                resp = httpx.post(url, json=payload, timeout=5)
+            elif wh_type == "generic":
+                resp = httpx.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=5)
+            else:
+                resp = httpx.post(url, json=payload, timeout=5)
+            if resp.status_code < 500:
+                return resp.status_code, resp.text[:500], True
+            # Server error — retry with backoff
+            last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+        except Exception as e:
+            last_error = str(e)[:200]
+        if attempt < max_retries - 1:
+            time.sleep(BASE_DELAY * (2 ** attempt))
+    # All retries exhausted
+    return 0, last_error, False
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────
 
 
@@ -281,40 +323,26 @@ async def notify(action: str, task: dict, extra: str = ""):
             payload = _format_payload(wh["type"], action, task, extra)
             tasks_to_send.append((wh["type"], wh["url"], payload))
 
-    # Fire all (best-effort)
+    # Fire all (best-effort) with retry
     deliveries = []
-    async with httpx.AsyncClient(timeout=5) as client:
-        for wh_type, url, payload in tasks_to_send:
-            try:
-                if wh_type == "telegram":
-                    resp = await client.post(url, json=payload)
-                elif wh_type == "generic":
-                    resp = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
-                else:
-                    resp = await client.post(url, json=payload)
-                code = resp.status_code
-                body = resp.text[:500]
-                success = resp.status_code < 500
-            except Exception as e:
-                code = 0
-                body = str(e)[:500]
-                success = False
+    for wh_type, url, payload in tasks_to_send:
+        code, body, success = _deliver_with_retry(wh_type, url, payload)
 
-            # Find the webhook ID for logging
-            wh_id = ""
-            for wh in webhooks:
-                if wh["url"] == url and wh["type"] == wh_type:
-                    wh_id = wh["id"]
-                    break
+        # Find the webhook ID for logging
+        wh_id = ""
+        for wh in webhooks:
+            if wh["url"] == url and wh["type"] == wh_type:
+                wh_id = wh["id"]
+                break
 
-            deliveries.append({
-                "webhook_id": wh_id,
-                "event": action,
-                "url": url,
-                "status_code": code,
-                "response_body": body,
-                "success": success,
-            })
+        deliveries.append({
+            "webhook_id": wh_id,
+            "event": action,
+            "url": url,
+            "status_code": code,
+            "response_body": body,
+            "success": success,
+        })
 
     # Log deliveries to STDB (fire-and-forget)
     for d in deliveries:
@@ -334,8 +362,8 @@ async def notify(action: str, task: dict, extra: str = ""):
 
 def list_webhook_deliveries(webhook_id: str, limit: int = 20) -> list[dict]:
     """Get delivery history for a specific webhook."""
-    rows = _stdb_sql(
-        "SELECT * FROM webhook_deliveries WHERE webhook_id = '{webhook_id}'".format(webhook_id=_sanitize(webhook_id))
+    rows = _sql_param(
+        "SELECT * FROM webhook_deliveries WHERE webhook_id = '{webhook_id}'", webhook_id=webhook_id
     )
     rows.sort(key=lambda r: -(r.get("delivered_at", 0)))
     result = []

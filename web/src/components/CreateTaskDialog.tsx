@@ -3,6 +3,23 @@ import { Plus, Loader2 } from 'lucide-react'
 import { api } from '../api'
 import { PRIORITY_LABELS, type TaskTemplate, BUILT_IN_TEMPLATES } from './constants'
 
+/** Convert YYYY-MM-DD from a date input to epoch ms (start of that day in local timezone). */
+function dateInputToEpochMs(val: string): number | null {
+  if (!val) return null
+  const d = new Date(val + 'T00:00:00')
+  return d.getTime()
+}
+
+/** Convert epoch ms to YYYY-MM-DD for a date input. */
+function epochMsToDateInput(ms: number | null | undefined): string {
+  if (!ms) return ''
+  const d = new Date(ms)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null)
   const [title, setTitle] = useState('')
@@ -11,6 +28,7 @@ export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; 
   const [repo, setRepo] = useState('')
   const [roadmap, setRoadmap] = useState('')
   const [skills, setSkills] = useState('')
+  const [dueDate, setDueDate] = useState('')
   const [saving, setSaving] = useState(false)
 
   const applyTemplate = (tpl: TaskTemplate) => {
@@ -28,7 +46,16 @@ export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; 
     if (!title.trim()) return
     setSaving(true)
     try {
-      await api.tasks.create({ title: title.trim(), description, priority, repo: repo || undefined, roadmap_item: roadmap || undefined, required_skills: skills || undefined })
+      const dueByMs = dateInputToEpochMs(dueDate)
+      await api.tasks.create({
+        title: title.trim(),
+        description,
+        priority,
+        repo: repo || undefined,
+        roadmap_item: roadmap || undefined,
+        required_skills: skills || undefined,
+        due_by: dueByMs ?? undefined,
+      })
       onCreated()
       onClose()
     } catch (err) {
@@ -36,7 +63,7 @@ export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; 
     } finally {
       setSaving(false)
     }
-  }, [title, description, priority, repo, roadmap, skills, onClose, onCreated])
+  }, [title, description, priority, repo, roadmap, skills, dueDate, onClose, onCreated])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
@@ -77,6 +104,12 @@ export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; 
             <input value={skills} onChange={e => setSkills(e.target.value)} placeholder="Skills (e.g. rust,python)"
               className="w-full px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
             />
+            <div>
+              <label className="text-xs font-medium text-[var(--color-muted)] block mb-1">Due date (optional)</label>
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+              />
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={onClose}
                 className="text-sm px-3 py-1.5 rounded text-[var(--color-muted)] hover:bg-white/5 transition-colors"
