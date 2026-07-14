@@ -40,6 +40,11 @@ from shared import (
     AgentHeartbeatRequest,
     AgentOut,
     AgentRegisterRequest,
+    ApiKeyCreate,
+    ApiKeyOut,
+    AutomationRuleCreate,
+    AutomationRuleOut,
+    AutomationRuleUpdate,
     BatchLabelsRequest,
     BlockRequest,
     BlockWithReasonRequest,
@@ -58,6 +63,8 @@ from shared import (
     LabelUpdate,
     LogOut,
     MaxAttemptsRequest,
+    MigrationCreate,
+    MigrationOut,
     ProjectCreate,
     ProjectOut,
     ProjectUpdate,
@@ -66,14 +73,18 @@ from shared import (
     SetDependencyRequest,
     SetSkillsRequest,
     SplitTaskRequest,
+    SprintRequest,
     SuggestResult,
     TaskCreate,
     TaskLabelAssign,
     TaskOut,
+    TaskRelationCreate,
+    TaskRelationOut,
     TaskUpdate,
     TemplateCreate,
     TemplateOut,
     TemplateUpdate,
+    TimeEstimatesRequest,
     WebhookCreateRequest,
     WebhookUpdateRequest,
 )
@@ -366,6 +377,23 @@ async def patch_task(task_id: str, body: TaskUpdate):
     elif "due_by" in body.model_dump(exclude_unset=True):
         # User explicitly set due_by to null — clear it
         await _call("set_due_by", [task_id, 0])
+    # Handle sprint
+    if body.sprint is not None:
+        await _call("set_sprint", [task_id, body.sprint])
+    elif "sprint" in body.model_dump(exclude_unset=True):
+        # User explicitly set sprint to null — clear it
+        await _call("set_sprint", [task_id, ""])
+    # Handle archived
+    if body.archived is not None:
+        if body.archived:
+            await _call("archive_task", [task_id])
+        else:
+            await _call("unarchive_task", [task_id])
+    # Handle time estimates
+    if body.estimated_hours is not None or body.spent_hours is not None:
+        est = body.estimated_hours if body.estimated_hours is not None else t.get("estimated_hours") or 0
+        spent = body.spent_hours if body.spent_hours is not None else t.get("spent_hours") or 0
+        await _call("set_time_estimates", [task_id, est, spent])
     return {"status": "updated"}
 
 @app.post("/api/tasks/{task_id}/claim", dependencies=[Depends(verify_auth)])
@@ -1720,6 +1748,289 @@ def _auto_star(repo: str):
         _logger.warning(f"Failed to star {repo}: HTTP {e.code}")
     except Exception as e:
         _logger.warning(f"Could not reach GitHub API: {e}")
+
+
+# ── Task Archive / Unarchive ──────────────────────────────────────────
+
+@app.post("/api/tasks/{task_id}/archive", dependencies=[Depends(verify_auth)])
+async def archive_task(task_id: str):
+    """Toggle archive on a task (calls toggle_archive reducer)."""
+    await _call("toggle_archive", [task_id])
+    return {"status": "toggled", "task_id": task_id}
+
+
+@app.post("/api/tasks/{task_id}/unarchive", dependencies=[Depends(verify_auth)])
+async def unarchive_task(task_id: str):
+    """Unarchive a task (calls unarchive_task reducer)."""
+    await _call("unarchive_task", [task_id])
+    return {"status": "unarchived", "task_id": task_id}
+
+
+# ── Sprint Management ─────────────────────────────────────────────────
+
+@app.post("/api/tasks/{task_id}/sprint", dependencies=[Depends(verify_auth)])
+async def set_task_sprint(task_id: str, body: SprintRequest):
+    """Set a task's sprint assignment."""
+    await _call("set_sprint", [task_id, body.sprint])
+    return {"status": "updated", "task_id": task_id, "sprint": body.sprint}
+
+
+# ── Time Estimates ────────────────────────────────────────────────────
+
+@app.post("/api/tasks/{task_id}/time-estimates", dependencies=[Depends(verify_auth)])
+async def set_task_time_estimates(task_id: str, body: TimeEstimatesRequest):
+    """Set estimated and spent hours on a task."""
+    await _call("set_time_estimates", [task_id, body.estimated_hours, body.spent_hours])
+    return {
+        "status": "updated",
+        "task_id": task_id,
+        "estimated_hours": body.estimated_hours,
+        "spent_hours": body.spent_hours,
+    }
+
+
+# ── Task Relations ────────────────────────────────────────────────────
+
+@app.get("/api/tasks/{task_id}/relations", response_model=list[TaskRelationOut])
+async def list_task_relations(task_id: str):
+    """List all relations for a task."""
+    rows = await _sql_param(
+        "SELECT * FROM task_relations WHERE task_id = '{task_id}'",
+        task_id=task_id,
+    )
+    # Also return relations where this task is the related_task_id
+    reverse_rows = await _sql_param(
+        "SELECT * FROM task_relations WHERE related_task_id = '{task_id}'",
+        task_id=task_id,
+    )
+    all_rows = rows + reverse_rows
+    return [
+        TaskRelationOut(
+            id=r["id"],
+            task_id=r["task_id"],
+            related_task_id=r["related_task_id"],
+            relation_type=r["relation_type"],
+            created_at=r.get("created_at", 0),
+        )
+        for r in all_rows
+    ]
+
+
+@app.post("/api/tasks/{task_id}/relations", dependencies=[Depends(verify_auth)])
+async def add_task_relation(task_id: str, body: TaskRelationCreate):
+    """Add a relation between two tasks."""
+    await _call("add_task_relation", [task_id, body.related_task_id, body.relation_type])
+    return {"status": "created", "task_id": task_id, "related_task_id": body.related_task_id}
+
+
+@app.delete("/api/tasks/{task_id}/relations/{relation_id}", dependencies=[Depends(verify_auth)])
+async def remove_task_relation(task_id: str, relation_id: str):
+    """Remove a task relation."""
+    await _call("remove_task_relation", [relation_id])
+    return {"status": "deleted"}
+
+
+# ── Automation Rules ──────────────────────────────────────────────────
+
+@app.get("/api/rules", response_model=list[AutomationRuleOut])
+async def list_automation_rules():
+    """List all automation rules."""
+    rows = await _sql("SELECT * FROM automation_rules")
+    return [
+        AutomationRuleOut(
+            id=r["id"],
+            name=r.get("name", ""),
+            description=r.get("description", ""),
+            trigger_event=r.get("trigger_event", ""),
+            condition=r.get("condition"),
+            action_type=r.get("action_type", ""),
+            action_config=r.get("action_config", ""),
+            repo=r.get("repo"),
+            active=r.get("active", True),
+            created_at=r.get("created_at", 0),
+            updated_at=r.get("updated_at", 0),
+        )
+        for r in rows
+    ]
+
+
+@app.post("/api/rules", status_code=201, dependencies=[Depends(verify_auth)])
+async def create_automation_rule(body: AutomationRuleCreate):
+    """Create a new automation rule."""
+    import uuid as _uuid
+    rule_id = body.id or f"rule_{_uuid.uuid4().hex[:16]}"
+    await _call("create_automation_rule", [
+        rule_id,
+        body.name,
+        body.description,
+        body.trigger_event,
+        body.condition,
+        body.action_type,
+        body.action_config,
+        body.repo,
+        body.active,
+    ])
+    return {"status": "created", "id": rule_id}
+
+
+@app.get("/api/rules/{rule_id}", response_model=AutomationRuleOut)
+async def get_automation_rule(rule_id: str):
+    """Get a single automation rule."""
+    rows = await _sql_param(
+        "SELECT * FROM automation_rules WHERE id = '{rule_id}'",
+        rule_id=rule_id,
+    )
+    if not rows:
+        raise HTTPException(404, "Rule not found")
+    r = rows[0]
+    return AutomationRuleOut(
+        id=r["id"],
+        name=r.get("name", ""),
+        description=r.get("description", ""),
+        trigger_event=r.get("trigger_event", ""),
+        condition=r.get("condition"),
+        action_type=r.get("action_type", ""),
+        action_config=r.get("action_config", ""),
+        repo=r.get("repo"),
+        active=r.get("active", True),
+        created_at=r.get("created_at", 0),
+        updated_at=r.get("updated_at", 0),
+    )
+
+
+@app.patch("/api/rules/{rule_id}", dependencies=[Depends(verify_auth)])
+async def update_automation_rule(rule_id: str, body: AutomationRuleUpdate):
+    """Update an automation rule."""
+    rows = await _sql_param(
+        "SELECT * FROM automation_rules WHERE id = '{rule_id}'",
+        rule_id=rule_id,
+    )
+    if not rows:
+        raise HTTPException(404, "Rule not found")
+    existing = rows[0]
+    name = body.name if body.name is not None else existing.get("name", "")
+    description = body.description if body.description is not None else existing.get("description", "")
+    trigger_event = body.trigger_event if body.trigger_event is not None else existing.get("trigger_event", "")
+    condition = body.condition if body.condition is not None else existing.get("condition") or ""
+    action_type = body.action_type if body.action_type is not None else existing.get("action_type", "")
+    action_config = body.action_config if body.action_config is not None else existing.get("action_config", "")
+    repo = body.repo if body.repo is not None else existing.get("repo") or ""
+    active = body.active if body.active is not None else existing.get("active", True)
+    await _call("update_automation_rule", [
+        rule_id, name, description, trigger_event, condition,
+        action_type, action_config, repo, active,
+    ])
+    return {"status": "updated", "id": rule_id}
+
+
+@app.delete("/api/rules/{rule_id}", dependencies=[Depends(verify_auth)])
+async def delete_automation_rule(rule_id: str):
+    """Delete an automation rule."""
+    await _call("delete_automation_rule", [rule_id])
+    return {"status": "deleted"}
+
+
+# ── API Keys ─────────────────────────────────────────────────────────
+
+@app.get("/api/api-keys", response_model=list[ApiKeyOut])
+async def list_api_keys():
+    """List all API keys."""
+    rows = await _sql("SELECT * FROM api_keys")
+    return [
+        ApiKeyOut(
+            id=r["id"],
+            key_hash=r.get("key_hash", ""),
+            name=r.get("name", ""),
+            repo_scope=r.get("repo_scope"),
+            permissions=r.get("permissions", "read"),
+            created_by=r.get("created_by", ""),
+            created_at=r.get("created_at", 0),
+            last_used_at=r.get("last_used_at", 0),
+            active=r.get("active", True),
+        )
+        for r in rows
+    ]
+
+
+@app.post("/api/api-keys", status_code=201, dependencies=[Depends(verify_auth)])
+async def create_api_key(body: ApiKeyCreate):
+    """Create a new API key."""
+    import uuid as _uuid
+    key_id = body.id or f"apikey_{_uuid.uuid4().hex[:16]}"
+    await _call("create_api_key", [
+        key_id,
+        body.key_hash,
+        body.name,
+        body.repo_scope,
+        body.permissions,
+        body.created_by,
+    ])
+    return {"status": "created", "id": key_id}
+
+
+@app.post("/api/api-keys/{key_id}/revoke", dependencies=[Depends(verify_auth)])
+async def revoke_api_key(key_id: str):
+    """Revoke an API key."""
+    await _call("revoke_api_key", [key_id])
+    return {"status": "revoked", "key_id": key_id}
+
+
+# ── Calendar ──────────────────────────────────────────────────────────
+
+@app.get("/api/calendar", response_model=list[TaskOut])
+async def calendar_tasks():
+    """Return tasks that have due_by dates set."""
+    rows = await _sql("SELECT * FROM tasks WHERE due_by IS NOT NULL AND due_by > 0")
+    tasks = [_row_to_task(r) for r in rows]
+    tasks.sort(key=lambda t: t.due_by or 0)
+    return tasks
+
+
+# ── Cross-Project Aggregation ─────────────────────────────────────────
+
+@app.get("/api/cross-project")
+async def cross_project_aggregation():
+    """Return aggregate counts per repo."""
+    rows = await _sql("SELECT * FROM tasks")
+    repos: dict[str, dict] = {}
+    for r in rows:
+        repo = r.get("repo") or "(none)"
+        if repo not in repos:
+            repos[repo] = {"repo": repo, "total": 0, "available": 0, "in_progress": 0, "blocked": 0, "done": 0, "archived": 0}
+        repos[repo]["total"] += 1
+        status = r.get("status", "unknown")
+        if status in repos[repo]:
+            repos[repo][status] += 1
+        if r.get("archived", False):
+            repos[repo]["archived"] += 1
+    return list(repos.values())
+
+
+# ── Schema Migrations ─────────────────────────────────────────────────
+
+@app.get("/api/migrations", response_model=list[MigrationOut])
+async def list_migrations():
+    """List applied schema migrations."""
+    rows = await _sql("SELECT * FROM schema_migrations ORDER BY applied_at ASC")
+    return [
+        MigrationOut(
+            version=r["version"],
+            description=r.get("description", ""),
+            applied_at=r.get("applied_at", 0),
+            applied_by=r.get("applied_by", ""),
+            checksum=r.get("checksum"),
+        )
+        for r in rows
+    ]
+
+
+@app.post("/api/migrations", status_code=201, dependencies=[Depends(verify_auth)])
+async def record_migration(body: MigrationCreate):
+    """Record a schema migration."""
+    await _call("record_migration", [
+        body.version, body.description, body.applied_by, body.checksum,
+    ])
+    return {"status": "recorded", "version": body.version}
 
 
 # ── Main ─────────────────────────────────────────────────────────────

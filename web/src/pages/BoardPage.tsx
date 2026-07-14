@@ -78,6 +78,7 @@ export default function BoardPage() {
   const [filterPriorities, setFilterPriorities] = useState<Set<number>>(new Set())
   const [filterAssignees, setFilterAssignees] = useState<Set<string>>(new Set())
   const [filterLabels, setFilterLabels] = useState<Set<string>>(new Set())
+  const [sprintFilter, setSprintFilter] = useState<string>('')
   const [allLabels, setAllLabels] = useState<KanbanLabel[]>([])
   const [taskLabelMap, setTaskLabelMap] = useState<Map<string, KanbanLabel[]>>(new Map())
   const [issueLinks, setIssueLinks] = useState<Record<string, IssueLink>>({})

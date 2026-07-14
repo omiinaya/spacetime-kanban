@@ -175,6 +175,38 @@ pub fn is_template_due(schedule: &str, last_triggered_at: u64, now: u64) -> bool
     (now / 1000) - (last_triggered_at / 1000) >= min_interval
 }
 
+// ── Task Relations ─────────────────────────────────────────────────
+
+pub fn find_task_relation(ctx: &ReducerContext, relation_id: &str) -> Option<TaskRelation> {
+    ctx.db.task_relations()
+        .iter()
+        .find(|r| r.id == relation_id)
+}
+
+// ── Automation Rules ──────────────────────────────────────────────
+
+pub fn find_automation_rule(ctx: &ReducerContext, rule_id: &str) -> Option<AutomationRule> {
+    ctx.db.automation_rules()
+        .iter()
+        .find(|r| r.id == rule_id)
+}
+
+// ── API Keys ──────────────────────────────────────────────────────
+
+pub fn find_api_key(ctx: &ReducerContext, key_id: &str) -> Option<ApiKey> {
+    ctx.db.api_keys()
+        .iter()
+        .find(|k| k.id == key_id)
+}
+
+// ── Schema Migrations ─────────────────────────────────────────────
+
+pub fn find_migration(ctx: &ReducerContext, version: &str) -> Option<SchemaMigration> {
+    ctx.db.schema_migrations()
+        .iter()
+        .find(|m| m.version == version)
+}
+
 // ── Unit Tests ────────────────────────────────────────────────────────────
 #[cfg(test)]
 mod tests {

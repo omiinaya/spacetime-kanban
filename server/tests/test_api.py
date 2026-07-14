@@ -17,6 +17,10 @@ def _make_task(
     status="available",
     repo="sample-repo-q",
     due_by=None,
+    sprint=None,
+    archived=False,
+    estimated_hours=None,
+    spent_hours=None,
 ):
     """Build a minimal task dict as returned by STDB rows."""
     return {
@@ -42,6 +46,10 @@ def _make_task(
         "subtask_of": None,
         "subtasks": None,
         "due_by": due_by,
+        "sprint": sprint,
+        "archived": archived,
+        "estimated_hours": estimated_hours,
+        "spent_hours": spent_hours,
     }
 
 
@@ -903,3 +911,339 @@ async def test_get_task_labels(client, mock_all):
     data = resp.json()
     assert len(data) == 1
     assert data[0]["name"] == "bug"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Archive / Unarchive
+# ════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_archive_task(client, mock_all):
+    """POST /api/tasks/{id}/archive should call toggle_archive reducer."""
+    resp = await client.post("/api/tasks/task_1/archive")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "toggled"
+    assert data["task_id"] == "task_1"
+    # Verify toggle_archive was called
+    toggle_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "toggle_archive"]
+    assert len(toggle_calls) == 1
+    assert toggle_calls[0][0][1] == ["task_1"]
+
+
+@pytest.mark.asyncio
+async def test_unarchive_task(client, mock_all):
+    """POST /api/tasks/{id}/unarchive should call unarchive_task reducer."""
+    resp = await client.post("/api/tasks/task_1/unarchive")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "unarchived"
+    assert data["task_id"] == "task_1"
+    unarchive_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "unarchive_task"]
+    assert len(unarchive_calls) == 1
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Sprint
+# ════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_set_sprint(client, mock_all):
+    """POST /api/tasks/{id}/sprint should call set_sprint reducer."""
+    resp = await client.post(
+        "/api/tasks/task_1/sprint",
+        json={"sprint": "sprint-1"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "updated"
+    assert data["sprint"] == "sprint-1"
+    sprint_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "set_sprint"]
+    assert len(sprint_calls) == 1
+    assert sprint_calls[0][0][1] == ["task_1", "sprint-1"]
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Time Estimates
+# ════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_set_time_estimates(client, mock_all):
+    """POST /api/tasks/{id}/time-estimates should call set_time_estimates reducer."""
+    resp = await client.post(
+        "/api/tasks/task_1/time-estimates",
+        json={"estimated_hours": 5, "spent_hours": 2},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "updated"
+    assert data["estimated_hours"] == 5
+    assert data["spent_hours"] == 2
+    est_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "set_time_estimates"]
+    assert len(est_calls) == 1
+    assert est_calls[0][0][1] == ["task_1", 5, 2]
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Task Relations
+# ════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_list_task_relations_empty(client, mock_all):
+    """GET /api/tasks/{id}/relations should return empty list."""
+    resp = await client.get("/api/tasks/task_1/relations")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_list_task_relations_with_data(client, mock_all):
+    """GET /api/tasks/{id}/relations should return stored relations."""
+    mock_all["param"].return_value = [
+        {"id": "rel_1", "task_id": "task_1", "related_task_id": "task_2",
+         "relation_type": "blocks", "created_at": 1000},
+    ]
+    resp = await client.get("/api/tasks/task_1/relations")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) >= 1
+    assert data[0]["relation_type"] == "blocks"
+
+
+@pytest.mark.asyncio
+async def test_add_task_relation(client, mock_all):
+    """POST /api/tasks/{id}/relations should add a relation."""
+    resp = await client.post(
+        "/api/tasks/task_1/relations",
+        json={"related_task_id": "task_2", "relation_type": "blocks"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "created"
+    assert data["related_task_id"] == "task_2"
+
+
+@pytest.mark.asyncio
+async def test_remove_task_relation(client, mock_all):
+    """DELETE /api/tasks/{id}/relations/{rel_id} should delete relation."""
+    resp = await client.delete("/api/tasks/task_1/relations/rel_1")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "deleted"}
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Automation Rules
+# ════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_list_rules_empty(client, mock_all):
+    """GET /api/rules should return empty list."""
+    resp = await client.get("/api/rules")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_create_rule(client, mock_all):
+    """POST /api/rules should create a rule."""
+    resp = await client.post("/api/rules", json={
+        "name": "Auto assign high priority",
+        "trigger_event": "task_created",
+        "action_type": "assign_to",
+        "action_config": "{\"agent\": \"bot\"}",
+    })
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "created"
+    assert "id" in data
+
+
+@pytest.mark.asyncio
+async def test_get_rule(client, mock_all):
+    """GET /api/rules/{id} should return a single rule."""
+    mock_all["param"].return_value = [{
+        "id": "rule_1",
+        "name": "Test Rule",
+        "description": "A test rule",
+        "trigger_event": "task_created",
+        "condition": None,
+        "action_type": "move_to_column",
+        "action_config": "{\"status\": \"in_progress\"}",
+        "repo": None,
+        "active": True,
+        "created_at": 1000,
+        "updated_at": 1000,
+    }]
+    resp = await client.get("/api/rules/rule_1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "Test Rule"
+    assert data["trigger_event"] == "task_created"
+
+
+@pytest.mark.asyncio
+async def test_get_rule_not_found(client, mock_all):
+    """GET /api/rules/{id} for non-existent rule should return 404."""
+    mock_all["param"].return_value = []
+    resp = await client.get("/api/rules/nonexistent")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_rule(client, mock_all):
+    """PATCH /api/rules/{id} should update a rule."""
+    mock_all["param"].return_value = [{
+        "id": "rule_1",
+        "name": "Old Name",
+        "description": "",
+        "trigger_event": "task_created",
+        "condition": None,
+        "action_type": "move_to_column",
+        "action_config": "{}",
+        "repo": None,
+        "active": True,
+        "created_at": 1000,
+        "updated_at": 1000,
+    }]
+    resp = await client.patch("/api/rules/rule_1", json={"name": "New Name"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "updated"
+
+
+@pytest.mark.asyncio
+async def test_delete_rule(client, mock_all):
+    """DELETE /api/rules/{id} should delete a rule."""
+    resp = await client.delete("/api/rules/rule_1")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "deleted"}
+
+
+# ════════════════════════════════════════════════════════════════════════
+# API Keys
+# ════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_list_api_keys_empty(client, mock_all):
+    """GET /api/api-keys should return empty list."""
+    resp = await client.get("/api/api-keys")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_create_api_key(client, mock_all):
+    """POST /api/api-keys should create a key."""
+    resp = await client.post("/api/api-keys", json={
+        "key_hash": "abc123hash",
+        "name": "CI pipeline key",
+    })
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "created"
+    assert "id" in data
+
+
+@pytest.mark.asyncio
+async def test_revoke_api_key(client, mock_all):
+    """POST /api/api-keys/{id}/revoke should revoke a key."""
+    resp = await client.post("/api/api-keys/key_1/revoke")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "revoked"
+    assert data["key_id"] == "key_1"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Calendar & Cross-Project
+# ════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_calendar_empty(client, mock_all):
+    """GET /api/calendar should return empty list when no tasks have due_by."""
+    resp = await client.get("/api/calendar")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_calendar_with_dates(client, mock_all):
+    """GET /api/calendar should return tasks with due_by set."""
+    mock_all["sql"].return_value = [
+        _make_task("t1", "Due task", due_by=1893456000000),
+    ]
+    resp = await client.get("/api/calendar")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["due_by"] == 1893456000000
+
+
+@pytest.mark.asyncio
+async def test_cross_project_empty(client, mock_all):
+    """GET /api/cross-project should return empty list when no tasks."""
+    resp = await client.get("/api/cross-project")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Schema Migrations
+# ════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_list_migrations_empty(client, mock_all):
+    """GET /api/migrations should return empty list."""
+    resp = await client.get("/api/migrations")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_record_migration(client, mock_all):
+    """POST /api/migrations should record a migration."""
+    resp = await client.post("/api/migrations", json={
+        "version": "2026-07-14-01-add-sprint",
+        "description": "Add sprint and archive fields",
+    })
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "recorded"
+    assert data["version"] == "2026-07-14-01-add-sprint"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# PATCH /api/tasks/{id} with new fields
+# ════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_patch_task_sprint(client, mock_all):
+    """PATCH with sprint should call set_sprint reducer."""
+    mock_all["param"].return_value = [_make_task("t1", "My task")]
+    resp = await client.patch("/api/tasks/t1", json={"sprint": "sprint-2"})
+    assert resp.status_code == 200
+    sprint_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "set_sprint"]
+    assert len(sprint_calls) == 1
+    assert sprint_calls[0][0][1] == ["t1", "sprint-2"]
+
+
+@pytest.mark.asyncio
+async def test_patch_task_archive(client, mock_all):
+    """PATCH with archived=true should call archive_task reducer."""
+    mock_all["param"].return_value = [_make_task("t1", "My task")]
+    resp = await client.patch("/api/tasks/t1", json={"archived": True})
+    assert resp.status_code == 200
+    archive_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "archive_task"]
+    assert len(archive_calls) == 1
+    assert archive_calls[0][0][1] == ["t1"]
+
+
+@pytest.mark.asyncio
+async def test_patch_task_time_estimates(client, mock_all):
+    """PATCH with estimated_hours and spent_hours should call set_time_estimates."""
+    mock_all["param"].return_value = [_make_task("t1", "My task")]
+    resp = await client.patch("/api/tasks/t1", json={"estimated_hours": 8, "spent_hours": 3})
+    assert resp.status_code == 200
+    est_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "set_time_estimates"]
+    assert len(est_calls) == 1
+    assert est_calls[0][0][1] == ["t1", 8, 3]

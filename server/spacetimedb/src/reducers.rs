@@ -181,6 +181,10 @@ pub fn add_task(
         subtask_of: None,
         subtasks: None,
         due_by: due,
+        sprint: None,
+        archived: false,
+        estimated_hours: None,
+        spent_hours: None,
     });
 
     log_action(ctx, &task_id, "created", None, None);
@@ -287,6 +291,10 @@ pub fn split_task(
             subtask_of: Some(parent_task_id.clone()),
             subtasks: None,
             due_by: None,
+            sprint: None,
+            archived: false,
+            estimated_hours: None,
+            spent_hours: None,
         });
         log_action(
             ctx,
@@ -554,29 +562,33 @@ pub fn seed_sample_tasks(ctx: &ReducerContext) -> Result<(), String> {
         let slug: String = title.chars().take(12).collect();
         let id = format!("sample_{}_{}", now, slug);
         ctx.db.tasks().insert(Task {
-            id: id.clone(),
-            title: title.to_string(),
-            description: desc.to_string(),
-            priority,
-            status: "available".to_string(),
-            assigned_to: None,
-            repo: repo.to_string(),
-            branch: None,
-            roadmap_item: roadmap.to_string(),
-            created_by: sender.clone(),
-            created_at: now,
-            updated_at: now,
-            depends_on: None,
-            required_skills: None,
-            score: 0,
-            position: Some(now as u32),
-            fail_count: 0,
-            max_attempts: 3,
-            fail_reason: None,
-            subtask_of: None,
-            subtasks: None,
-            due_by: None,
-        });
+                        id: id.clone(),
+                        title: title.to_string(),
+                        description: desc.to_string(),
+                        priority: priority,
+                        status: "available".to_string(),
+                        assigned_to: None,
+                        repo: repo.to_string(),
+                        branch: None,
+                        roadmap_item: roadmap.to_string(),
+                        created_by: "seed".to_string(),
+                        created_at: now,
+                        updated_at: now,
+                        depends_on: None,
+                        required_skills: None,
+                        score: 0,
+                        position: Some(now as u32),
+                        fail_count: 0,
+                        max_attempts: 3,
+                        fail_reason: None,
+                        subtask_of: None,
+                        subtasks: None,
+                        due_by: None,
+                        sprint: None,
+                        archived: false,
+                        estimated_hours: None,
+                        spent_hours: None,
+                    });
 
         ctx.db.task_logs().insert(TaskLog {
             id: format!("log_{}_{}", now, slug),
@@ -1602,7 +1614,7 @@ pub fn trigger_task_templates(ctx: &ReducerContext) -> Result<(), String> {
 
         // Create a task from this template
         let task_id = make_id("task", ctx);
-        let sender = ctx.sender().to_string();
+        let _sender = ctx.sender().to_string();
 
         ctx.db.tasks().insert(Task {
             id: task_id.clone(),
@@ -1627,6 +1639,10 @@ pub fn trigger_task_templates(ctx: &ReducerContext) -> Result<(), String> {
             subtask_of: None,
             subtasks: None,
             due_by: None,
+            sprint: None,
+            archived: false,
+            estimated_hours: None,
+            spent_hours: None,
         });
 
         log_action(
@@ -1654,3 +1670,267 @@ pub fn trigger_task_templates(ctx: &ReducerContext) -> Result<(), String> {
     );
     Ok(())
 }
+// ── New Reducers for Phase 5C Remaining Items ───────────────────────
+// These are appended to the end of reducers.rs
+
+// ── Sprint Tracking (#17) ────────────────────────────────────────
+
+#[reducer]
+pub fn set_sprint(ctx: &ReducerContext, task_id: String, sprint: String) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
+    task.sprint = if sprint.is_empty() { None } else { Some(sprint.clone()) };
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
+    log_action(ctx, &task_id, "sprint_set", task.assigned_to.as_deref(),
+        Some(&if sprint.is_empty() { "sprint=cleared".to_string() } else { format!("sprint={}", sprint) }));
+    Ok(())
+}
+
+// ── Archive / Unarchive (#19) ─────────────────────────────────────
+
+#[reducer]
+pub fn toggle_archive(ctx: &ReducerContext, task_id: String) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
+    task.archived = !task.archived;
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
+    let action = if task.archived { "archived" } else { "unarchived" };
+    log_action(ctx, &task_id, action, task.assigned_to.as_deref(), None);
+    Ok(())
+}
+
+#[reducer]
+pub fn archive_task(ctx: &ReducerContext, task_id: String) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
+    task.archived = true;
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
+    log_action(ctx, &task_id, "archived", task.assigned_to.as_deref(), None);
+    Ok(())
+}
+
+#[reducer]
+pub fn unarchive_task(ctx: &ReducerContext, task_id: String) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
+    task.archived = false;
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
+    log_action(ctx, &task_id, "unarchived", task.assigned_to.as_deref(), None);
+    Ok(())
+}
+
+// ── Time Estimates (#20) ─────────────────────────────────────────
+
+#[reducer]
+pub fn set_time_estimates(ctx: &ReducerContext, task_id: String, estimated_hours: u32, spent_hours: u32) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
+    task.estimated_hours = if estimated_hours > 0 { Some(estimated_hours) } else { None };
+    task.spent_hours = if spent_hours > 0 { Some(spent_hours) } else { None };
+    task.updated_at = now;
+    update_task_in_db(ctx, &task);
+    log_action(ctx, &task_id, "time_estimates_set", task.assigned_to.as_deref(),
+        Some(&format!("est={}h spent={}h", estimated_hours, spent_hours)));
+    Ok(())
+}
+
+// ── Related Task Links (#21) ──────────────────────────────────────
+
+#[reducer]
+pub fn add_task_relation(ctx: &ReducerContext, task_id: String, related_task_id: String, relation_type: String) -> Result<(), String> {
+    // Verify both tasks exist
+    find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
+    find_task(ctx, &related_task_id).ok_or_else(|| "Related task not found".to_string())?;
+
+    // Validate relation type
+    let valid_types = ["blocks", "blocked_by", "relates_to", "duplicates", "is_duplicated_by"];
+    if !valid_types.contains(&relation_type.as_str()) {
+        return Err(format!("Invalid relation type: {}. Valid: {}", relation_type, valid_types.join(", ")));
+    }
+
+    // Check not self-referencing
+    if task_id == related_task_id {
+        return Err("Cannot relate a task to itself".to_string());
+    }
+
+    // Check not duplicate
+    let exists = ctx.db.task_relations().iter()
+        .any(|r| r.task_id == task_id && r.related_task_id == related_task_id);
+    if exists {
+        return Err("Relation already exists".to_string());
+    }
+
+    let now = now_ms(ctx);
+    let rel_id = make_id("rel", ctx);
+    ctx.db.task_relations().insert(TaskRelation {
+        id: rel_id,
+        task_id,
+        related_task_id,
+        relation_type,
+        created_at: now,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn remove_task_relation(ctx: &ReducerContext, relation_id: String) -> Result<(), String> {
+    let old: Vec<TaskRelation> = ctx.db.task_relations().iter()
+        .filter(|r| r.id == relation_id)
+        .map(|r| r.clone())
+        .collect();
+    for r in old {
+        ctx.db.task_relations().delete(r);
+    }
+    Ok(())
+}
+
+// ── Automation Rules (#24) ────────────────────────────────────────
+
+#[reducer]
+pub fn create_automation_rule(
+    ctx: &ReducerContext,
+    id: String,
+    name: String,
+    description: String,
+    trigger_event: String,
+    condition: String,
+    action_type: String,
+    action_config: String,
+    repo: String,
+    active: bool,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let rule_id = if id.is_empty() { make_id("rule", ctx) } else { id };
+    ctx.db.automation_rules().insert(AutomationRule {
+        id: rule_id,
+        name,
+        description,
+        trigger_event,
+        condition: if condition.is_empty() { None } else { Some(condition) },
+        action_type,
+        action_config,
+        repo: if repo.is_empty() { None } else { Some(repo) },
+        active,
+        created_at: now,
+        updated_at: now,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn update_automation_rule(
+    ctx: &ReducerContext,
+    rule_id: String,
+    name: String,
+    description: String,
+    trigger_event: String,
+    condition: String,
+    action_type: String,
+    action_config: String,
+    repo: String,
+    active: bool,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let mut rule = find_automation_rule(ctx, &rule_id).ok_or_else(|| "Rule not found".to_string())?;
+    if !name.is_empty() { rule.name = name; }
+    if !description.is_empty() { rule.description = description; }
+    if !trigger_event.is_empty() { rule.trigger_event = trigger_event; }
+    rule.condition = if condition.is_empty() { None } else { Some(condition) };
+    if !action_type.is_empty() { rule.action_type = action_type; }
+    if !action_config.is_empty() { rule.action_config = action_config; }
+    rule.repo = if repo.is_empty() { None } else { Some(repo) };
+    rule.active = active;
+    rule.updated_at = now;
+    let old: Vec<AutomationRule> = ctx.db.automation_rules().iter()
+        .filter(|r| r.id == rule_id)
+        .map(|r| r.clone())
+        .collect();
+    for r in old { ctx.db.automation_rules().delete(r); }
+    ctx.db.automation_rules().insert(rule);
+    Ok(())
+}
+
+#[reducer]
+pub fn delete_automation_rule(ctx: &ReducerContext, rule_id: String) -> Result<(), String> {
+    let old: Vec<AutomationRule> = ctx.db.automation_rules().iter()
+        .filter(|r| r.id == rule_id)
+        .map(|r| r.clone())
+        .collect();
+    for r in old { ctx.db.automation_rules().delete(r); }
+    Ok(())
+}
+
+// ── API Key Management (#23) ──────────────────────────────────────
+
+#[reducer]
+pub fn create_api_key(
+    ctx: &ReducerContext,
+    id: String,
+    key_hash: String,
+    name: String,
+    repo_scope: String,
+    permissions: String,
+    created_by: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let key_id = if id.is_empty() { make_id("apikey", ctx) } else { id };
+    ctx.db.api_keys().insert(ApiKey {
+        id: key_id,
+        key_hash,
+        name,
+        repo_scope: if repo_scope.is_empty() { None } else { Some(repo_scope) },
+        permissions,
+        created_by,
+        created_at: now,
+        last_used_at: now,
+        active: true,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn revoke_api_key(ctx: &ReducerContext, key_id: String) -> Result<(), String> {
+    let mut key = find_api_key(ctx, &key_id).ok_or_else(|| "API key not found".to_string())?;
+    key.active = false;
+    let old: Vec<ApiKey> = ctx.db.api_keys().iter()
+        .filter(|k| k.id == key_id)
+        .map(|k| k.clone())
+        .collect();
+    for k in old { ctx.db.api_keys().delete(k); }
+    ctx.db.api_keys().insert(key);
+    Ok(())
+}
+
+// ── Schema Migration Logging (#16) ─────────────────────────────────
+
+#[reducer]
+pub fn record_migration(
+    ctx: &ReducerContext,
+    version: String,
+    description: String,
+    applied_by: String,
+    checksum: String,
+) -> Result<(), String> {
+    let now = now_ms(ctx);
+    let sender = ctx.sender().to_string();
+    // Check already applied
+    let exists = ctx.db.schema_migrations().iter()
+        .any(|m| m.version == version);
+    if exists {
+        return Err(format!("Migration '{}' already applied", version));
+    }
+    ctx.db.schema_migrations().insert(SchemaMigration {
+        version,
+        description,
+        applied_at: now,
+        applied_by: if applied_by.is_empty() { sender } else { applied_by },
+        checksum: if checksum.is_empty() { None } else { Some(checksum) },
+    });
+    Ok(())
+}
+
+// ── Cross-Project Aggregation (done on Python side via DB queries) ────

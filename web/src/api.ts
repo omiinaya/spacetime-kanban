@@ -187,6 +187,29 @@ export interface Project {
   updated_at: number
 }
 
+export interface ApiKeyItem {
+  id: string
+  name: string
+  permissions: string
+  scope: string
+  key_prefix: string
+  created_at: number
+  last_used_at: number
+  revoked: boolean
+}
+
+export interface ApiKeyItemFull extends ApiKeyItem {
+  full_key: string
+}
+
+export interface TaskRelation {
+  id: string
+  task_id: string
+  related_task_id: string
+  relation_type: string
+  created_at: number
+}
+
 export const api = {
   tasks: {
     list: (params?: { status?: string; repo?: string; label?: string }) => {
@@ -349,6 +372,41 @@ export const api = {
       apiPatch<Project>(`/projects/${id}`, body),
     delete: (id: string) =>
       apiDelete<{ status: string }>(`/projects/${id}`),
+  },
+  crossProject: {
+    get: () => apiGet<Record<string, {
+      project: any;
+      total: number;
+      by_status: Record<string, number>;
+      by_priority: Record<string, number>;
+      sprints: string[];
+    }>>('/analytics/cross-project'),
+  },
+  calendar: {
+    get: (year?: number, month?: number) => {
+      const qs = new URLSearchParams()
+      if (year) qs.set('year', String(year))
+      if (month) qs.set('month', String(month))
+      const q = qs.toString()
+      return apiGet<{ year: number; month: number; tasks: Task[] }>(`/analytics/calendar${q ? `?${q}` : ''}`)
+    },
+  },
+  apiKeys: {
+    list: () => apiGet<ApiKeyItem[]>('/api-keys'),
+    create: (body: { name: string; permissions?: string; scope?: string }) =>
+      apiPost<ApiKeyItemFull>('/api-keys', body),
+    revoke: (keyId: string) =>
+      apiPost<{ status: string }>(`/api-keys/${keyId}/revoke`),
+    delete: (keyId: string) =>
+      apiDelete<{ status: string }>(`/api-keys/${keyId}`),
+  },
+  taskRelations: {
+    list: (taskId: string) =>
+      apiGet<TaskRelation[]>(`/tasks/${taskId}/relations`),
+    add: (taskId: string, body: { related_task_id: string; relation_type: string }) =>
+      apiPost<TaskRelation>(`/tasks/${taskId}/relations`, body),
+    remove: (taskId: string, relationId: string) =>
+      apiDelete<{ status: string }>(`/tasks/${taskId}/relations/${relationId}`),
   },
   comments: {
     list: (taskId: string) =>
