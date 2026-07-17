@@ -80,7 +80,10 @@ def force_claim(client: httpx.Client, tid: str, agent: str, attempts: int = 10):
         client.post(f"/api/tasks/{tid}/unclaim")
         time.sleep(0.3)
         last = r
-    raise AssertionError(f"could not claim {tid} as {agent} after {attempts} attempts (last: {last.status_code if last else '?'} {last.text[:120] if last else ''})")
+    raise AssertionError(
+        f"could not claim {tid} as {agent} after {attempts} attempts "
+        f"(last: {last.status_code if last else '?'} {last.text[:120] if last else ''})"
+    )
 
 
 # ── Claim atomicity ──────────────────────────────────────────────────
@@ -149,7 +152,9 @@ def test_dependency_blocks_claim_until_done(client, task):
 
     # Complete A: claim it first, then complete
     force_claim(client, a, "dep-test")
-    assert client.post(f"/api/tasks/{a}/complete", json={"result_notes": "itest"}).status_code == 200
+    assert (
+        client.post(f"/api/tasks/{a}/complete", json={"result_notes": "itest"}).status_code == 200
+    )
 
     # Now B must be claimable
     force_claim(client, b, "dep-test")
@@ -187,10 +192,14 @@ def block_to_limit(client: httpx.Client, tid: str, agent: str, reason: str = "it
     """
     for i in range(3):
         force_claim(client, tid, agent)
-        r = client.post(f"/api/tasks/{tid}/block-with-reason", json={"reason": f"{reason} #{i + 1}"})
+        r = client.post(
+            f"/api/tasks/{tid}/block-with-reason", json={"reason": f"{reason} #{i + 1}"}
+        )
         assert r.status_code == 200, r.text
     t = client.get(f"/api/tasks/{tid}").json()
-    assert t["status"] == "blocked", f"expected blocked after 3 fails, got {t['status']} (fc={t['fail_count']})"
+    assert t["status"] == "blocked", (
+        f"expected blocked after 3 fails, got {t['status']} (fc={t['fail_count']})"
+    )
     return t
 
 
