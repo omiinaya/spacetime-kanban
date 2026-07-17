@@ -17,7 +17,7 @@ export default {
   priority: __t.u8(),
   repo: __t.string(),
   roadmapItem: __t.string(),
-  createdBy: __t.string(),
-  initialStatus: __t.string(),
-  dueBy: __t.u64(),
+  requiredSkills: __t.string(),
+  cronSchedule: __t.string(),
+  active: __t.bool(),
 };
