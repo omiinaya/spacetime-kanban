@@ -11,6 +11,5 @@ import {
 } from "spacetimedb";
 
 export default {
-  taskId: __t.string(),
-  score: __t.u32(),
+  key: __t.string(),
 };

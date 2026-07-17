@@ -10,14 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  id: __t.string(),
-  title: __t.string(),
-  description: __t.string(),
-  priority: __t.u8(),
-  repo: __t.string(),
-  roadmapItem: __t.string(),
-  createdBy: __t.string(),
-  initialStatus: __t.string(),
-  dueBy: __t.u64(),
-};
+export default __t.row({
+  id: __t.string().primaryKey(),
+  taskId: __t.string().name("task_id"),
+  relatedTaskId: __t.string().name("related_task_id"),
+  relationType: __t.string().name("relation_type"),
+  createdAt: __t.u64().name("created_at"),
+});

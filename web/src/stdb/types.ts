@@ -10,6 +10,54 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const ApiKey = __t.object("ApiKey", {
+  id: __t.string(),
+  keyHash: __t.string(),
+  name: __t.string(),
+  repoScope: __t.option(__t.string()),
+  permissions: __t.string(),
+  createdBy: __t.string(),
+  createdAt: __t.u64(),
+  lastUsedAt: __t.u64(),
+  active: __t.bool(),
+});
+export type ApiKey = __Infer<typeof ApiKey>;
+
+export const AutomationRule = __t.object("AutomationRule", {
+  id: __t.string(),
+  name: __t.string(),
+  description: __t.string(),
+  triggerEvent: __t.string(),
+  condition: __t.option(__t.string()),
+  actionType: __t.string(),
+  actionConfig: __t.string(),
+  repo: __t.option(__t.string()),
+  active: __t.bool(),
+  createdAt: __t.u64(),
+  updatedAt: __t.u64(),
+});
+export type AutomationRule = __Infer<typeof AutomationRule>;
+
+export const AutomationRuleLog = __t.object("AutomationRuleLog", {
+  id: __t.string(),
+  ruleId: __t.string(),
+  ruleName: __t.string(),
+  triggerEvent: __t.string(),
+  taskId: __t.string(),
+  actionType: __t.string(),
+  result: __t.string(),
+  errorMessage: __t.option(__t.string()),
+  firedAt: __t.u64(),
+});
+export type AutomationRuleLog = __Infer<typeof AutomationRuleLog>;
+
+export const DispatcherStateRow = __t.object("DispatcherStateRow", {
+  key: __t.string(),
+  value: __t.string(),
+  updatedAt: __t.u64(),
+});
+export type DispatcherStateRow = __Infer<typeof DispatcherStateRow>;
+
 export const IssueLink = __t.object("IssueLink", {
   kanbanTaskId: __t.string(),
   issueNumber: __t.u32(),
@@ -29,6 +77,27 @@ export const KanbanLabel = __t.object("KanbanLabel", {
   createdAt: __t.u64(),
 });
 export type KanbanLabel = __Infer<typeof KanbanLabel>;
+
+export const KanbanProject = __t.object("KanbanProject", {
+  id: __t.string(),
+  name: __t.string(),
+  description: __t.string(),
+  color: __t.string(),
+  priority: __t.u8(),
+  active: __t.bool(),
+  createdAt: __t.u64(),
+  updatedAt: __t.u64(),
+});
+export type KanbanProject = __Infer<typeof KanbanProject>;
+
+export const SchemaMigration = __t.object("SchemaMigration", {
+  version: __t.string(),
+  description: __t.string(),
+  appliedAt: __t.u64(),
+  appliedBy: __t.string(),
+  checksum: __t.option(__t.string()),
+});
+export type SchemaMigration = __Infer<typeof SchemaMigration>;
 
 export const SwarmAgent = __t.object("SwarmAgent", {
   id: __t.string(),
@@ -107,6 +176,31 @@ export const TaskLog = __t.object("TaskLog", {
   timestamp: __t.u64(),
 });
 export type TaskLog = __Infer<typeof TaskLog>;
+
+export const TaskRelation = __t.object("TaskRelation", {
+  id: __t.string(),
+  taskId: __t.string(),
+  relatedTaskId: __t.string(),
+  relationType: __t.string(),
+  createdAt: __t.u64(),
+});
+export type TaskRelation = __Infer<typeof TaskRelation>;
+
+export const TaskTemplate = __t.object("TaskTemplate", {
+  id: __t.string(),
+  title: __t.string(),
+  description: __t.string(),
+  priority: __t.u8(),
+  repo: __t.string(),
+  roadmapItem: __t.string(),
+  requiredSkills: __t.option(__t.string()),
+  cronSchedule: __t.string(),
+  createdBy: __t.string(),
+  createdAt: __t.u64(),
+  lastTriggeredAt: __t.u64(),
+  active: __t.bool(),
+});
+export type TaskTemplate = __Infer<typeof TaskTemplate>;
 
 export const WebhookDelivery = __t.object("WebhookDelivery", {
   id: __t.string(),

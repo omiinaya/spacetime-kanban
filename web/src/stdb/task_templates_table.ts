@@ -10,14 +10,17 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  id: __t.string(),
+export default __t.row({
+  id: __t.string().primaryKey(),
   title: __t.string(),
   description: __t.string(),
   priority: __t.u8(),
   repo: __t.string(),
-  roadmapItem: __t.string(),
-  createdBy: __t.string(),
-  initialStatus: __t.string(),
-  dueBy: __t.u64(),
-};
+  roadmapItem: __t.string().name("roadmap_item"),
+  requiredSkills: __t.option(__t.string()).name("required_skills"),
+  cronSchedule: __t.string().name("cron_schedule"),
+  createdBy: __t.string().name("created_by"),
+  createdAt: __t.u64().name("created_at"),
+  lastTriggeredAt: __t.u64().name("last_triggered_at"),
+  active: __t.bool(),
+});

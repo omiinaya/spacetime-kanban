@@ -12,12 +12,12 @@ import {
 
 export default {
   id: __t.string(),
-  title: __t.string(),
+  name: __t.string(),
   description: __t.string(),
-  priority: __t.u8(),
+  triggerEvent: __t.string(),
+  condition: __t.string(),
+  actionType: __t.string(),
+  actionConfig: __t.string(),
   repo: __t.string(),
-  roadmapItem: __t.string(),
-  createdBy: __t.string(),
-  initialStatus: __t.string(),
-  dueBy: __t.u64(),
+  active: __t.bool(),
 };

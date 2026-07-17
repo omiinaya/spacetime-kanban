@@ -12,12 +12,9 @@ import {
 
 export default {
   id: __t.string(),
-  title: __t.string(),
-  description: __t.string(),
-  priority: __t.u8(),
-  repo: __t.string(),
-  roadmapItem: __t.string(),
+  keyHash: __t.string(),
+  name: __t.string(),
+  repoScope: __t.string(),
+  permissions: __t.string(),
   createdBy: __t.string(),
-  initialStatus: __t.string(),
-  dueBy: __t.u64(),
 };
