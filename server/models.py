@@ -284,6 +284,15 @@ class BulkReorderRequest(BaseModel):
     items: list[ReorderRequest]
 
 
+class BulkRetryRequest(BaseModel):
+    task_ids: list[str]
+    reset_fails: bool = True
+
+
+class BulkArchiveRequest(BaseModel):
+    task_ids: list[str]
+
+
 class WebhookCreateRequest(BaseModel):
     url: str
     type: str = "generic"

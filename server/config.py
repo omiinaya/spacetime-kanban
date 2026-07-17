@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     stdb_host: str = "localhost"
     stdb_port: int = 3001
     stdb_db: str = "kanban"
-    server_port: int = 8728
+    server_port: int = 8727
     cors_origin: str = "http://localhost:4444"
     github_token: str = ""
     github_default_repo: str = ""

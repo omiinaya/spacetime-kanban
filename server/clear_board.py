@@ -3,7 +3,7 @@
 
 import httpx
 
-API = "http://localhost:8728"
+API = "http://localhost:8727"
 
 
 def main():

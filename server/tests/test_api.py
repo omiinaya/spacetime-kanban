@@ -1357,3 +1357,62 @@ async def test_patch_task_time_estimates(client, mock_all):
     est_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "set_time_estimates"]
     assert len(est_calls) == 1
     assert est_calls[0][0][1] == ["t1", 8, 3]
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Bulk retry / bulk archive
+# ════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_bulk_retry_tasks(client, mock_all):
+    """POST /api/tasks/bulk-retry should reset fails + unclaim each task."""
+    resp = await client.post("/api/tasks/bulk-retry", json={"task_ids": ["t1", "t2"]})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["retried"] == 2
+    assert data["failed"] == []
+    reset_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "reset_fail_count"]
+    unclaim_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "unclaim_task"]
+    assert len(reset_calls) == 2
+    assert len(unclaim_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_retry_without_reset(client, mock_all):
+    """reset_fails=false should skip the reset_fail_count reducer."""
+    resp = await client.post(
+        "/api/tasks/bulk-retry", json={"task_ids": ["t1"], "reset_fails": False}
+    )
+    assert resp.status_code == 200
+    reset_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "reset_fail_count"]
+    unclaim_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "unclaim_task"]
+    assert len(reset_calls) == 0
+    assert len(unclaim_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_bulk_archive_tasks(client, mock_all):
+    """POST /api/tasks/bulk-archive should toggle only unarchived tasks."""
+    mock_all["param"].side_effect = [
+        [_make_task("t1", "Task one")],  # t1 not archived
+        [{**_make_task("t2", "Task two"), "archived": True}],  # t2 already archived
+    ]
+    resp = await client.post("/api/tasks/bulk-archive", json={"task_ids": ["t1", "t2"]})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["archived"] == 1
+    toggle_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "toggle_archive"]
+    assert len(toggle_calls) == 1
+    assert toggle_calls[0][0][1] == ["t1"]
+
+
+@pytest.mark.asyncio
+async def test_bulk_archive_missing_task(client, mock_all):
+    """Missing tasks land in the failed list."""
+    mock_all["param"].return_value = []
+    resp = await client.post("/api/tasks/bulk-archive", json={"task_ids": ["nope"]})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["archived"] == 0
+    assert data["failed"][0]["error"] == "not found"

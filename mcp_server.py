@@ -17,7 +17,7 @@ from urllib.parse import quote, urljoin
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 
-API_BASE = os.environ.get("KANBAN_API", "http://localhost:8728")
+API_BASE = os.environ.get("KANBAN_API", "http://localhost:8727")
 app = Server("spacetimedb-kanban")
 
 
