@@ -249,6 +249,12 @@ export const api = {
       apiPost<{ status: string; task_id: string }>(`/tasks/${id}/archive`),
     unarchive: (id: string) =>
       apiPost<{ status: string; task_id: string }>(`/tasks/${id}/unarchive`),
+    bulkRetry: (task_ids: string[], reset_fails = true) =>
+      apiPost<{ status: string; retried: number; failed: { task_id: string; error: string }[] }>(
+        '/tasks/bulk-retry', { task_ids, reset_fails }),
+    bulkArchive: (task_ids: string[]) =>
+      apiPost<{ status: string; archived: number; failed: { task_id: string; error: string }[] }>(
+        '/tasks/bulk-archive', { task_ids }),
     seed: () => apiPost<{ status: string }>('/tasks/seed'),
     reorder: (task_id: string, position: number) =>
       apiPost<{ status: string; task_id: string; position: number }>('/tasks/reorder', { task_id, position }),
