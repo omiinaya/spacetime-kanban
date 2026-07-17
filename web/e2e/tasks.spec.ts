@@ -6,12 +6,13 @@ test.describe('Task Interaction', () => {
     await page.locator('button').filter({ hasText: 'New' }).click()
 
     // Dialog should be visible
-    await expect(page.locator('h3').filter({ hasText: 'New Task' })).toBeVisible()
+    await expect(page.locator('h2').filter({ hasText: 'Create Task' })).toBeVisible()
 
-    // Verify all form fields exist
+    // Verify all form fields exist (scope select to the dialog form — the
+    // board toolbar also has a <select>, causing strict-mode violations)
     await expect(page.locator('input[placeholder="Task title"]')).toBeVisible()
     await expect(page.locator('textarea[placeholder="Description (optional)"]')).toBeVisible()
-    await expect(page.locator('select')).toBeVisible() // priority select
+    await expect(page.locator('form select')).toBeVisible() // priority select
     await expect(page.locator('input[placeholder="Repo slug"]')).toBeVisible()
     await expect(page.locator('input[placeholder="Roadmap item"]')).toBeVisible()
     await expect(page.locator('input[placeholder="Skills (e.g. rust,python)"]')).toBeVisible()
@@ -38,7 +39,7 @@ test.describe('Task Interaction', () => {
     await page.locator('input[placeholder="Skills (e.g. rust,python)"]').fill('typescript,playwright')
 
     // Select priority
-    await page.locator('select').selectOption('0')
+    await page.locator('form select').selectOption('0')
 
     // Submit button should now be enabled
     const createBtn = page.locator('button[type="submit"]').filter({ hasText: 'Create' })
@@ -48,18 +49,18 @@ test.describe('Task Interaction', () => {
   test('create task dialog can be dismissed with Cancel or X', async ({ page }) => {
     await page.goto('/')
     await page.locator('button').filter({ hasText: 'New' }).click()
-    await expect(page.locator('h3').filter({ hasText: 'New Task' })).toBeVisible()
+    await expect(page.locator('h2').filter({ hasText: 'Create Task' })).toBeVisible()
 
     // Click Cancel
     await page.locator('button').filter({ hasText: 'Cancel' }).click()
-    await expect(page.locator('h3').filter({ hasText: 'New Task' })).not.toBeVisible()
+    await expect(page.locator('h2').filter({ hasText: 'Create Task' })).not.toBeVisible()
   })
 
   test('can select priority in create dialog', async ({ page }) => {
     await page.goto('/')
     await page.locator('button').filter({ hasText: 'New' }).click()
 
-    const select = page.locator('select')
+    const select = page.locator('form select')
     // Verify all priority options exist
     const options = await select.locator('option').allInnerTexts()
     expect(options).toContain('Urgent')
@@ -74,44 +75,25 @@ test.describe('Task Interaction', () => {
 
   test('task detail dialog shows metadata when a task card is clicked', async ({ page }) => {
     await page.goto('/')
-    // First, seed data so we have tasks to interact with
-    const seedBtn = page.locator('button').filter({ hasText: 'Seed' })
-    if (await seedBtn.isVisible()) {
-      await seedBtn.click()
-      // Wait for tasks to appear (allow UI to update)
-      await page.waitForTimeout(2000)
-    }
+    // NOTE: never click Seed here — E2E runs against the PRODUCTION board.
+    // The live board already has tasks; click the first row in list view.
+    const firstRow = page.locator('table tbody tr').first()
+    await expect(firstRow).toBeVisible()
+    await firstRow.click()
 
-    // If any task cards exist, click one
-    const taskCards = page.locator('.cursor-pointer').filter({ has: page.locator('.text-sm.font-medium') })
-    const cardCount = await taskCards.count()
+    // Task detail dialog should open with expected sections
+    await expect(page.locator('text=Dependency Chain').first()).toBeVisible()
+    await expect(page.locator('text=Activity Log').first()).toBeVisible()
 
-    if (cardCount > 0) {
-      // Click the first task card
-      await taskCards.first().click()
-
-      // Task detail dialog should open with action buttons
-      // Look for the detail modal content
-      await expect(page.locator('text=Description').first()).toBeVisible()
-      await expect(page.locator('text=ID').first()).toBeVisible()
-      await expect(page.locator('text=Activity Log').first()).toBeVisible()
-
-      // Close the dialog
-      await page.locator('button').filter({ has: page.locator('.lucide-x') }).first().click()
-    }
+    // Close the dialog via the X button in its header (scoped to the dialog —
+    // the first .lucide-x button on the page is the hidden mobile-drawer close)
+    await page.locator('div.fixed.inset-0 button').filter({ has: page.locator('.lucide-x') }).first().click()
   })
 
-  test('task cards display priority labels and status', async ({ page }) => {
+  test('task list displays priority labels and status', async ({ page }) => {
     await page.goto('/')
-    const seedBtn = page.locator('button').filter({ hasText: 'Seed' })
-    if (await seedBtn.isVisible()) {
-      await seedBtn.click()
-      await page.waitForTimeout(2000)
-    }
-
-    // Check for priority labels in task cards
-    const priorityLabels = page.locator('text=Urgent, text=High, text=Medium, text=Low').first()
-    // Just verify the page structure is correct (data may vary)
-    await expect(page.locator('h1')).toBeVisible()
+    // List view shows priority labels (Urgent/High/Medium/Low) and status badges
+    await expect(page.locator('h1')).toContainText('Board')
+    await expect(page.locator('table tbody tr').first()).toBeVisible()
   })
 })

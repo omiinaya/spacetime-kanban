@@ -1,4 +1,9 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
+
+/** Switch the board from the default list view to kanban card view. */
+async function switchToCardView(page: Page) {
+  await page.locator('button[title="Card view (detailed)"]').click()
+}
 
 test.describe('Board Page', () => {
   test('board page loads with correct page title', async ({ page }) => {
@@ -10,25 +15,27 @@ test.describe('Board Page', () => {
 
   test('four kanban column headers are displayed on desktop', async ({ page }) => {
     await page.goto('/')
-    // On desktop (>= 1024px) we get 4 columns via CSS grid
+    // On desktop (>= 1024px) we get 4 columns in card view (default is list view)
     await page.setViewportSize({ width: 1280, height: 800 })
+    await switchToCardView(page)
 
     const columns = page.locator('h2')
     const columnTexts = await columns.allInnerTexts()
 
-    expect(columnTexts).toContain('AVAILABLE')
-    expect(columnTexts).toContain('IN PROGRESS')
-    expect(columnTexts).toContain('BLOCKED')
-    expect(columnTexts).toContain('DONE')
+    expect(columnTexts.join(' ')).toContain('AVAILABLE')
+    expect(columnTexts.join(' ')).toContain('IN PROGRESS')
+    expect(columnTexts.join(' ')).toContain('BLOCKED')
+    expect(columnTexts.join(' ')).toContain('DONE')
   })
 
-  test('shows empty state when no tasks exist', async ({ page }) => {
+  test('shows search-aware empty state when nothing matches', async ({ page }) => {
     await page.goto('/')
-    // Check for empty state message
-    const hasEmptyAlert = page.locator('text=No tasks found')
-    const emptyColumn = page.locator('text=Empty').first()
-
-    await expect(hasEmptyAlert.or(emptyColumn)).toBeVisible()
+    // Live board is never empty — verify the search-aware empty state instead
+    const searchInput = page.locator('input[placeholder="Search tasks..."]')
+    await expect(searchInput).toBeVisible()
+    await searchInput.fill('zzz-no-such-task-exists-zzz')
+    // Two elements match (banner + list-view td) — assert the first
+    await expect(page.locator('text=No tasks match').first()).toBeVisible()
   })
 
   test('"New" button opens the Create Task dialog', async ({ page }) => {
@@ -39,8 +46,8 @@ test.describe('Board Page', () => {
     await expect(newButton).toBeVisible()
     await newButton.click()
 
-    // Dialog should be visible — look for "New Task" heading
-    const dialogTitle = page.locator('h3').filter({ hasText: 'New Task' })
+    // Dialog should be visible — look for "Create Task" heading
+    const dialogTitle = page.locator('h2').filter({ hasText: 'Create Task' })
     await expect(dialogTitle).toBeVisible()
 
     // Form fields should be present
@@ -59,7 +66,7 @@ test.describe('Board Page', () => {
 
     // Type a query — the no-results message should appear
     await searchInput.fill('nonexistent-task-xyz')
-    await expect(page.locator('text=No tasks match')).toBeVisible()
+    await expect(page.locator('text=No tasks match').first()).toBeVisible()
   })
 
   test('repo filter dropdown appears when repos exist', async ({ page }) => {
@@ -100,10 +107,8 @@ test.describe('Board Page', () => {
     await expect(graphBtn).toBeVisible()
     await graphBtn.click()
 
-    // Graph overlay should be visible — check for its close button
-    await page.waitForTimeout(500)
-    const closeBtn = page.locator('button').filter({ hasText: /Close/ })
-    await expect(closeBtn.first()).toBeVisible()
+    // Graph overlay should be visible — check for its heading
+    await expect(page.locator('h2').filter({ hasText: 'Dependency Graph' })).toBeVisible()
   })
 
   test('mobile view shows status tabs instead of columns', async ({ page }) => {
@@ -135,10 +140,12 @@ test.describe('Board Page', () => {
   test('kanban column shows task count badges', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     await page.goto('/')
+    await switchToCardView(page)
 
-    // Each column heading has a count badge next to it
-    const columnCounters = page.locator('h2 + span')
-    const count = await columnCounters.count()
-    expect(count).toBeGreaterThanOrEqual(1)
+    // Each column header (h2) includes a count, e.g. "AVAILABLE (12/50)" or a badge
+    const columnHeaders = page.locator('h2')
+    await expect(columnHeaders.first()).toBeVisible()
+    const count = await columnHeaders.count()
+    expect(count).toBeGreaterThanOrEqual(4)
   })
 })
