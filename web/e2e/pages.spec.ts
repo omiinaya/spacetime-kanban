@@ -65,7 +65,8 @@ test.describe('Key Pages', () => {
 
     test('refresh button is present', async ({ page }) => {
       await page.goto('/issues')
-      const refreshBtn = page.locator('button').filter({ has: page.locator('.lucide-refresh-cw') })
+      // Use the stable title attribute, not the lucide icon class
+      const refreshBtn = page.locator('button[title="Refresh"]')
       await expect(refreshBtn).toBeVisible()
     })
   })
