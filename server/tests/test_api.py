@@ -72,6 +72,10 @@ def mock_all():
         "routes.projects": ["_sql", "_sql_param", "_call"],
         "routes.tasks": ["_sql", "_sql_param", "_call", "_notify"],
         "routes.templates": ["_sql", "_sql_param", "_call"],
+        "routes.ops": ["_sql", "_call"],
+        "routes.dispatcher": ["_sql", "_sql_param", "_call"],
+        "routes.rules": ["_sql", "_sql_param", "_call"],
+        "routes.apikeys": ["_sql", "_call"],
     }
 
     with ExitStack() as stack:
@@ -83,12 +87,6 @@ def mock_all():
 
         # Map function names to their mock objects
         mock_map = {"_sql": sql, "_sql_param": param, "_call": call, "_notify": notify}
-
-        # Patch main module references
-        stack.enter_context(patch("main._sql", sql))
-        stack.enter_context(patch("main._sql_param", param))
-        stack.enter_context(patch("main._call", call))
-        stack.enter_context(patch("main._notify", notify))
 
         # Patch each route module's references with the SAME mock objects
         for mod, names in route_modules.items():
