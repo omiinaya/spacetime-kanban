@@ -7,14 +7,14 @@ test.describe('Navigation', () => {
     const navLinks = page.locator('aside nav a')
     await expect(navLinks.first()).toBeVisible()
 
-    // All four nav items should be present
-    await expect(navLinks).toHaveCount(4)
-
+    // All nav items should be present (Board, Triage, Projects, Labels, Issues, ...)
     const labels = await navLinks.allInnerTexts()
     expect(labels).toContain('Board')
+    expect(labels).toContain('Triage')
     expect(labels).toContain('GitHub Issues')
     expect(labels).toContain('Activity Log')
     expect(labels).toContain('Analytics')
+    expect(labels.length).toBeGreaterThanOrEqual(12)
   })
 
   test('navigating to Board shows the kanban board', async ({ page }) => {
@@ -30,16 +30,17 @@ test.describe('Navigation', () => {
 
   test('navigating to Activity Log page', async ({ page }) => {
     await page.goto('/logs')
-    // LogsPage renders h1 after loading completes (API call fails quickly)
-    await expect(page.locator('h1').or(page.locator('text=Activity Log'))).toBeVisible({ timeout: 10000 })
+    // LogsPage renders h1 after loading completes
+    await expect(page.locator('h1')).toContainText('Activity Log')
   })
 
   test('navigating to Analytics page', async ({ page }) => {
     await page.goto('/analytics')
-    // AnalyticsPage shows h1 only when data loads; wait for either heading or error
+    // AnalyticsPage shows h1 only when data loads (overview query takes ~5s+);
+    // wait for either heading or error
     await expect(
       page.locator('h1').or(page.locator('text=Analytics error'))
-    ).toBeVisible({ timeout: 10000 })
+    ).toBeVisible({ timeout: 30000 })
   })
 
   test('sidebar nav links navigate correctly', async ({ page }) => {
@@ -48,7 +49,7 @@ test.describe('Navigation', () => {
     // Click "Activity Log" — target the sidebar (first aside) link
     await page.locator('aside').first().getByText('Activity Log').click()
     await expect(page).toHaveURL('/logs')
-    await expect(page.locator('h1').or(page.locator('text=Activity Log'))).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('h1')).toContainText('Activity Log')
 
     // Click "Board"
     await page.locator('aside').first().getByText('Board').click()
