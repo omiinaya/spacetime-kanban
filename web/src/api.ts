@@ -16,6 +16,11 @@ export interface Task {
   score: number
   position: number | null
   due_by: number | null
+  fail_count?: number
+  max_attempts?: number
+  fail_reason?: string | null
+  subtask_of?: string | null
+  subtasks?: string | null
 }
 
 export interface LogEntry {
@@ -375,7 +380,7 @@ export const api = {
   },
   crossProject: {
     get: () => apiGet<Record<string, {
-      project: any;
+      project: Record<string, unknown>;
       total: number;
       by_status: Record<string, number>;
       by_priority: Record<string, number>;

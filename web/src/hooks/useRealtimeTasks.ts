@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DbConnection } from '../stdb'
 import type { Task, TaskLog } from '../stdb/types'
 import { api } from '../api'
@@ -58,6 +58,7 @@ export function useRealtimeTasks() {
       const data = await api.tasks.list()
       if (Array.isArray(data)) {
         // API returns snake_case, STDB uses camelCase — map fields
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API returns number timestamps, Task uses bigint; direct cast fails
         const mapped = (data as unknown as any[]).map(d => ({
           id: d.id,
           title: d.title,
@@ -85,24 +86,24 @@ export function useRealtimeTasks() {
         setTasksIfChanged(mapped)
         if (mapped.length > 0) setLoading(false)  // Data with content arrived
       }
-    } catch (e: any) {
+    } catch {
       // API might also fail — that's fine, we retry next interval
     }
   })
 
-  function syncFromCache(conn: DbConnection) {
-    try {
-      const all = Array.from(conn.db.tasks.iter()) as Task[]
-      setTasksIfChanged(all)
-      if (all.length > 0) setLoading(false)  // Data with content arrived from STDB
-    } catch (e: any) {
-      console.warn('Failed to sync from STDB cache:', e.message)
-    }
-  }
-
   useEffect(() => {
     cancelledRef.current = false
     const cancelled = () => cancelledRef.current
+
+    function syncFromCache(conn: DbConnection) {
+      try {
+        const all = Array.from(conn.db.tasks.iter()) as Task[]
+        setTasksIfChanged(all)
+        if (all.length > 0) setLoading(false)  // Data with content arrived from STDB
+      } catch (e: unknown) {
+        console.warn('Failed to sync from STDB cache:', e instanceof Error ? e.message : String(e))
+      }
+    }
 
     // Fire an immediate REST fetch — bootstrap data while STDB connects
     syncFromApi.current()
@@ -154,7 +155,7 @@ export function useRealtimeTasks() {
             stopPolling()  // STDB is live — no need for REST polling
             syncFromCache(conn)
           })
-          .onConnectError((_ctx: any, err: Error) => {
+          .onConnectError((_ctx: unknown, err: Error) => {
             if (cancelled()) return
             console.warn('STDB WebSocket connection failed:', err.message)
             setConnected(false)
@@ -162,7 +163,7 @@ export function useRealtimeTasks() {
             startPolling()  // Start REST polling since STDB is down
             scheduleReconnect()
           })
-          .onDisconnect((_ctx: any, err?: Error) => {
+          .onDisconnect((_ctx: unknown, err?: Error) => {
             if (cancelled()) return
             console.warn('STDB WebSocket disconnected:', err?.message)
             setConnected(false)
@@ -191,7 +192,7 @@ export function useRealtimeTasks() {
         conn.db.tasks.onDelete(() => {
           if (!cancelled()) syncFromCache(conn)
         })
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!cancelled()) {
           console.error('STDB connection error:', e)
           setConnected(false)

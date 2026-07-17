@@ -1,0 +1,39 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-lint
+        name: Ruff lint
+        entry: ruff check --fix
+        language: system
+        types: [python]
+        stages: [pre-commit]
+
+      - id: ruff-format
+        name: Ruff format
+        entry: ruff format
+        language: system
+        types: [python]
+        stages: [pre-commit]
+
+      - id: eslint
+        name: ESLint (frontend)
+        entry: bash -c 'cd web && npm run lint 2>/dev/null || true'
+        language: system
+        files: '^web/.*\.(ts|tsx|js|jsx)$'
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: prettier
+        name: Prettier (frontend)
+        entry: bash -c 'cd web && npm run format:check 2>/dev/null || true'
+        language: system
+        files: '^web/.*\.(ts|tsx|js|jsx|css|json)$'
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-branch-refs
+        name: Check debug artifacts
+        entry: bash -c 'if git diff --cached --name-only | grep -qE "\.only\b|console\.log|dbg!"; then echo "⚠️  Found debug artifacts (.only, console.log, dbg!)"; exit 1; fi'
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false

@@ -2,7 +2,6 @@ import { useState, useRef, useCallback } from 'react'
 import {
   Plus, Play, CheckCircle2, Ban, RotateCcw, Trash2, Link, Cpu,
   Github, CheckSquare, Square,
-  Loader2,
 } from 'lucide-react'
 import { CardSkeleton, CompactCardSkeleton } from './Skeleton'
 import type { KanbanLabel, IssueLink } from '../api'

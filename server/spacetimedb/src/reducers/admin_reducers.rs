@@ -29,7 +29,7 @@ pub fn seed_sample_tasks(ctx: &ReducerContext) -> Result<(), String> {
                         id: id.clone(),
                         title: title.to_string(),
                         description: desc.to_string(),
-                        priority: priority,
+                        priority,
                         status: "available".to_string(),
                         assigned_to: None,
                         repo: repo.to_string(),
@@ -230,7 +230,6 @@ pub fn update_webhook_subscription(
         .webhook_subscriptions()
         .iter()
         .filter(|w| w.id == wh.id)
-        .map(|w| w.clone())
         .collect();
     for w in old {
         ctx.db.webhook_subscriptions().delete(w);
@@ -242,6 +241,7 @@ pub fn update_webhook_subscription(
 // ── Webhook Delivery Log ────────────────────────────────────────────
 
 #[reducer]
+#[allow(clippy::too_many_arguments)]
 pub fn log_webhook_delivery(
     ctx: &ReducerContext,
     id: String,
@@ -324,7 +324,6 @@ pub fn update_issue_link_status(
         .issue_links()
         .iter()
         .filter(|l| l.kanban_task_id == link.kanban_task_id)
-        .map(|l| l.clone())
         .collect();
     for l in old {
         ctx.db.issue_links().delete(l);
@@ -370,7 +369,6 @@ pub fn remove_label(ctx: &ReducerContext, label_id: String) -> Result<(), String
         .task_label_assignments()
         .iter()
         .filter(|a| a.label_id == label_id)
-        .map(|a| a.clone())
         .collect();
     for a in assignments {
         ctx.db.task_label_assignments().delete(a);
@@ -400,7 +398,6 @@ pub fn update_label(
         .kanban_labels()
         .iter()
         .filter(|l| l.id == label.id)
-        .map(|l| l.clone())
         .collect();
     for l in old {
         ctx.db.kanban_labels().delete(l);
@@ -449,7 +446,6 @@ pub fn unassign_label_from_task(
         .task_label_assignments()
         .iter()
         .filter(|a| a.task_id == task_id && a.label_id == label_id)
-        .map(|a| a.clone())
         .collect();
     if assignment.is_empty() {
         return Err("Label assignment not found".to_string());
@@ -545,7 +541,6 @@ pub fn batch_unassign_labels(
                 .task_label_assignments()
                 .iter()
                 .filter(|a| a.task_id == *task_id && a.label_id == *label_id)
-                .map(|a| a.clone())
                 .collect();
             for a in to_remove {
                 ctx.db.task_label_assignments().delete(a);
@@ -583,7 +578,6 @@ pub fn set_dispatcher_state(
         .dispatcher_state()
         .iter()
         .filter(|r| r.key == key)
-        .map(|r| r.clone())
         .collect();
     for r in old {
         ctx.db.dispatcher_state().delete(r);
@@ -606,7 +600,6 @@ pub fn delete_dispatcher_state_row(
         .dispatcher_state()
         .iter()
         .filter(|r| r.key == key)
-        .map(|r| r.clone())
         .collect();
     if old.is_empty() {
         return Err("Key not found".to_string());

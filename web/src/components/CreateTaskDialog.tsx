@@ -10,16 +10,6 @@ function dateInputToEpochMs(val: string): number | null {
   return d.getTime()
 }
 
-/** Convert epoch ms to YYYY-MM-DD for a date input. */
-function epochMsToDateInput(ms: number | null | undefined): string {
-  if (!ms) return ''
-  const d = new Date(ms)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
 export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null)
   const [title, setTitle] = useState('')

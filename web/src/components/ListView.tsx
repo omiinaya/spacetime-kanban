@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
-  Play, CheckCircle2, Ban, RotateCcw, Trash2, Link, Cpu,
-  Github, CheckSquare, Square, Tag, Loader2,
+  Play, CheckCircle2, Ban, RotateCcw, Trash2, Cpu,
+  Github, CheckSquare, Square, Loader2,
   ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react'
 import type { KanbanLabel, IssueLink } from '../api'
@@ -16,7 +16,6 @@ interface ListViewProps {
   selectMode: boolean
   taskLabelMap: Map<string, KanbanLabel[]>
   issueLinks: Record<string, IssueLink>
-  allLabels: KanbanLabel[]
   onToggleSelect: (id: string) => void
   onClaim: (id: string) => void
   onComplete: (id: string) => void
@@ -47,7 +46,7 @@ const PRIORITY_COLORS_VIBRANT: Record<number, string> = {
 
 export default function ListView({
   tasks, loading, selectedIds, selectMode,
-  taskLabelMap, issueLinks, allLabels,
+  taskLabelMap, issueLinks,
   onToggleSelect, onClaim, onComplete, onBlock, onUnclaim, onDelete, onClick,
 }: ListViewProps) {
   const [sortField, setSortField] = useState<SortField>('priority')

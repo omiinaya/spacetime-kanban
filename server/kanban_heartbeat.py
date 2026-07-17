@@ -8,8 +8,8 @@ Silent when successful (no_agent mode — only output on error).
 import json
 import os
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 
 API_BASE = os.environ.get("KANBAN_API", "http://localhost:8728")
 AGENT_ID = os.environ.get("KANBAN_AGENT_ID", "hermes")

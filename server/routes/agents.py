@@ -5,17 +5,14 @@ import time
 from fastapi import APIRouter, Depends, HTTPException
 
 from shared import (
-    _call,
-    _sanitize,
-    _sql,
-    _sql_param,
-    verify_auth,
-)
-from shared import (
     AgentCapabilitiesRequest,
     AgentHeartbeatRequest,
     AgentOut,
     AgentRegisterRequest,
+    _call,
+    _sql,
+    _sql_param,
+    verify_auth,
 )
 
 router = APIRouter()
@@ -84,18 +81,20 @@ async def agent_health():
         age_ms = now_ms - last_hb
         stale = age_ms > stale_threshold if last_hb > 0 else True
 
-        result.append({
-            "id": aid,
-            "host": r.get("host", ""),
-            "status": r.get("status", "offline"),
-            "capabilities": r.get("capabilities"),
-            "repo_focus": r.get("repo_focus"),
-            "current_task": task_info,
-            "last_heartbeat": last_hb,
-            "heartbeat_age_seconds": max(0, age_ms // 1000) if last_hb > 0 else -1,
-            "stale": stale,
-            "first_seen": r.get("first_seen", 0),
-        })
+        result.append(
+            {
+                "id": aid,
+                "host": r.get("host", ""),
+                "status": r.get("status", "offline"),
+                "capabilities": r.get("capabilities"),
+                "repo_focus": r.get("repo_focus"),
+                "current_task": task_info,
+                "last_heartbeat": last_hb,
+                "heartbeat_age_seconds": max(0, age_ms // 1000) if last_hb > 0 else -1,
+                "stale": stale,
+                "first_seen": r.get("first_seen", 0),
+            }
+        )
 
     result.sort(key=lambda a: -a["last_heartbeat"])
     return result

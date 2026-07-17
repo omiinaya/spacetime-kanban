@@ -6,10 +6,12 @@ Extracted from shared.py to keep concerns separated.
 
 import secrets
 
-from fastapi import HTTPException, Header
+from fastapi import Header, HTTPException
 
 
-async def verify_auth(authorization: str = Header(None), x_api_key: str = Header(None, alias="X-API-Key")):
+async def verify_auth(
+    authorization: str = Header(None), x_api_key: str = Header(None, alias="X-API-Key")
+):
     """Require API key for mutation endpoints. If API_KEY is not set, auth is disabled."""
     from config import settings
 

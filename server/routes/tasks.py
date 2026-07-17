@@ -1,6 +1,7 @@
 """Task endpoints for spacetimedb-kanban."""
 
 import asyncio
+import contextlib
 import csv
 import io
 import json
@@ -9,16 +10,6 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, Response
 
-from shared import (
-    _call,
-    _compute_score,
-    _notify,
-    _row_to_task,
-    _sanitize,
-    _sql,
-    _sql_param,
-    verify_auth,
-)
 from shared import (
     AddLogRequest,
     BatchLabelsRequest,
@@ -46,6 +37,13 @@ from shared import (
     TaskRelationOut,
     TaskUpdate,
     TimeEstimatesRequest,
+    _call,
+    _compute_score,
+    _notify,
+    _row_to_task,
+    _sql,
+    _sql_param,
+    verify_auth,
 )
 
 router = APIRouter()
@@ -63,7 +61,9 @@ async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
     agent_caps = None
     if agent_id:
         try:
-            agent_rows = await _sql_param("SELECT capabilities FROM swarm_agents WHERE id = '{id}'", id=agent_id)
+            agent_rows = await _sql_param(
+                "SELECT capabilities FROM swarm_agents WHERE id = '{id}'", id=agent_id
+            )
             if agent_rows:
                 agent_caps = agent_rows[0].get("capabilities")
         except Exception:
@@ -88,11 +88,14 @@ async def list_tasks(
     repo: str | None = None,
     label: str | None = None,
     search: str | None = None,
+    limit: int = 500,
 ):
     # If label filter provided, first get task IDs with that label
     label_task_ids: set[str] | None = None
     if label:
-        rows = await _sql_param("SELECT task_id FROM task_label_assignments WHERE label_id = '{label}'", label=label)
+        rows = await _sql_param(
+            "SELECT task_id FROM task_label_assignments WHERE label_id = '{label}'", label=label
+        )
         label_task_ids = {r["task_id"] for r in rows}
 
     sql = "SELECT * FROM tasks"
@@ -106,6 +109,8 @@ async def list_tasks(
         params["repo"] = repo
     if filters:
         sql += " WHERE " + " AND ".join(filters)
+    # Add server-side LIMIT to prevent loading all rows
+    sql += f" LIMIT {min(limit, 1000)}"
     if params:
         rows = await _sql_param(sql, **params)
     else:
@@ -116,12 +121,15 @@ async def list_tasks(
     # Apply client-side search filter
     if search:
         q = search.lower()
-        tasks = [t for t in tasks if
-                 q in t.title.lower() or
-                 q in t.description.lower() or
-                 q in t.repo.lower() or
-                 (t.assigned_to and q in t.assigned_to.lower()) or
-                 q in t.id.lower()]
+        tasks = [
+            t
+            for t in tasks
+            if q in t.title.lower()
+            or q in t.description.lower()
+            or q in t.repo.lower()
+            or (t.assigned_to and q in t.assigned_to.lower())
+            or q in t.id.lower()
+        ]
     tasks.sort(key=lambda t: (t.priority, -t.created_at))
     return tasks
 
@@ -174,19 +182,47 @@ async def export_tasks(format: str = "json", status: str = "", repo: str = ""):
     if format == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["id", "title", "description", "priority", "status",
-                         "assigned_to", "repo", "branch", "roadmap_item",
-                         "created_by", "created_at", "updated_at",
-                         "depends_on", "required_skills", "score", "due_by"])
+        writer.writerow(
+            [
+                "id",
+                "title",
+                "description",
+                "priority",
+                "status",
+                "assigned_to",
+                "repo",
+                "branch",
+                "roadmap_item",
+                "created_by",
+                "created_at",
+                "updated_at",
+                "depends_on",
+                "required_skills",
+                "score",
+                "due_by",
+            ]
+        )
         for r in rows:
-            writer.writerow([
-                r.get("id", ""), r.get("title", ""), r.get("description", ""),
-                r.get("priority", 2), r.get("status", ""), r.get("assigned_to", ""),
-                r.get("repo", ""), r.get("branch", ""), r.get("roadmap_item", ""),
-                r.get("created_by", ""), r.get("created_at", 0), r.get("updated_at", 0),
-                r.get("depends_on", ""), r.get("required_skills", ""), r.get("score", 0),
-                r.get("due_by", ""),
-            ])
+            writer.writerow(
+                [
+                    r.get("id", ""),
+                    r.get("title", ""),
+                    r.get("description", ""),
+                    r.get("priority", 2),
+                    r.get("status", ""),
+                    r.get("assigned_to", ""),
+                    r.get("repo", ""),
+                    r.get("branch", ""),
+                    r.get("roadmap_item", ""),
+                    r.get("created_by", ""),
+                    r.get("created_at", 0),
+                    r.get("updated_at", 0),
+                    r.get("depends_on", ""),
+                    r.get("required_skills", ""),
+                    r.get("score", 0),
+                    r.get("due_by", ""),
+                ]
+            )
         csv_content = output.getvalue()
         return Response(
             content=csv_content,
@@ -235,7 +271,7 @@ async def batch_assign_labels(body: BatchLabelsRequest):
         result = await _call("batch_assign_labels", [task_str, label_str])
         return {"status": "assigned", "result": result}
     except Exception as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
 
 
 @router.post("/api/tasks/batch/unlabels", status_code=200, dependencies=[Depends(verify_auth)])
@@ -249,7 +285,7 @@ async def batch_unassign_labels(body: BatchLabelsRequest):
         result = await _call("batch_unassign_labels", [task_str, label_str])
         return {"status": "removed", "result": result}
     except Exception as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
 
 
 # ── Task CRUD ──────────────────────────────────────────────────────────
@@ -266,26 +302,36 @@ async def get_task(task_id: str):
 @router.post("/api/tasks", status_code=201, dependencies=[Depends(verify_auth)])
 async def create_task(body: TaskCreate):
     import uuid as _uuid
+
     task_id = f"task_{_uuid.uuid4().hex[:16]}"
-    await _call("add_task", [
-        task_id,
-        body.title,
-        body.description,
-        body.priority,
-        body.repo,
-        body.roadmap_item,
-        body.created_by,
-        body.status,
-        body.due_by if body.due_by is not None else 0,
-    ])
+    await _call(
+        "add_task",
+        [
+            task_id,
+            body.title,
+            body.description,
+            body.priority,
+            body.repo,
+            body.roadmap_item,
+            body.created_by,
+            body.status,
+            body.due_by if body.due_by is not None else 0,
+        ],
+    )
     # Set skills if provided — using known task_id, no race condition
     if body.required_skills:
         await _call("set_task_skills", [task_id, body.required_skills])
-    asyncio.ensure_future(_notify("created", {
-        "title": body.title,
-        "id": task_id,
-        "repo": body.repo,
-    }, body.created_by))
+    asyncio.ensure_future(
+        _notify(
+            "created",
+            {
+                "title": body.title,
+                "id": task_id,
+                "repo": body.repo,
+            },
+            body.created_by,
+        )
+    )
     return {"status": "created", "id": task_id}
 
 
@@ -320,7 +366,11 @@ async def patch_task(task_id: str, body: TaskUpdate):
             await _call("unarchive_task", [task_id])
     # Handle time estimates
     if body.estimated_hours is not None or body.spent_hours is not None:
-        est = body.estimated_hours if body.estimated_hours is not None else t.get("estimated_hours") or 0
+        est = (
+            body.estimated_hours
+            if body.estimated_hours is not None
+            else t.get("estimated_hours") or 0
+        )
         spent = body.spent_hours if body.spent_hours is not None else t.get("spent_hours") or 0
         await _call("set_time_estimates", [task_id, est, spent])
     return {"status": "updated"}
@@ -337,7 +387,7 @@ async def delete_task(task_id: str):
 
 @router.post("/api/tasks/{task_id}/claim", dependencies=[Depends(verify_auth)])
 async def claim_task(task_id: str, body: ClaimRequest):
-    result = await _call("claim_task", [task_id, body.agent_id])
+    await _call("claim_task", [task_id, body.agent_id])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
         asyncio.ensure_future(_notify("claimed", rows[0]))
@@ -347,6 +397,7 @@ async def claim_task(task_id: str, body: ClaimRequest):
 async def _sync_to_github(task_id: str, event: str, notes: str = ""):
     """Push a kanban task state change back to a linked GitHub issue."""
     import logging
+
     import issue_sync
     from config import settings
 
@@ -365,18 +416,18 @@ async def _sync_to_github(task_id: str, event: str, notes: str = ""):
             issue_sync.close_issue(token, repo, issue_number)
             issue_sync.update_issue_status(task_id, "closed")
             if notes:
-                try:
-                    issue_sync.add_issue_comment(token, repo, issue_number, f"✅ Kanban task completed: {notes}")
-                except Exception:
-                    pass
+                with contextlib.suppress(Exception):
+                    issue_sync.add_issue_comment(
+                        token, repo, issue_number, f"✅ Kanban task completed: {notes}"
+                    )
         elif event == "unclaimed":
             issue_sync.reopen_issue(token, repo, issue_number)
             issue_sync.update_issue_status(task_id, "open")
             if notes:
-                try:
-                    issue_sync.add_issue_comment(token, repo, issue_number, f"🔄 Kanban task reopened: {notes}")
-                except Exception:
-                    pass
+                with contextlib.suppress(Exception):
+                    issue_sync.add_issue_comment(
+                        token, repo, issue_number, f"🔄 Kanban task reopened: {notes}"
+                    )
     except Exception as e:
         logging.getLogger(__name__).warning(f"Failed to sync task {task_id} to GitHub: {e}")
 
@@ -392,7 +443,9 @@ async def unclaim_task(task_id: str):
 
 
 @router.post("/api/tasks/{task_id}/complete", dependencies=[Depends(verify_auth)])
-async def complete_task(task_id: str, body: CompleteRequest = CompleteRequest()):
+async def complete_task(task_id: str, body: CompleteRequest | None = None):
+    if body is None:
+        body = CompleteRequest()
     await _call("complete_task", [task_id, body.result_notes])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
@@ -402,7 +455,9 @@ async def complete_task(task_id: str, body: CompleteRequest = CompleteRequest())
 
 
 @router.post("/api/tasks/{task_id}/block", dependencies=[Depends(verify_auth)])
-async def block_task(task_id: str, body: BlockRequest = BlockRequest()):
+async def block_task(task_id: str, body: BlockRequest | None = None):
+    if body is None:
+        body = BlockRequest()
     await _call("block_task", [task_id, body.reason])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
@@ -551,7 +606,9 @@ async def add_comment(task_id: str, body: CommentCreate):
 @router.get("/api/tasks/{task_id}/comments", response_model=list[CommentOut])
 async def list_comments(task_id: str):
     """List all comments for a task, oldest first."""
-    rows = await _sql_param("SELECT * FROM task_comments WHERE task_id = '{task_id}'", task_id=task_id)
+    rows = await _sql_param(
+        "SELECT * FROM task_comments WHERE task_id = '{task_id}'", task_id=task_id
+    )
     rows.sort(key=lambda r: r.get("created_at", 0))
     return [CommentOut(**r) for r in rows]
 
@@ -587,7 +644,9 @@ async def add_checklist_item(task_id: str, body: ChecklistItemCreate):
 @router.get("/api/tasks/{task_id}/checklist", response_model=list[ChecklistItemOut])
 async def list_checklist(task_id: str):
     """List all checklist items for a task, ordered by position."""
-    rows = await _sql_param("SELECT * FROM task_checklists WHERE task_id = '{task_id}'", task_id=task_id)
+    rows = await _sql_param(
+        "SELECT * FROM task_checklists WHERE task_id = '{task_id}'", task_id=task_id
+    )
     rows.sort(key=lambda r: r.get("position", 0))
     return [ChecklistItemOut(**r) for r in rows]
 
@@ -606,7 +665,9 @@ async def remove_checklist_item(task_id: str, item_id: str):
     return {"status": "deleted"}
 
 
-@router.post("/api/tasks/{task_id}/checklist/{item_id}/reorder", dependencies=[Depends(verify_auth)])
+@router.post(
+    "/api/tasks/{task_id}/checklist/{item_id}/reorder", dependencies=[Depends(verify_auth)]
+)
 async def reorder_checklist_item(task_id: str, item_id: str, new_position: int):
     """Reorder a checklist item."""
     await _call("reorder_checklist_items", [item_id, new_position])
@@ -624,32 +685,37 @@ async def get_task_labels(task_id: str):
         INNER JOIN task_label_assignments a ON l.id = a.label_id
         WHERE a.task_id = '{task_id}'
     """)
-    return [LabelOut(id=r["id"], name=r["name"], color=r.get("color", "#0ea5e9"),
-                     description=r.get("description", ""), created_at=r.get("created_at", 0))
-            for r in rows]
+    return [
+        LabelOut(
+            id=r["id"],
+            name=r["name"],
+            color=r.get("color", "#0ea5e9"),
+            description=r.get("description", ""),
+            created_at=r.get("created_at", 0),
+        )
+        for r in rows
+    ]
 
 
 @router.post("/api/tasks/{task_id}/labels", dependencies=[Depends(verify_auth)])
 async def set_task_labels(task_id: str, body: TaskLabelAssign):
     """Set labels for a task by replacing all current assignments."""
-    existing = await _sql_param("SELECT label_id FROM task_label_assignments WHERE task_id = '{task_id}'", task_id=task_id)
+    existing = await _sql_param(
+        "SELECT label_id FROM task_label_assignments WHERE task_id = '{task_id}'", task_id=task_id
+    )
     current_ids = {r["label_id"] for r in existing}
     new_ids = set(body.label_ids)
 
     # Remove any labels not in the new set
     to_remove = current_ids - new_ids
     for lid in to_remove:
-        try:
+        with contextlib.suppress(Exception):
             await _call("unassign_label_from_task", [task_id, lid])
-        except Exception:
-            pass
 
     # Add any labels not already assigned
     to_add = new_ids - current_ids
     for lid in to_add:
-        try:
+        with contextlib.suppress(Exception):
             await _call("assign_label_to_task", [task_id, lid])
-        except Exception:
-            pass
 
     return {"status": "updated", "assigned": list(new_ids)}

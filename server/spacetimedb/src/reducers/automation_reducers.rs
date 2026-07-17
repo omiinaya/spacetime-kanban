@@ -7,6 +7,7 @@ use super::{now_ms, make_id, log_action, update_template_in_db};
 // ── Task Templates (Recurring / Cron-Based) ─────────────────────────
 
 #[reducer]
+#[allow(clippy::too_many_arguments)]
 pub fn add_task_template(
     ctx: &ReducerContext,
     id: String,
@@ -57,6 +58,7 @@ pub fn remove_task_template(ctx: &ReducerContext, id: String) -> Result<(), Stri
 }
 
 #[reducer]
+#[allow(clippy::too_many_arguments)]
 pub fn update_task_template(
     ctx: &ReducerContext,
     id: String,
@@ -110,7 +112,6 @@ pub fn trigger_task_templates(ctx: &ReducerContext) -> Result<(), String> {
         .task_templates()
         .iter()
         .filter(|t| t.active)
-        .map(|t| t.clone())
         .collect();
 
     for template in templates {
@@ -182,6 +183,7 @@ pub fn trigger_task_templates(ctx: &ReducerContext) -> Result<(), String> {
 // ── Automation Rules (#24) ────────────────────────────────────────
 
 #[reducer]
+#[allow(clippy::too_many_arguments)]
 pub fn create_automation_rule(
     ctx: &ReducerContext,
     id: String,
@@ -213,6 +215,7 @@ pub fn create_automation_rule(
 }
 
 #[reducer]
+#[allow(clippy::too_many_arguments)]
 pub fn update_automation_rule(
     ctx: &ReducerContext,
     rule_id: String,
@@ -238,7 +241,6 @@ pub fn update_automation_rule(
     rule.updated_at = now;
     let old: Vec<AutomationRule> = ctx.db.automation_rules().iter()
         .filter(|r| r.id == rule_id)
-        .map(|r| r.clone())
         .collect();
     for r in old { ctx.db.automation_rules().delete(r); }
     ctx.db.automation_rules().insert(rule);
@@ -249,7 +251,6 @@ pub fn update_automation_rule(
 pub fn delete_automation_rule(ctx: &ReducerContext, rule_id: String) -> Result<(), String> {
     let old: Vec<AutomationRule> = ctx.db.automation_rules().iter()
         .filter(|r| r.id == rule_id)
-        .map(|r| r.clone())
         .collect();
     for r in old { ctx.db.automation_rules().delete(r); }
     Ok(())
@@ -289,7 +290,6 @@ pub fn revoke_api_key(ctx: &ReducerContext, key_id: String) -> Result<(), String
     key.active = false;
     let old: Vec<ApiKey> = ctx.db.api_keys().iter()
         .filter(|k| k.id == key_id)
-        .map(|k| k.clone())
         .collect();
     for k in old { ctx.db.api_keys().delete(k); }
     ctx.db.api_keys().insert(key);

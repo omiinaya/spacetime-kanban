@@ -3,10 +3,10 @@
 Stores the kanban-task ⟷ GitHub-issue mapping in STDB (issue_links table).
 Provides GitHub API helpers for creating, closing, and reopening issues.
 """
+
 import json
-import re
 from datetime import datetime
-from typing import Optional
+from typing import Any
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -14,8 +14,12 @@ import httpx
 
 from config import settings
 
-STDB_SQL_URL = f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/sql"
-STDB_CALL_URL = f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/call"
+STDB_SQL_URL = (
+    f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/sql"
+)
+STDB_CALL_URL = (
+    f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/call"
+)
 GITHUB_API = "https://api.github.com"
 
 
@@ -56,10 +60,7 @@ def _parse_rows(resp_json: list[dict]) -> list[dict]:
         for i, val in enumerate(row):
             key = col_names[i] if i < len(col_names) else f"col_{i}"
             if isinstance(val, list) and len(val) == 2:
-                if val[0] == 0:
-                    val = val[1] if val[1] and val[1] != [] else None
-                else:
-                    val = None
+                val = (val[1] if val[1] and val[1] != [] else None) if val[0] == 0 else None
             row_dict[key] = val
         result.append(row_dict)
     return result
@@ -80,12 +81,26 @@ def _call(reducer: str, args: list) -> dict:
     return {"status": "ok"}
 
 
+def _sanitize(val: str) -> str:
+    """Escape single quotes to prevent SQL injection."""
+    return val.replace("'", "''")
+
+
+def _sql_param(query_template: str, **params: str) -> list[dict]:
+    """Safe SQL query with named parameters — escapes all string values."""
+    escaped = {k: _sanitize(str(v)) for k, v in params.items()}
+    query = query_template.format(**escaped)
+    return _stdb_sql(query)
+
+
 # ── Public mapping API (STDB-backed) ──────────────────────────────────
 
 
-def get_link(task_id: str) -> Optional[dict]:
+def get_link(task_id: str) -> dict | None:
     """Get the GitHub issue link for a kanban task, if any."""
-    rows = _sql_param("SELECT * FROM issue_links WHERE kanban_task_id = '{task_id}'", task_id=task_id)
+    rows = _sql_param(
+        "SELECT * FROM issue_links WHERE kanban_task_id = '{task_id}'", task_id=task_id
+    )
     if not rows:
         return None
     r = rows[0]
@@ -99,7 +114,7 @@ def get_link(task_id: str) -> Optional[dict]:
     }
 
 
-def get_task_id_for_issue(repo: str, issue_number: int) -> Optional[str]:
+def get_task_id_for_issue(repo: str, issue_number: int) -> str | None:
     """Reverse lookup: find kanban task ID by GitHub issue."""
     rows = _stdb_sql(
         f"SELECT kanban_task_id FROM issue_links "
@@ -134,7 +149,7 @@ def unlink_issue(task_id: str) -> bool:
         raise
 
 
-def update_issue_status(task_id: str, status: str) -> Optional[dict]:
+def update_issue_status(task_id: str, status: str) -> dict | None:
     """Update the cached GH issue status (open/closed) in STDB."""
     try:
         _call("update_issue_link_status", [task_id, status])
@@ -145,7 +160,7 @@ def update_issue_status(task_id: str, status: str) -> Optional[dict]:
     return get_link(task_id)
 
 
-def list_links(repo: Optional[str] = None) -> list[dict]:
+def list_links(repo: str | None = None) -> list[dict]:
     """List all linked issues, optionally filtered by repo."""
     if repo:
         rows = _sql_param("SELECT * FROM issue_links WHERE repo = '{repo}'", repo=repo)
@@ -153,15 +168,17 @@ def list_links(repo: Optional[str] = None) -> list[dict]:
         rows = _stdb_sql("SELECT * FROM issue_links")
     results = []
     for r in rows:
-        results.append({
-            "kanban_task_id": r.get("kanban_task_id", ""),
-            "issue_number": r.get("issue_number", 0),
-            "repo": r.get("repo", ""),
-            "issue_url": r.get("issue_url", ""),
-            "html_url": r.get("html_url", ""),
-            "status": r.get("status", "open"),
-            "linked_at": r.get("linked_at", 0),
-        })
+        results.append(
+            {
+                "kanban_task_id": r.get("kanban_task_id", ""),
+                "issue_number": r.get("issue_number", 0),
+                "repo": r.get("repo", ""),
+                "issue_url": r.get("issue_url", ""),
+                "html_url": r.get("html_url", ""),
+                "status": r.get("status", "open"),
+                "linked_at": r.get("linked_at", 0),
+            }
+        )
     results.sort(key=lambda x: -x.get("linked_at", 0))
     return results
 
@@ -177,7 +194,7 @@ def _gh_headers(token: str) -> dict:
     }
 
 
-def _gh_request(method: str, url: str, token: str, body: Optional[dict] = None) -> dict:
+def _gh_request(method: str, url: str, token: str, body: dict | None = None) -> dict:
     """Make a GitHub API request and return parsed JSON."""
     data = json.dumps(body).encode() if body else None
     req = Request(url, data=data, method=method, headers=_gh_headers(token))
@@ -187,7 +204,7 @@ def _gh_request(method: str, url: str, token: str, body: Optional[dict] = None) 
             return json.loads(raw) if raw else {}
     except HTTPError as e:
         err_body = e.read().decode()[:300]
-        raise RuntimeError(f"GitHub API HTTP {e.code}: {err_body}")
+        raise RuntimeError(f"GitHub API HTTP {e.code}: {err_body}") from e
 
 
 def create_issue(
@@ -195,11 +212,11 @@ def create_issue(
     repo: str,
     title: str,
     body: str = "",
-    labels: Optional[list[str]] = None,
-    assignee: Optional[str] = None,
+    labels: list[str] | None = None,
+    assignee: str | None = None,
 ) -> dict:
     """Create a GitHub issue and return {number, html_url, issue_url, ...}."""
-    payload = {"title": title}
+    payload: dict[str, Any] = {"title": title}
     if body:
         payload["body"] = body
     if labels:

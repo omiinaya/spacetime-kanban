@@ -42,8 +42,8 @@ export default function AgentHealthPage() {
       const data = await api.agents.health()
       setAgents(data)
       setError('')
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
       setRefreshing(false)

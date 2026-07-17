@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
-  Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
-  Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
-  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal, Tag, Keyboard, Save, Bookmark,
-  MessageSquare, Send
+import { useState, useEffect } from 'react'
+import { Plus, Loader2, Trash2, Play, CheckCircle2,
+  Ban, RotateCcw, Link,
+  Cpu, History, GitBranch, ExternalLink, X, Github,
+  Tag,
+  MessageSquare, Send, CheckSquare
 } from 'lucide-react'
-import { api, type KanbanLabel, type IssueLink, type TaskComment, type ChecklistItem } from '../api'
-import { type Task, type TaskStatus } from '../hooks/useRealtimeTasks'
+import { api, type KanbanLabel, type TaskComment, type ChecklistItem, type LogEntry } from '../api'
+import { type Task } from '../hooks/useRealtimeTasks'
 import { Link as RouterLink } from 'react-router-dom'
 import { PRIORITY_LABELS, PRIORITY_COLORS, STATUS_LABELS } from './constants'
 
@@ -38,8 +38,8 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
       const ms = dateInputToEpochMs(value)
       await api.tasks.update(taskId, { due_by: ms ?? null })
       setEditing(false)
-    } catch (e: any) {
-      alert(`Failed to update due date: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Failed to update due date: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -51,8 +51,8 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
       await api.tasks.update(taskId, { due_by: null })
       setValue('')
       setEditing(false)
-    } catch (e: any) {
-      alert(`Failed to clear due date: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Failed to clear due date: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -103,14 +103,13 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
 }
 
 export function TaskDetailDialog({
-  taskId, tasks, taskTitleMap, onClose,
+  taskId, tasks, onClose,
   onClaim, onUnclaim, onComplete, onBlock, onDelete,
   onSetDependency, onSetSkills,
   allLabels = [], taskLabelMap = new Map(),
 }: {
   taskId: string
   tasks: Task[]
-  taskTitleMap: Map<string, string>
   onClose: () => void
   onClaim: (id: string) => void
   onUnclaim: (id: string) => void
@@ -122,7 +121,7 @@ export function TaskDetailDialog({
   allLabels?: KanbanLabel[]
   taskLabelMap?: Map<string, KanbanLabel[]>
 }) {
-  const [logs, setLogs] = useState<any[]>([])
+  const [logs, setLogs] = useState<LogEntry[]>([])
   const [loadingLogs, setLoadingLogs] = useState(true)
   const [issueLink, setIssueLink] = useState<{ html_url: string; issue_number: number; repo: string; status?: string } | null>(null)
   const [loadingIssue, setLoadingIssue] = useState(true)
@@ -144,7 +143,6 @@ export function TaskDetailDialog({
   const task = tasks.find(t => t.id === taskId)
   const downstream = tasks.filter(t => t.dependsOn === taskId)
   const upstream = task?.dependsOn ? tasks.find(t => t.id === task.dependsOn) : null
-  const blockedByDep = task?.dependsOn && tasks.find(t => t.id === task.dependsOn)?.status !== 'done'
 
   useEffect(() => {
     let cancelled = false
@@ -196,8 +194,8 @@ export function TaskDetailDialog({
         }])
         setNewComment('')
       }
-    } catch (e: any) {
-      alert(`Failed to add comment: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Failed to add comment: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSendingComment(false)
     }
@@ -230,8 +228,8 @@ export function TaskDetailDialog({
         }])
         setNewChecklistText('')
       }
-    } catch (e: any) {
-      alert(`Failed to add checklist item: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Failed to add checklist item: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSavingChecklist(false)
     }
@@ -241,10 +239,10 @@ export function TaskDetailDialog({
     setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i))
     try {
       await api.checklist.toggle(taskId, itemId)
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Revert on failure
       setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i))
-      alert(`Failed to toggle: ${e.message}`)
+      alert(`Failed to toggle: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -253,8 +251,8 @@ export function TaskDetailDialog({
     setChecklist(prev => prev.filter(i => i.id !== itemId))
     try {
       await api.checklist.remove(taskId, itemId)
-    } catch (e: any) {
-      alert(`Failed to remove: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Failed to remove: ${e instanceof Error ? e.message : String(e)}`)
       // Reload on failure
       api.checklist.list(taskId).then(items => setChecklist(items))
     }
@@ -271,8 +269,8 @@ export function TaskDetailDialog({
     try {
       await api.labels.setForTask(taskId, { label_ids: [...next] })
       setCurrentLabelIds(next)
-    } catch (e: any) {
-      alert(`Failed to update labels: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Failed to update labels: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setLabelSaving(false)
     }
@@ -447,8 +445,8 @@ export function TaskDetailDialog({
                   try {
                     const result = await api.issues.create(task.id, repo, labels)
                     setIssueLink({ html_url: result.html_url, issue_number: result.issue_number, repo })
-                  } catch (e: any) {
-                    alert(`Failed to create issue: ${e.message}`)
+                  } catch (e: unknown) {
+                    alert(`Failed to create issue: ${e instanceof Error ? e.message : String(e)}`)
                   }
                 }}
                   className="text-xs px-2 py-1 rounded bg-[var(--color-primary)] text-white hover:bg-blue-600 transition-colors ml-auto"
@@ -511,7 +509,7 @@ export function TaskDetailDialog({
               <p className="text-xs text-[var(--color-muted)] py-2">No activity recorded.</p>
             ) : (
               <div className="space-y-1 max-h-48 overflow-y-auto">
-                {logs.map((log: any) => (
+                {logs.map((log: LogEntry) => (
                   <div key={log.id} className="flex items-start gap-2 py-1.5 border-b border-[var(--color-border)] last:border-0">
                     <span className="text-sm shrink-0">{actionIcons[log.action] || '📋'}</span>
                     <div className="min-w-0 flex-1">

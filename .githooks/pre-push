@@ -1,0 +1,5 @@
+#!/bin/sh
+# Pre-push hook — enforce branch naming convention
+# Installed via: make setup-git-hooks
+
+exec bin/check-branch --pre-push

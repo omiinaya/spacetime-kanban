@@ -61,7 +61,7 @@ export default function LogsPage() {
   const [highlightedEvent, setHighlightedEvent] = useState<string | null>(null)
 
   const buildParams = useCallback((offset = 0) => {
-    const params: any = { limit: 50, offset }
+    const params: Record<string, string | number | undefined> = { limit: 50, offset }
     if (selectedActions.size > 0) params.action = [...selectedActions].join(',')
     if (agentFilter) params.agent_id = agentFilter
     if (searchQuery) params.search = searchQuery
@@ -79,8 +79,8 @@ export default function LogsPage() {
       setLogs(data)
       setStats(statsData)
       setHasMore(data.length === 50)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
@@ -97,8 +97,8 @@ export default function LogsPage() {
       const data = await api.logs.list(buildParams(logs.length))
       setLogs(prev => [...prev, ...data])
       setHasMore(data.length === 50)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoadingMore(false)
     }
@@ -180,7 +180,7 @@ export default function LogsPage() {
                     <button key={a} onClick={() => {
                       setSelectedActions(prev => {
                         const next = new Set(prev)
-                        next.has(a) ? next.delete(a) : next.add(a)
+                        if (next.has(a)) next.delete(a); else next.add(a)
                         return next
                       })
                     }}
@@ -333,7 +333,7 @@ export default function LogsPage() {
                     onClick={() => {
                       setSelectedActions(prev => {
                         const next = new Set(prev)
-                        next.has(action) ? next.delete(action) : next.add(action)
+                        if (next.has(action)) next.delete(action); else next.add(action)
                         return next
                       })
                     }}

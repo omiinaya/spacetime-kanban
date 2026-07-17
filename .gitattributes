@@ -1,0 +1,67 @@
+# Auto-detect text files and normalize line endings
+* text=auto
+
+# Python
+*.py text diff=python
+*.pyx text diff=python
+*.pxd text diff=python
+*.pxi text diff=python
+*.pyi text diff=python
+*.whl binary
+
+# Rust
+*.rs text diff=rust
+*.rlib binary
+
+# TypeScript / JavaScript
+*.ts text diff=typescript
+*.tsx text diff=typescript
+*.js text
+*.jsx text
+*.mjs text
+*.cjs text
+
+# Web
+*.html text diff=html
+*.css text diff=css
+*.scss text diff=css
+*.json text
+*.svg text
+*.xml text
+
+# Configuration
+*.yaml text
+*.yml text
+*.toml text
+*.ini text
+*.cfg text
+*.conf text
+
+# Shell
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+
+# Markdown / Docs
+*.md text diff=markdown
+*.txt text
+
+# Generated / Binary
+*.wasm binary
+*.lock binary
+*.map binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+*.ttf binary
+*.otf binary
+
+# Git
+.gitattributes export-ignore
+.gitignore export-ignore

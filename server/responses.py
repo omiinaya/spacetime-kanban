@@ -10,7 +10,7 @@ from typing import Any
 
 def _row_to_task(r: dict) -> Any:
     """Convert a STDB task row to a TaskOut model."""
-    from shared import TaskOut
+    from models import TaskOut
 
     return TaskOut(
         id=r["id"],
@@ -44,7 +44,7 @@ def _row_to_task(r: dict) -> Any:
 
 def _row_to_log(r: dict) -> Any:
     """Convert a STDB log row to a LogOut model."""
-    from shared import LogOut
+    from models import LogOut
 
     return LogOut(
         id=r["id"],
@@ -56,9 +56,25 @@ def _row_to_log(r: dict) -> Any:
     )
 
 
+def _row_to_agent(r: dict) -> Any:
+    """Convert a STDB swarm_agents row to an AgentOut model."""
+    from models import AgentOut
+
+    return AgentOut(
+        id=r["id"],
+        host=r.get("host", ""),
+        capabilities=r.get("capabilities"),
+        repo_focus=r.get("repo_focus"),
+        current_task_id=r.get("current_task_id"),
+        status=r.get("status", "offline"),
+        last_heartbeat=r.get("last_heartbeat", 0),
+        first_seen=r.get("first_seen", 0),
+    )
+
+
 def _row_to_template(r: dict) -> Any:
     """Convert a STDB template row to a TemplateOut model."""
-    from shared import TemplateOut
+    from models import TemplateOut
 
     return TemplateOut(
         id=r["id"],

@@ -11,6 +11,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 interface CrossProjectData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API returns dynamic project fields with no static type
   project: any
   total: number
   by_status: Record<string, number>
@@ -28,8 +29,8 @@ export default function CrossProjectPage() {
       try {
         const result = await api.crossProject.get()
         setData(result)
-      } catch (e: any) {
-        setError(e.message)
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e))
       } finally {
         setLoading(false)
       }

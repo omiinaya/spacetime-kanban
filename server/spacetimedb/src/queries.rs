@@ -70,7 +70,7 @@ pub fn assignment_id(task_id: &str, label_id: &str) -> String {
 /// Returns true if the schedule matches the current timestamp, and
 /// enough time has passed since last_triggered_at.
 pub fn is_template_due(schedule: &str, last_triggered_at: u64, now: u64) -> bool {
-    let parts: Vec<&str> = schedule.trim().split_whitespace().collect();
+    let parts: Vec<&str> = schedule.split_whitespace().collect();
     if parts.is_empty() {
         return false;
     }
@@ -139,18 +139,17 @@ pub fn is_template_due(schedule: &str, last_triggered_at: u64, now: u64) -> bool
                 }
             }
         }
-        "monthly" => {
-            if parts.len() >= 3 {
+        "monthly"
+            if parts.len() >= 3 => {
                 let day_str = parts[1].trim_end_matches(|c: char| !c.is_ascii_digit());
                 let target_day: u8 = match day_str.parse() {
-                    Ok(d) if d >= 1 && d <= 31 => d,
+                    Ok(d) if (1..=31).contains(&d) => d,
                     _ => return false,
                 };
                 if let Some((h, m)) = parse_time(parts[2]) {
                     matched = day_of_month == target_day && hour == h && minute == m;
                 }
             }
-        }
         _ => {}
     }
 

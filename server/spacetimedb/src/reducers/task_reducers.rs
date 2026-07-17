@@ -7,6 +7,7 @@ use super::{now_ms, make_id, log_action, update_task_in_db, delete_logs_for_task
 // ── Task Reducers ───────────────────────────────────────────────────
 
 #[reducer]
+#[allow(clippy::too_many_arguments)]
 pub fn add_task(
     ctx: &ReducerContext,
     id: String,
@@ -400,7 +401,6 @@ pub fn delete_task(ctx: &ReducerContext, task_id: String) -> Result<(), String> 
         .task_label_assignments()
         .iter()
         .filter(|a| a.task_id == task_id)
-        .map(|a| a.clone())
         .collect();
     for a in assignments {
         ctx.db.task_label_assignments().delete(a);
@@ -411,7 +411,6 @@ pub fn delete_task(ctx: &ReducerContext, task_id: String) -> Result<(), String> 
         .task_checklists()
         .iter()
         .filter(|i| i.task_id == task_id)
-        .map(|i| i.clone())
         .collect();
     for i in checklist_items {
         ctx.db.task_checklists().delete(i);
@@ -531,7 +530,6 @@ pub fn delete_comment(ctx: &ReducerContext, comment_id: String) -> Result<(), St
         .task_comments()
         .iter()
         .filter(|c| c.id == comment_id)
-        .map(|c| c.clone())
         .collect();
     if comment.is_empty() {
         return Err("Comment not found".to_string());
@@ -593,7 +591,6 @@ pub fn toggle_checklist_item(
         .task_checklists()
         .iter()
         .filter(|i| i.id == item.id)
-        .map(|i| i.clone())
         .collect();
     for i in old {
         ctx.db.task_checklists().delete(i);
@@ -627,7 +624,6 @@ pub fn reorder_checklist_items(
         .task_checklists()
         .iter()
         .filter(|i| i.id == item.id)
-        .map(|i| i.clone())
         .collect();
     for i in old {
         ctx.db.task_checklists().delete(i);

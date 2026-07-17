@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
+import { X } from 'lucide-react'
 import type { Task } from '../hooks/useRealtimeTasks'
 
 const NODE_W = 180

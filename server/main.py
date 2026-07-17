@@ -1,39 +1,39 @@
 import asyncio
+import contextlib
 import csv
 import io
 import json
+import logging as _logging
 import os
+import os as _os
 import re
+import threading as _threading
 import time
+import urllib.error as _urllib_error
+import urllib.request as _urllib_request
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
-from pydantic import BaseModel
 
-from config import settings
-import webhooks
 import issue_sync
-
+import webhooks
+from config import settings
+from routes.agents import router as agents_router
+from routes.analytics import router as analytics_router
+from routes.github import router as github_router
+from routes.labels import router as labels_router
+from routes.logs import router as logs_router
+from routes.projects import router as projects_router
+from routes.tasks import router as tasks_router
+from routes.templates import router as templates_router
 from shared import (
-    # Helpers
-    _call,
-    _compute_score,
-    _notify,
-    _row_to_log,
-    _row_to_task,
-    _row_to_template,
-    _sanitize,
-    _sql,
-    _sql_param,
-    verify_auth,
     # Models
     AddLogRequest,
     AgentCapabilitiesRequest,
@@ -87,10 +87,21 @@ from shared import (
     TimeEstimatesRequest,
     WebhookCreateRequest,
     WebhookUpdateRequest,
+    # Helpers
+    _call,
+    _compute_score,
+    _notify,
+    _row_to_agent,
+    _row_to_log,
+    _row_to_task,
+    _row_to_template,
+    _sql,
+    _sql_param,
+    verify_auth,
 )
 
-
 # ── Lifespan: wait for STDB before accepting requests ──────────────
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -102,9 +113,7 @@ async def lifespan(app: FastAPI):
     for attempt in range(1, max_retries + 1):
         try:
             async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(
-                    f"{settings.stdb_base_url}/v1/database/{settings.stdb_db}"
-                )
+                resp = await client.get(f"{settings.stdb_base_url}/v1/database/{settings.stdb_db}")
             if resp.status_code == 404:
                 async with httpx.AsyncClient(timeout=10) as client:
                     resp = await client.post(
@@ -128,12 +137,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title='spacetimedb-kanban',
-    version='0.1.0',
+    title="spacetimedb-kanban",
+    version="0.1.0",
     lifespan=lifespan,
-    docs_url='/docs',
-    redoc_url='/redoc',
-    openapi_url='/openapi.json',
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 app.add_middleware(
@@ -154,18 +163,24 @@ else:
     print(f"⚠ Web dist not found at {WEB_DIST} — dashboard not available")
     print("  Build it: cd web && npm run build")
 
+
 @app.get("/")
 async def serve_spa():
     index = os.path.join(WEB_DIST, "index.html")
     if os.path.isfile(index):
-        return FileResponse(index, headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        })
+        return FileResponse(
+            index,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
     return {"status": "dashboard not built — run 'npm run build' in web/"}
 
+
 # ── Endpoints start here ──────────────────────────────────────────────
+
 
 @app.get("/api/health")
 async def health():
@@ -182,7 +197,9 @@ async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
     agent_caps = None
     if agent_id:
         try:
-            agent_rows = await _sql_param("SELECT capabilities FROM swarm_agents WHERE id = '{id}'", id=agent_id)
+            agent_rows = await _sql_param(
+                "SELECT capabilities FROM swarm_agents WHERE id = '{id}'", id=agent_id
+            )
             if agent_rows:
                 agent_caps = agent_rows[0].get("capabilities")
         except Exception as e:
@@ -197,17 +214,21 @@ async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
     results.sort(key=lambda x: -x.score)
     return results[:limit]
 
+
 @app.get("/api/tasks", response_model=list[TaskOut])
 async def list_tasks(
-    status: Optional[str] = None,
-    repo: Optional[str] = None,
-    label: Optional[str] = None,
-    search: Optional[str] = None,
+    status: str | None = None,
+    repo: str | None = None,
+    label: str | None = None,
+    search: str | None = None,
+    limit: int = 500,
 ):
     # If label filter provided, first get task IDs with that label
     label_task_ids: set[str] | None = None
     if label:
-        rows = await _sql_param("SELECT task_id FROM task_label_assignments WHERE label_id = '{label}'", label=label)
+        rows = await _sql_param(
+            "SELECT task_id FROM task_label_assignments WHERE label_id = '{label}'", label=label
+        )
         label_task_ids = {r["task_id"] for r in rows}
 
     sql = "SELECT * FROM tasks"
@@ -221,6 +242,8 @@ async def list_tasks(
         params["repo"] = repo
     if filters:
         sql += " WHERE " + " AND ".join(filters)
+    # Add server-side LIMIT to prevent loading all rows
+    sql += f" LIMIT {min(limit, 1000)}"
     if params:
         rows = await _sql_param(sql, **params)
     else:
@@ -231,20 +254,25 @@ async def list_tasks(
     # Apply client-side search filter
     if search:
         q = search.lower()
-        tasks = [t for t in tasks if
-                 q in t.title.lower() or
-                 q in t.description.lower() or
-                 q in t.repo.lower() or
-                 (t.assigned_to and q in t.assigned_to.lower()) or
-                 q in t.id.lower()]
+        tasks = [
+            t
+            for t in tasks
+            if q in t.title.lower()
+            or q in t.description.lower()
+            or q in t.repo.lower()
+            or (t.assigned_to and q in t.assigned_to.lower())
+            or q in t.id.lower()
+        ]
     tasks.sort(key=lambda t: (t.priority, -t.created_at))
     return tasks
+
 
 @app.post("/api/tasks/seed", dependencies=[Depends(verify_auth)])
 async def seed_tasks():
     """Seed sample tasks into the database."""
     await _call("seed_sample_tasks", [])
     return {"status": "seeded"}
+
 
 @app.post("/api/tasks/clear", dependencies=[Depends(verify_auth)])
 async def clear_all_tasks():
@@ -260,10 +288,6 @@ async def clear_all_tasks():
             except Exception as e:
                 print(f"[warn] Failed to delete task {tid}: {e}")
     return {"status": "cleared", "deleted": deleted}
-
-
-import csv
-import io
 
 
 @app.get("/api/tasks/export")
@@ -288,19 +312,47 @@ async def export_tasks(format: str = "json", status: str = "", repo: str = ""):
     if format == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["id", "title", "description", "priority", "status",
-                         "assigned_to", "repo", "branch", "roadmap_item",
-                         "created_by", "created_at", "updated_at",
-                         "depends_on", "required_skills", "score", "due_by"])
+        writer.writerow(
+            [
+                "id",
+                "title",
+                "description",
+                "priority",
+                "status",
+                "assigned_to",
+                "repo",
+                "branch",
+                "roadmap_item",
+                "created_by",
+                "created_at",
+                "updated_at",
+                "depends_on",
+                "required_skills",
+                "score",
+                "due_by",
+            ]
+        )
         for r in rows:
-            writer.writerow([
-                r.get("id", ""), r.get("title", ""), r.get("description", ""),
-                r.get("priority", 2), r.get("status", ""), r.get("assigned_to", ""),
-                r.get("repo", ""), r.get("branch", ""), r.get("roadmap_item", ""),
-                r.get("created_by", ""), r.get("created_at", 0), r.get("updated_at", 0),
-                r.get("depends_on", ""), r.get("required_skills", ""), r.get("score", 0),
-                r.get("due_by", ""),
-            ])
+            writer.writerow(
+                [
+                    r.get("id", ""),
+                    r.get("title", ""),
+                    r.get("description", ""),
+                    r.get("priority", 2),
+                    r.get("status", ""),
+                    r.get("assigned_to", ""),
+                    r.get("repo", ""),
+                    r.get("branch", ""),
+                    r.get("roadmap_item", ""),
+                    r.get("created_by", ""),
+                    r.get("created_at", 0),
+                    r.get("updated_at", 0),
+                    r.get("depends_on", ""),
+                    r.get("required_skills", ""),
+                    r.get("score", 0),
+                    r.get("due_by", ""),
+                ]
+            )
         csv_content = output.getvalue()
         return Response(
             content=csv_content,
@@ -324,29 +376,40 @@ async def get_task(task_id: str):
         raise HTTPException(404, "Task not found")
     return _row_to_task(rows[0])
 
+
 @app.post("/api/tasks", status_code=201, dependencies=[Depends(verify_auth)])
 async def create_task(body: TaskCreate):
     import uuid as _uuid
+
     task_id = f"task_{_uuid.uuid4().hex[:16]}"
-    await _call("add_task", [
-        task_id,
-        body.title,
-        body.description,
-        body.priority,
-        body.repo,
-        body.roadmap_item,
-        body.created_by,
-        body.status,
-        body.due_by if body.due_by is not None else 0,
-    ])
+    await _call(
+        "add_task",
+        [
+            task_id,
+            body.title,
+            body.description,
+            body.priority,
+            body.repo,
+            body.roadmap_item,
+            body.created_by,
+            body.status,
+            body.due_by if body.due_by is not None else 0,
+        ],
+    )
     # Set skills if provided — using known task_id, no race condition
     if body.required_skills:
         await _call("set_task_skills", [task_id, body.required_skills])
-    asyncio.ensure_future(_notify("created", {
-        "title": body.title,
-        "id": task_id,
-        "repo": body.repo,
-    }, body.created_by))
+    asyncio.ensure_future(
+        _notify(
+            "created",
+            {
+                "title": body.title,
+                "id": task_id,
+                "repo": body.repo,
+            },
+            body.created_by,
+        )
+    )
     return {"status": "created", "id": task_id}
 
 
@@ -391,18 +454,24 @@ async def patch_task(task_id: str, body: TaskUpdate):
             await _call("unarchive_task", [task_id])
     # Handle time estimates
     if body.estimated_hours is not None or body.spent_hours is not None:
-        est = body.estimated_hours if body.estimated_hours is not None else t.get("estimated_hours") or 0
+        est = (
+            body.estimated_hours
+            if body.estimated_hours is not None
+            else t.get("estimated_hours") or 0
+        )
         spent = body.spent_hours if body.spent_hours is not None else t.get("spent_hours") or 0
         await _call("set_time_estimates", [task_id, est, spent])
     return {"status": "updated"}
 
+
 @app.post("/api/tasks/{task_id}/claim", dependencies=[Depends(verify_auth)])
 async def claim_task(task_id: str, body: ClaimRequest):
-    result = await _call("claim_task", [task_id, body.agent_id])
+    await _call("claim_task", [task_id, body.agent_id])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
         asyncio.ensure_future(_notify("claimed", rows[0]))
     return {"status": "claimed", "task_id": task_id, "assigned_to": body.agent_id}
+
 
 @app.post("/api/tasks/{task_id}/unclaim", dependencies=[Depends(verify_auth)])
 async def unclaim_task(task_id: str):
@@ -412,6 +481,7 @@ async def unclaim_task(task_id: str):
         asyncio.ensure_future(_notify("unclaimed", rows[0]))
         asyncio.ensure_future(_sync_to_github(task_id, "unclaimed"))
     return {"status": "unclaimed", "task_id": task_id}
+
 
 async def _sync_to_github(task_id: str, event: str, notes: str = ""):
     """Push a kanban task state change back to a linked GitHub issue."""
@@ -431,7 +501,9 @@ async def _sync_to_github(task_id: str, event: str, notes: str = ""):
             issue_sync.update_issue_status(task_id, "closed")
             if notes:
                 try:
-                    issue_sync.add_issue_comment(token, repo, issue_number, f"✅ Kanban task completed: {notes}")
+                    issue_sync.add_issue_comment(
+                        token, repo, issue_number, f"✅ Kanban task completed: {notes}"
+                    )
                 except Exception as e:
                     print(f"[warn] Failed to add comment for issue {issue_number}: {e}")
         elif event == "unclaimed":
@@ -439,17 +511,22 @@ async def _sync_to_github(task_id: str, event: str, notes: str = ""):
             issue_sync.update_issue_status(task_id, "open")
             if notes:
                 try:
-                    issue_sync.add_issue_comment(token, repo, issue_number, f"🔄 Kanban task reopened: {notes}")
+                    issue_sync.add_issue_comment(
+                        token, repo, issue_number, f"🔄 Kanban task reopened: {notes}"
+                    )
                 except Exception as e:
                     print(f"[warn] Failed to add reopen comment for issue {issue_number}: {e}")
     except Exception as e:
         print(f"[warn] Issue sync error: {e}")
         import logging
+
         logging.getLogger(__name__).warning(f"Failed to sync task {task_id} to GitHub: {e}")
 
 
 @app.post("/api/tasks/{task_id}/complete", dependencies=[Depends(verify_auth)])
-async def complete_task(task_id: str, body: CompleteRequest = CompleteRequest()):
+async def complete_task(task_id: str, body: CompleteRequest | None = None):
+    if body is None:
+        body = CompleteRequest()
     await _call("complete_task", [task_id, body.result_notes])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
@@ -457,13 +534,17 @@ async def complete_task(task_id: str, body: CompleteRequest = CompleteRequest())
         asyncio.ensure_future(_sync_to_github(task_id, "completed", body.result_notes))
     return {"status": "completed", "task_id": task_id}
 
+
 @app.post("/api/tasks/{task_id}/block", dependencies=[Depends(verify_auth)])
-async def block_task(task_id: str, body: BlockRequest = BlockRequest()):
+async def block_task(task_id: str, body: BlockRequest | None = None):
+    if body is None:
+        body = BlockRequest()
     await _call("block_task", [task_id, body.reason])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
         asyncio.ensure_future(_notify("blocked", rows[0], body.reason))
     return {"status": "blocked", "task_id": task_id}
+
 
 @app.post("/api/tasks/{task_id}/block-with-reason", dependencies=[Depends(verify_auth)])
 async def block_task_with_reason(task_id: str, body: BlockWithReasonRequest):
@@ -473,41 +554,51 @@ async def block_task_with_reason(task_id: str, body: BlockWithReasonRequest):
         asyncio.ensure_future(_notify("blocked", rows[0], body.reason))
     return {"status": "blocked", "task_id": task_id, "reason": body.reason}
 
+
 @app.post("/api/tasks/{task_id}/split", dependencies=[Depends(verify_auth)])
 async def split_task(task_id: str, body: SplitTaskRequest):
     import json
+
     child_titles_json = json.dumps(body.child_titles)
     await _call("split_task", [task_id, child_titles_json])
     return {"status": "split", "parent_task_id": task_id, "child_count": len(body.child_titles)}
+
 
 @app.post("/api/tasks/{task_id}/reset-fails", dependencies=[Depends(verify_auth)])
 async def reset_fail_count(task_id: str):
     await _call("reset_fail_count", [task_id])
     return {"status": "reset", "task_id": task_id}
 
+
 @app.post("/api/tasks/{task_id}/max-attempts", dependencies=[Depends(verify_auth)])
 async def set_max_attempts(task_id: str, body: MaxAttemptsRequest):
     await _call("set_max_attempts", [task_id, body.max_attempts])
     return {"status": "updated", "task_id": task_id, "max_attempts": body.max_attempts}
+
 
 @app.post("/api/tasks/{task_id}/dependency", dependencies=[Depends(verify_auth)])
 async def set_dependency(task_id: str, body: SetDependencyRequest):
     await _call("set_dependency", [task_id, body.depends_on])
     return {"status": "updated", "task_id": task_id, "depends_on": body.depends_on or None}
 
+
 @app.delete("/api/tasks/{task_id}", dependencies=[Depends(verify_auth)])
 async def delete_task(task_id: str):
     await _call("delete_task", [task_id])
     return {"status": "deleted"}
 
+
 # ── Task Skills (Capability Tags) ──────────────────────────────────
+
 
 @app.post("/api/tasks/{task_id}/skills", dependencies=[Depends(verify_auth)])
 async def set_task_skills(task_id: str, body: SetSkillsRequest):
     await _call("set_task_skills", [task_id, body.skills])
     return {"status": "updated", "task_id": task_id, "skills": body.skills or None}
 
+
 # ── Task Comments ──────────────────────────────────────────────────
+
 
 @app.post("/api/tasks/{task_id}/comments", status_code=201, dependencies=[Depends(verify_auth)])
 async def add_comment(task_id: str, body: CommentCreate):
@@ -516,14 +607,16 @@ async def add_comment(task_id: str, body: CommentCreate):
     await _call("add_comment", [comment_id, task_id, body.author, body.body])
     return {"status": "created", "id": comment_id}
 
+
 @app.get("/api/tasks/{task_id}/comments", response_model=list[CommentOut])
 async def list_comments(task_id: str):
     """List all comments for a task, oldest first."""
-    rows = await _sql(
-        _sql_param("SELECT * FROM task_comments WHERE task_id = '{task_id}'", task_id=task_id)
+    rows = await _sql_param(
+        "SELECT * FROM task_comments WHERE task_id = '{task_id}'", task_id=task_id
     )
     rows.sort(key=lambda r: r.get("created_at", 0))
     return [CommentOut(**r) for r in rows]
+
 
 @app.delete("/api/tasks/{task_id}/comments/{comment_id}", dependencies=[Depends(verify_auth)])
 async def delete_comment(task_id: str, comment_id: str):
@@ -531,7 +624,9 @@ async def delete_comment(task_id: str, comment_id: str):
     await _call("delete_comment", [comment_id])
     return {"status": "deleted"}
 
+
 # ── Task Checklists / Subtasks ──────────────────────────────────────
+
 
 @app.post("/api/tasks/{task_id}/checklist", status_code=201, dependencies=[Depends(verify_auth)])
 async def add_checklist_item(task_id: str, body: ChecklistItemCreate):
@@ -540,12 +635,16 @@ async def add_checklist_item(task_id: str, body: ChecklistItemCreate):
     await _call("add_checklist_item", [item_id, task_id, body.text])
     return {"status": "created", "id": item_id}
 
+
 @app.get("/api/tasks/{task_id}/checklist", response_model=list[ChecklistItemOut])
 async def list_checklist(task_id: str):
     """List all checklist items for a task, ordered by position."""
-    rows = await _sql_param("SELECT * FROM task_checklists WHERE task_id = '{task_id}'", task_id=task_id)
+    rows = await _sql_param(
+        "SELECT * FROM task_checklists WHERE task_id = '{task_id}'", task_id=task_id
+    )
     rows.sort(key=lambda r: r.get("position", 0))
     return [ChecklistItemOut(**r) for r in rows]
+
 
 @app.post("/api/tasks/{task_id}/checklist/{item_id}/toggle", dependencies=[Depends(verify_auth)])
 async def toggle_checklist_item(task_id: str, item_id: str):
@@ -553,17 +652,20 @@ async def toggle_checklist_item(task_id: str, item_id: str):
     await _call("toggle_checklist_item", [item_id])
     return {"status": "toggled"}
 
+
 @app.delete("/api/tasks/{task_id}/checklist/{item_id}", dependencies=[Depends(verify_auth)])
 async def remove_checklist_item(task_id: str, item_id: str):
     """Remove a checklist item."""
     await _call("remove_checklist_item", [item_id])
     return {"status": "deleted"}
 
+
 @app.post("/api/tasks/{task_id}/checklist/{item_id}/reorder", dependencies=[Depends(verify_auth)])
 async def reorder_checklist_item(task_id: str, item_id: str, new_position: int):
     """Reorder a checklist item."""
     await _call("reorder_checklist_items", [item_id, new_position])
     return {"status": "reordered"}
+
 
 # ── Task Reorder / Position ──────────────────────────────────────────────
 
@@ -574,13 +676,16 @@ async def reorder_task(body: ReorderRequest):
     await _call("reorder_task", [body.task_id, body.position])
     return {"status": "reordered", "task_id": body.task_id, "position": body.position}
 
+
 @app.post("/api/tasks/bulk-reorder", dependencies=[Depends(verify_auth)])
 async def bulk_reorder_tasks(body: BulkReorderRequest):
     """Bulk-set positions for multiple tasks (e.g. drag-drop within a column)."""
     import json
+
     items_json = json.dumps([{"task_id": it.task_id, "position": it.position} for it in body.items])
     await _call("bulk_reorder_tasks", [items_json])
     return {"status": "reordered", "count": len(body.items)}
+
 
 # ── Priority Scoring / Suggestions ──────────────────────────────────
 
@@ -635,18 +740,20 @@ async def agent_health():
         age_ms = now_ms - last_hb
         stale = age_ms > stale_threshold if last_hb > 0 else True
 
-        result.append({
-            "id": aid,
-            "host": r.get("host", ""),
-            "status": r.get("status", "offline"),
-            "capabilities": r.get("capabilities"),
-            "repo_focus": r.get("repo_focus"),
-            "current_task": task_info,
-            "last_heartbeat": last_hb,
-            "heartbeat_age_seconds": max(0, age_ms // 1000) if last_hb > 0 else -1,
-            "stale": stale,
-            "first_seen": r.get("first_seen", 0),
-        })
+        result.append(
+            {
+                "id": aid,
+                "host": r.get("host", ""),
+                "status": r.get("status", "offline"),
+                "capabilities": r.get("capabilities"),
+                "repo_focus": r.get("repo_focus"),
+                "current_task": task_info,
+                "last_heartbeat": last_hb,
+                "heartbeat_age_seconds": max(0, age_ms // 1000) if last_hb > 0 else -1,
+                "stale": stale,
+                "first_seen": r.get("first_seen", 0),
+            }
+        )
 
     result.sort(key=lambda a: -a["last_heartbeat"])
     return result
@@ -673,7 +780,6 @@ async def get_agent(agent_id: str):
     return await _row_to_agent(rows[0])
 
 
-
 @app.exception_handler(404)
 async def spa_fallback(request, exc):
     """Catch-all for SPA client-side routing."""
@@ -681,11 +787,14 @@ async def spa_fallback(request, exc):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
     index = os.path.join(WEB_DIST, "index.html")
     if os.path.isfile(index):
-        return FileResponse(index, headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        })
+        return FileResponse(
+            index,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
     return JSONResponse(status_code=404, content={"detail": "Not found"})
 
 
@@ -694,11 +803,14 @@ async def spa_fallback(request, exc):
 # database persistence. Each key maps to a JSON-serialized value row
 # in the dispatcher_state STDB table.
 
+
 @app.get("/api/dispatcher/state")
 async def get_dispatcher_state(key: str | None = None):
     """Get dispatcher state from STDB. If key is provided, return only that key's value."""
     if key:
-        rows = await _sql_param("SELECT key, value FROM dispatcher_state WHERE key = '{key}'", key=key)
+        rows = await _sql_param(
+            "SELECT key, value FROM dispatcher_state WHERE key = '{key}'", key=key
+        )
         if rows:
             return {key: json.loads(rows[0]["value"])}
         return {key: None}
@@ -712,11 +824,6 @@ async def get_dispatcher_state(key: str | None = None):
     return result
 
 
-class DispatcherStateUpdate(BaseModel):
-    key: str
-    value: Any
-
-
 @app.post("/api/dispatcher/state", dependencies=[Depends(verify_auth)])
 async def set_dispatcher_state(body: DispatcherStateUpdate):
     """Set a single key in dispatcher state via STDB reducer."""
@@ -725,7 +832,7 @@ async def set_dispatcher_state(body: DispatcherStateUpdate):
         await _call("set_dispatcher_state", [body.key, value_json])
         return {"status": "ok", "key": body.key}
     except Exception as e:
-        raise HTTPException(502, f"Failed to set dispatcher state: {e}")
+        raise HTTPException(502, f"Failed to set dispatcher state: {e}") from e
 
 
 @app.delete("/api/dispatcher/state/{key}", dependencies=[Depends(verify_auth)])
@@ -737,16 +844,18 @@ async def delete_dispatcher_state(key: str):
     except Exception as e:
         # If error is "Key not found", return 404
         if "Key not found" in str(e):
-            raise HTTPException(404, f"Key not found: {key}")
-        raise HTTPException(502, f"Failed to delete dispatcher state: {e}")
+            raise HTTPException(404, f"Key not found: {key}") from e
+        raise HTTPException(502, f"Failed to delete dispatcher state: {e}") from e
 
 
 # ── Roadmap Import ─────────────────────────────────────────────────
+
 
 @app.post("/api/roadmap/import", dependencies=[Depends(verify_auth)])
 async def import_roadmap(body: RoadmapImportRequest):
     """Parse ROADMAP.md content and bulk-create kanban tasks."""
     import re
+
     lines = body.content.splitlines()
     current_phase = ""
     tasks = []
@@ -768,42 +877,54 @@ async def import_roadmap(body: RoadmapImportRequest):
             priority = int(phase_num_match.group(1)) if phase_num_match else 3
             priority = min(max(priority - 1, 0), 3)
 
-            tasks.append({
-                "title": title,
-                "description": f"From {current_phase}",
-                "priority": priority,
-                "repo": body.repo,
-                "roadmap_item": current_phase,
-                "created_by": body.created_by,
-            })
+            tasks.append(
+                {
+                    "title": title,
+                    "description": f"From {current_phase}",
+                    "priority": priority,
+                    "repo": body.repo,
+                    "roadmap_item": current_phase,
+                    "created_by": body.created_by,
+                }
+            )
             task_count += 1
 
             if len(tasks) >= 5:
                 for t in tasks:
-                    await _call("add_task", ["", t["title"], t["description"], t["priority"], t["repo"], t["roadmap_item"], t["created_by"], ""])
+                    await _call(
+                        "add_task",
+                        [
+                            "",
+                            t["title"],
+                            t["description"],
+                            t["priority"],
+                            t["repo"],
+                            t["roadmap_item"],
+                            t["created_by"],
+                            "",
+                        ],
+                    )
                 tasks = []
 
     for t in tasks:
-        await _call("add_task", ["", t["title"], t["description"], t["priority"], t["repo"], t["roadmap_item"], t["created_by"], ""])
+        await _call(
+            "add_task",
+            [
+                "",
+                t["title"],
+                t["description"],
+                t["priority"],
+                t["repo"],
+                t["roadmap_item"],
+                t["created_by"],
+                "",
+            ],
+        )
 
     return {"status": "imported", "task_count": task_count}
 
 
 # ── Webhook Subscriptions ────────────────────────────────────────────
-
-
-class WebhookCreateRequest(BaseModel):
-    url: str
-    type: str = "generic"
-    events: list[str] = ["created", "claimed", "unclaimed", "completed", "blocked"]
-    label: str = ""
-
-
-class WebhookUpdateRequest(BaseModel):
-    url: Optional[str] = None
-    type: Optional[str] = None
-    events: Optional[list[str]] = None
-    label: Optional[str] = None
 
 
 @app.get("/api/webhooks")
@@ -866,18 +987,23 @@ async def test_webhook(webhook_id: str):
         "score": 0,
     }
     from webhooks import _format_payload
+
     payload = _format_payload(wh["type"], "test", test_task, "Webhook test ping")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             if wh["type"] == "telegram":
                 resp = await client.post(wh["url"], json=payload)
             else:
-                resp = await client.post(wh["url"], json=payload,
-                    headers={"Content-Type": "application/json"} if wh["type"] == "generic" else {})
+                resp = await client.post(
+                    wh["url"],
+                    json=payload,
+                    headers={"Content-Type": "application/json"} if wh["type"] == "generic" else {},
+                )
             resp.raise_for_status()
         return {"status": "sent", "webhook_id": webhook_id, "response_code": resp.status_code}
     except Exception as e:
-        raise HTTPException(502, f"Webhook test failed: {str(e)[:200]}")
+        raise HTTPException(502, f"Webhook test failed: {str(e)[:200]}") from e
+
 
 @app.delete("/api/webhooks/{webhook_id}", dependencies=[Depends(verify_auth)])
 async def delete_webhook(webhook_id: str):
@@ -894,19 +1020,6 @@ async def get_webhook_deliveries(webhook_id: str, limit: int = 20):
 
 
 # ── Issue Sync ────────────────────────────────────────────────────────
-
-class IssueLinkRequest(BaseModel):
-    task_id: str
-    repo: str
-    issue_number: int
-    issue_url: str = ""
-    html_url: str = ""
-
-class IssueCreateRequest(BaseModel):
-    task_id: str
-    repo: str = ""
-    labels: str = ""
-    assignee: str = ""
 
 
 @app.get("/api/issues")
@@ -934,7 +1047,8 @@ async def link_issue(body: IssueLinkRequest):
         task_id=body.task_id,
         repo=body.repo,
         issue_number=body.issue_number,
-        issue_url=body.issue_url or f"https://api.github.com/repos/{body.repo}/issues/{body.issue_number}",
+        issue_url=body.issue_url
+        or f"https://api.github.com/repos/{body.repo}/issues/{body.issue_number}",
         html_url=body.html_url or f"https://github.com/{body.repo}/issues/{body.issue_number}",
     )
     return {"status": "linked", **link}
@@ -965,7 +1079,9 @@ async def create_issue_from_task(body: IssueCreateRequest):
     if not repo:
         raise HTTPException(400, "No repo specified and no github_default_repo configured")
 
-    label_list = [l.strip() for l in body.labels.split(",") if l.strip()] if body.labels else []
+    label_list = (
+        [rec.strip() for rec in body.labels.split(",") if rec.strip()] if body.labels else []
+    )
     # Build issue body from task description + metadata
     issue_body = task.get("description", "") or ""
     meta = (
@@ -977,13 +1093,25 @@ async def create_issue_from_task(body: IssueCreateRequest):
     )
     issue_body += meta
 
-    result = issue_sync.create_issue(token, repo, task["title"], issue_body, label_list, body.assignee or None)
-    issue_sync.link_issue(body.task_id, repo, result["issue_number"], result["issue_url"], result["html_url"])
+    result = issue_sync.create_issue(
+        token, repo, task["title"], issue_body, label_list, body.assignee or None
+    )
+    issue_sync.link_issue(
+        body.task_id, repo, result["issue_number"], result["issue_url"], result["html_url"]
+    )
     issue_sync.update_issue_status(body.task_id, result["state"])
 
     # Add activity log
     try:
-        await _call("add_log", [body.task_id, "github_issue_created", "", f"Issue #{result['issue_number']}: {result['html_url']}"])
+        await _call(
+            "add_log",
+            [
+                body.task_id,
+                "github_issue_created",
+                "",
+                f"Issue #{result['issue_number']}: {result['html_url']}",
+            ],
+        )
     except Exception as e:
         print(f"[warn] Failed to log GitHub issue creation: {e}")
 
@@ -1028,36 +1156,62 @@ async def github_webhook(request: Request):
             if task_id_match:
                 # Already linked — just record the mapping
                 existing_task_id = task_id_match.group(1)
-                issue_sync.link_issue(existing_task_id, repo_full, issue_number, issue.get("url", ""), issue_html)
+                issue_sync.link_issue(
+                    existing_task_id, repo_full, issue_number, issue.get("url", ""), issue_html
+                )
                 issue_sync.update_issue_status(existing_task_id, issue_state)
                 return {"status": "re-linked", "task_id": existing_task_id}
 
             # New issue from outside kanban — create task
             import uuid as _uuid
+
             gh_task_id = f"task_{_uuid.uuid4().hex[:16]}"
-            await _call("add_task", [
-                gh_task_id,
-                issue_title,
-                f"Issue #{issue_number}: {issue_html}\n\n{issue_body[:500]}",
-                2,
-                repo_full,
-                f"GitHub Issues — {repo_full}",
-                "github-webhook",
-                "",
-            ])
-            await _call("add_log", [gh_task_id, "created", "github-webhook", f"From issue #{issue_number}: {issue_html}"])
-            issue_sync.link_issue(gh_task_id, repo_full, issue_number, issue.get("url", ""), issue_html)
+            await _call(
+                "add_task",
+                [
+                    gh_task_id,
+                    issue_title,
+                    f"Issue #{issue_number}: {issue_html}\n\n{issue_body[:500]}",
+                    2,
+                    repo_full,
+                    f"GitHub Issues — {repo_full}",
+                    "github-webhook",
+                    "",
+                ],
+            )
+            await _call(
+                "add_log",
+                [
+                    gh_task_id,
+                    "created",
+                    "github-webhook",
+                    f"From issue #{issue_number}: {issue_html}",
+                ],
+            )
+            issue_sync.link_issue(
+                gh_task_id, repo_full, issue_number, issue.get("url", ""), issue_html
+            )
             issue_sync.update_issue_status(gh_task_id, issue_state)
-            asyncio.ensure_future(_notify("created", {
-                "title": issue_title, "id": gh_task_id, "repo": repo_full,
-            }, f"Issue #{issue_number}"))
+            asyncio.ensure_future(
+                _notify(
+                    "created",
+                    {
+                        "title": issue_title,
+                        "id": gh_task_id,
+                        "repo": repo_full,
+                    },
+                    f"Issue #{issue_number}",
+                )
+            )
             return {"status": "created", "task_id": gh_task_id, "issue_number": issue_number}
 
         elif action == "closed":
             # Auto-complete the linked kanban task
             task_id = issue_sync.get_task_id_for_issue(repo_full, issue_number)
             if task_id:
-                rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
+                rows = await _sql_param(
+                    "SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id
+                )
                 if rows and rows[0].get("status") != "done":
                     notes = f"GitHub issue #{issue_number} closed"
                     if rows[0].get("status") == "in_progress":
@@ -1076,15 +1230,27 @@ async def github_webhook(request: Request):
             # Re-open the linked kanban task
             task_id = issue_sync.get_task_id_for_issue(repo_full, issue_number)
             if task_id:
-                rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
+                rows = await _sql_param(
+                    "SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id
+                )
                 if rows and rows[0].get("status") == "done":
                     await _call("unclaim_task", [task_id])
                     try:
-                        await _call("add_log", [task_id, "unclaimed", "github-webhook", f"Issue #{issue_number} reopened"])
+                        await _call(
+                            "add_log",
+                            [
+                                task_id,
+                                "unclaimed",
+                                "github-webhook",
+                                f"Issue #{issue_number} reopened",
+                            ],
+                        )
                     except Exception as e:
                         print(f"[warn] Failed to log webhook reopen: {e}")
                     issue_sync.update_issue_status(task_id, "open")
-                    asyncio.ensure_future(_notify("unclaimed", rows[0], f"Issue #{issue_number} reopened"))
+                    asyncio.ensure_future(
+                        _notify("unclaimed", rows[0], f"Issue #{issue_number} reopened")
+                    )
                     return {"status": "reopened", "task_id": task_id}
             return {"status": "ignored", "reason": "no linked task or not done"}
         return {"status": "ignored", "action": action, "event": event}
@@ -1111,21 +1277,27 @@ async def github_webhook(request: Request):
     if action == "opened" or action == "reopened":
         # Set branch field on the task — preserve original title
         try:
-            rows = await _sql_param("SELECT title FROM tasks WHERE id = '{task_id}'", task_id=task_id)
+            rows = await _sql_param(
+                "SELECT title FROM tasks WHERE id = '{task_id}'", task_id=task_id
+            )
             original_title = rows[0]["title"] if rows else pr_title
         except Exception:
             original_title = pr_title
-        try:
+        with contextlib.suppress(HTTPException):
             await _call("update_task", [task_id, original_title, f"PR: {pr_url}", 2, branch])
-        except HTTPException:
-            # Expected: task not found or not actionable — not an error
-            pass  # Task may not exist yet
-        asyncio.ensure_future(_notify("linked", {
-            "id": task_id,
-            "title": original_title,
-            "repo": payload.get("repository", {}).get("full_name", ""),
-            "assigned_to": None,
-        }, f"PR {pr_url}"))
+            # Task may not exist yet — expected, not an error
+        asyncio.ensure_future(
+            _notify(
+                "linked",
+                {
+                    "id": task_id,
+                    "title": original_title,
+                    "repo": payload.get("repository", {}).get("full_name", ""),
+                    "assigned_to": None,
+                },
+                f"PR {pr_url}",
+            )
+        )
         return {"status": "linked", "task_id": task_id, "action": action}
 
     elif action == "closed" and pr.get("merged", False):
@@ -1154,12 +1326,12 @@ async def github_webhook(request: Request):
 
 @app.get("/api/logs", response_model=list[LogOut])
 async def list_logs(
-    task_id: Optional[str] = None,
-    action: Optional[str] = None,
-    agent_id: Optional[str] = None,
-    search: Optional[str] = None,
-    since: Optional[int] = None,
-    until: Optional[int] = None,
+    task_id: str | None = None,
+    action: str | None = None,
+    agent_id: str | None = None,
+    search: str | None = None,
+    since: int | None = None,
+    until: int | None = None,
     offset: int = 0,
     limit: int = 50,
 ):
@@ -1169,26 +1341,29 @@ async def list_logs(
 
     # Apply filters
     if task_id:
-        logs = [l for l in logs if l.task_id == task_id]
+        logs = [rec for rec in logs if rec.task_id == task_id]
     if action:
         action_set = set(a.strip() for a in action.split(",") if a.strip())
-        logs = [l for l in logs if l.action in action_set]
+        logs = [rec for rec in logs if rec.action in action_set]
     if agent_id:
-        logs = [l for l in logs if l.agent_id == agent_id]
+        logs = [rec for rec in logs if rec.agent_id == agent_id]
     if search:
         q = search.lower()
-        logs = [l for l in logs if
-                (l.notes and q in l.notes.lower()) or
-                q in l.task_id.lower() or
-                q in l.action.lower()]
+        logs = [
+            rec
+            for rec in logs
+            if (rec.notes and q in rec.notes.lower())
+            or q in rec.task_id.lower()
+            or q in rec.action.lower()
+        ]
     if since:
-        logs = [l for l in logs if l.timestamp >= since]
+        logs = [rec for rec in logs if rec.timestamp >= since]
     if until:
-        logs = [l for l in logs if l.timestamp <= until]
+        logs = [rec for rec in logs if rec.timestamp <= until]
 
-    logs.sort(key=lambda l: -l.timestamp)
-    total = len(logs)
-    page = logs[offset:offset + limit]
+    logs.sort(key=lambda rec: -rec.timestamp)
+    len(logs)
+    page = logs[offset : offset + limit]
     return page
 
 
@@ -1201,20 +1376,20 @@ async def logs_stats():
     now_ms = int(time.time() * 1000)
     day_ms = 86_400_000
 
-    today = [l for l in logs if l.timestamp >= now_ms - day_ms]
+    today = [rec for rec in logs if rec.timestamp >= now_ms - day_ms]
 
     action_counts: dict[str, int] = {}
     agent_counts: dict[str, int] = {}
-    for l in logs:
-        action_counts[l.action] = action_counts.get(l.action, 0) + 1
-        if l.agent_id:
-            agent_counts[l.agent_id] = agent_counts.get(l.agent_id, 0) + 1
+    for rec in logs:
+        action_counts[rec.action] = action_counts.get(rec.action, 0) + 1
+        if rec.agent_id:
+            agent_counts[rec.agent_id] = agent_counts.get(rec.agent_id, 0) + 1
 
     # Get unique agents who have been active today
     today_agents = set()
-    for l in today:
-        if l.agent_id:
-            today_agents.add(l.agent_id)
+    for rec in today:
+        if rec.agent_id:
+            today_agents.add(rec.agent_id)
 
     return {
         "total_events": len(logs),
@@ -1232,21 +1407,33 @@ async def logs_stats():
 async def list_labels():
     """List all labels."""
     rows = await _sql("SELECT * FROM kanban_labels")
-    return [LabelOut(id=r["id"], name=r["name"], color=r.get("color", "#0ea5e9"),
-                     description=r.get("description", ""), created_at=r.get("created_at", 0))
-            for r in rows]
+    return [
+        LabelOut(
+            id=r["id"],
+            name=r["name"],
+            color=r.get("color", "#0ea5e9"),
+            description=r.get("description", ""),
+            created_at=r.get("created_at", 0),
+        )
+        for r in rows
+    ]
 
 
 @app.post("/api/labels", status_code=201, dependencies=[Depends(verify_auth)])
 async def create_label(body: LabelCreate):
     """Create a new label."""
-    result = await _call("add_label", [body.id, body.name, body.color, body.description])
+    await _call("add_label", [body.id, body.name, body.color, body.description])
     # Find the label we just created to return it
     rows = await _sql_param("SELECT * FROM kanban_labels WHERE name = '{name}'", name=body.name)
     if rows:
         r = rows[0]
-        return LabelOut(id=r["id"], name=r["name"], color=r.get("color", "#0ea5e9"),
-                        description=r.get("description", ""), created_at=r.get("created_at", 0))
+        return LabelOut(
+            id=r["id"],
+            name=r["name"],
+            color=r.get("color", "#0ea5e9"),
+            description=r.get("description", ""),
+            created_at=r.get("created_at", 0),
+        )
     return {"status": "created"}
 
 
@@ -1254,11 +1441,18 @@ async def create_label(body: LabelCreate):
 async def update_label(label_id: str, body: LabelUpdate):
     """Update a label's name, color, or description."""
     await _call("update_label", [label_id, body.name, body.color, body.description])
-    rows = await _sql_param("SELECT * FROM kanban_labels WHERE id = '{label_id}'", label_id=label_id)
+    rows = await _sql_param(
+        "SELECT * FROM kanban_labels WHERE id = '{label_id}'", label_id=label_id
+    )
     if rows:
         r = rows[0]
-        return LabelOut(id=r["id"], name=r["name"], color=r.get("color", "#0ea5e9"),
-                        description=r.get("description", ""), created_at=r.get("created_at", 0))
+        return LabelOut(
+            id=r["id"],
+            name=r["name"],
+            color=r.get("color", "#0ea5e9"),
+            description=r.get("description", ""),
+            created_at=r.get("created_at", 0),
+        )
     return {"status": "updated"}
 
 
@@ -1267,11 +1461,6 @@ async def delete_label(label_id: str):
     """Delete a label and remove it from all tasks."""
     await _call("remove_label", [label_id])
     return {"status": "deleted"}
-
-
-class BatchLabelsRequest(BaseModel):
-    task_ids: list[str]
-    label_ids: list[str]
 
 
 @app.post("/api/tasks/batch/labels", status_code=200, dependencies=[Depends(verify_auth)])
@@ -1285,7 +1474,7 @@ async def batch_assign_labels(body: BatchLabelsRequest):
         result = await _call("batch_assign_labels", [task_str, label_str])
         return {"status": "assigned", "result": result}
     except Exception as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
 
 
 @app.post("/api/tasks/batch/unlabels", status_code=200, dependencies=[Depends(verify_auth)])
@@ -1299,7 +1488,7 @@ async def batch_unassign_labels(body: BatchLabelsRequest):
         result = await _call("batch_unassign_labels", [task_str, label_str])
         return {"status": "removed", "result": result}
     except Exception as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
 
 
 @app.get("/api/tasks/{task_id}/labels", response_model=list[LabelOut])
@@ -1310,15 +1499,24 @@ async def get_task_labels(task_id: str):
         INNER JOIN task_label_assignments a ON l.id = a.label_id
         WHERE a.task_id = '{task_id}'
     """)
-    return [LabelOut(id=r["id"], name=r["name"], color=r.get("color", "#0ea5e9"),
-                     description=r.get("description", ""), created_at=r.get("created_at", 0))
-            for r in rows]
+    return [
+        LabelOut(
+            id=r["id"],
+            name=r["name"],
+            color=r.get("color", "#0ea5e9"),
+            description=r.get("description", ""),
+            created_at=r.get("created_at", 0),
+        )
+        for r in rows
+    ]
 
 
 @app.post("/api/tasks/{task_id}/labels", dependencies=[Depends(verify_auth)])
 async def set_task_labels(task_id: str, body: TaskLabelAssign):
     """Set labels for a task by replacing all current assignments."""
-    existing = await _sql_param("SELECT label_id FROM task_label_assignments WHERE task_id = '{task_id}'", task_id=task_id)
+    existing = await _sql_param(
+        "SELECT label_id FROM task_label_assignments WHERE task_id = '{task_id}'", task_id=task_id
+    )
     current_ids = {r["label_id"] for r in existing}
     new_ids = set(body.label_ids)
 
@@ -1368,18 +1566,29 @@ async def create_project(body: ProjectCreate):
     """Register a new project/repo with priority."""
     if not body.id:
         raise HTTPException(400, "id (repo slug) is required")
-    result = await _call("add_project", [
-        body.id, body.name, body.description, body.color,
-        body.priority, body.active,
-    ])
+    await _call(
+        "add_project",
+        [
+            body.id,
+            body.name,
+            body.description,
+            body.color,
+            body.priority,
+            body.active,
+        ],
+    )
     rows = await _sql_param("SELECT * FROM kanban_projects WHERE id = '{id}'", id=body.id)
     if rows:
         r = rows[0]
         return ProjectOut(
-            id=r["id"], name=r.get("name", r["id"]),
-            description=r.get("description", ""), color=r.get("color", "#6b7280"),
-            priority=r.get("priority", 2), active=r.get("active", True),
-            created_at=r.get("created_at", 0), updated_at=r.get("updated_at", 0),
+            id=r["id"],
+            name=r.get("name", r["id"]),
+            description=r.get("description", ""),
+            color=r.get("color", "#6b7280"),
+            priority=r.get("priority", 2),
+            active=r.get("active", True),
+            created_at=r.get("created_at", 0),
+            updated_at=r.get("updated_at", 0),
         )
     return {"status": "created"}
 
@@ -1389,22 +1598,37 @@ async def update_project(project_id: str, body: ProjectUpdate):
     """Update a project's priority, name, colour, or active status."""
     # If priority wasn't provided, fetch current value from DB
     if body.priority is None:
-        rows = await _sql_param("SELECT priority FROM kanban_projects WHERE id = '{project_id}'", project_id=project_id)
+        rows = await _sql_param(
+            "SELECT priority FROM kanban_projects WHERE id = '{project_id}'", project_id=project_id
+        )
         prio = rows[0]["priority"] if rows else 2
     else:
         prio = body.priority
-    await _call("update_project", [
-        project_id, body.name, body.description, body.color,
-        prio, body.active,
-    ])
-    rows = await _sql_param("SELECT * FROM kanban_projects WHERE id = '{project_id}'", project_id=project_id)
+    await _call(
+        "update_project",
+        [
+            project_id,
+            body.name,
+            body.description,
+            body.color,
+            prio,
+            body.active,
+        ],
+    )
+    rows = await _sql_param(
+        "SELECT * FROM kanban_projects WHERE id = '{project_id}'", project_id=project_id
+    )
     if rows:
         r = rows[0]
         return ProjectOut(
-            id=r["id"], name=r.get("name", r["id"]),
-            description=r.get("description", ""), color=r.get("color", "#6b7280"),
-            priority=r.get("priority", 2), active=r.get("active", True),
-            created_at=r.get("created_at", 0), updated_at=r.get("updated_at", 0),
+            id=r["id"],
+            name=r.get("name", r["id"]),
+            description=r.get("description", ""),
+            color=r.get("color", "#6b7280"),
+            priority=r.get("priority", 2),
+            active=r.get("active", True),
+            created_at=r.get("created_at", 0),
+            updated_at=r.get("updated_at", 0),
         )
     return {"status": "updated"}
 
@@ -1446,13 +1670,15 @@ async def suggest_by_project(limit: int = 10):
             parts.append(f"project_boost={proj_boost}")
         if stale_bonus > 0:
             parts.append(f"stale_bonus={stale_bonus}")
-        scored.append({
-            "task_id": t["id"],
-            "repo": repo,
-            "title": t["title"],
-            "score": score,
-            "reason": " + ".join(parts),
-        })
+        scored.append(
+            {
+                "task_id": t["id"],
+                "repo": repo,
+                "title": t["title"],
+                "score": score,
+                "reason": " + ".join(parts),
+            }
+        )
     scored.sort(key=lambda x: -x["score"])
     return scored[:limit]
 
@@ -1462,28 +1688,28 @@ async def suggest_by_project(limit: int = 10):
 
 @app.get("/api/analytics/overview")
 async def analytics_overview():
-    """High-level metrics: total, per-status, completed today/this week."""
+    """High-level metrics: total, per-status, completed today/this week.
+
+    Uses shared httpx client (avoids creating a new client per query).
+    Removed the useless SELECT * FROM task_logs that loaded 50K+ rows."""
     tasks = await _sql("SELECT * FROM tasks")
-    logs = await _sql("SELECT * FROM task_logs")
 
     now = int(time.time() * 1000)
     day_ms = 86_400_000
     week_ms = 7 * day_ms
 
-    total = len(tasks)
+    total = 0
     by_status = {}
     for t in tasks:
         s = t.get("status", "unknown")
         by_status[s] = by_status.get(s, 0) + 1
+        total += 1
 
-    # Completed recently
     completed_today = sum(
-        1 for t in tasks
-        if t.get("status") == "done" and (now - t.get("updated_at", 0)) < day_ms
+        1 for t in tasks if t.get("status") == "done" and (now - t.get("updated_at", 0)) < day_ms
     )
     completed_week = sum(
-        1 for t in tasks
-        if t.get("status") == "done" and (now - t.get("updated_at", 0)) < week_ms
+        1 for t in tasks if t.get("status") == "done" and (now - t.get("updated_at", 0)) < week_ms
     )
     total_done = by_status.get("done", 0)
 
@@ -1505,7 +1731,6 @@ async def analytics_overview():
         "completed_week": completed_week,
         "total_done": total_done,
         "repos": repos,
-        "agent_count": len(await _sql("SELECT * FROM swarm_agents")),
     }
 
 
@@ -1574,13 +1799,15 @@ async def analytics_cycle_times():
     result = []
     for repo, cycles in sorted(repo_cycles.items()):
         avg_ms = sum(cycles) / len(cycles)
-        result.append({
-            "repo": repo or "(none)",
-            "count": len(cycles),
-            "avg_hours": round(avg_ms / 3_600_000, 1),
-            "min_hours": round(min(cycles) / 3_600_000, 1),
-            "max_hours": round(max(cycles) / 3_600_000, 1),
-        })
+        result.append(
+            {
+                "repo": repo or "(none)",
+                "count": len(cycles),
+                "avg_hours": round(avg_ms / 3_600_000, 1),
+                "min_hours": round(min(cycles) / 3_600_000, 1),
+                "max_hours": round(max(cycles) / 3_600_000, 1),
+            }
+        )
     return result
 
 
@@ -1589,7 +1816,7 @@ async def analytics_agents():
     """Per-agent stats: tasks completed, stale rate."""
     agents = await _sql("SELECT * FROM swarm_agents")
     logs = await _sql("SELECT * FROM task_logs")
-    tasks = await _sql("SELECT * FROM tasks")
+    await _sql("SELECT * FROM tasks")
 
     # Count completed tasks per agent from logs
     agent_completions: dict[str, int] = {}
@@ -1606,36 +1833,21 @@ async def analytics_agents():
     result = []
     for a in agents:
         aid = a.get("id", "")
-        result.append({
-            "id": aid,
-            "status": a.get("status", "offline"),
-            "completed": agent_completions.get(aid, 0),
-            "blocked": agent_stales.get(aid, 0),
-            "capabilities": a.get("capabilities"),
-            "repo_focus": a.get("repo_focus"),
-            "last_heartbeat": a.get("last_heartbeat", 0),
-        })
+        result.append(
+            {
+                "id": aid,
+                "status": a.get("status", "offline"),
+                "completed": agent_completions.get(aid, 0),
+                "blocked": agent_stales.get(aid, 0),
+                "capabilities": a.get("capabilities"),
+                "repo_focus": a.get("repo_focus"),
+                "last_heartbeat": a.get("last_heartbeat", 0),
+            }
+        )
     return result
 
 
 # ── Task Template Endpoints ───────────────────────────────────────────
-
-
-def _row_to_template(r: dict) -> TemplateOut:
-    return TemplateOut(
-        id=r["id"],
-        title=r["title"],
-        description=r.get("description", ""),
-        priority=r.get("priority", 2),
-        repo=r.get("repo", ""),
-        roadmap_item=r.get("roadmap_item", ""),
-        required_skills=r.get("required_skills"),
-        cron_schedule=r.get("cron_schedule", ""),
-        created_by=r.get("created_by", ""),
-        created_at=r.get("created_at", 0),
-        last_triggered_at=r.get("last_triggered_at", 0),
-        active=r.get("active", True),
-    )
 
 
 @app.get("/api/task-templates", response_model=list[TemplateOut])
@@ -1647,17 +1859,20 @@ async def list_task_templates():
 @app.post("/api/task-templates", status_code=201, response_model=TemplateOut)
 async def create_task_template(body: TemplateCreate):
     template_id = f"tpl_{uuid.uuid4().hex[:12]}"
-    await _call("add_task_template", [
-        template_id,
-        body.title,
-        body.description,
-        body.priority,
-        body.repo,
-        body.roadmap_item,
-        body.required_skills,
-        body.cron_schedule,
-        body.created_by,
-    ])
+    await _call(
+        "add_task_template",
+        [
+            template_id,
+            body.title,
+            body.description,
+            body.priority,
+            body.repo,
+            body.roadmap_item,
+            body.required_skills,
+            body.cron_schedule,
+            body.created_by,
+        ],
+    )
     rows = await _sql_param("SELECT * FROM task_templates WHERE id = '{id}'", id=template_id)
     if not rows:
         raise HTTPException(500, "Template not found after creation")
@@ -1670,17 +1885,20 @@ async def update_task_template(template_id: str, body: TemplateUpdate):
     if not rows:
         raise HTTPException(404, "Template not found")
 
-    await _call("update_task_template", [
-        template_id,
-        body.title,
-        body.description,
-        body.priority if body.priority != 128 else 2,  # sentinel for no change
-        body.repo,
-        body.roadmap_item,
-        body.required_skills,
-        body.cron_schedule,
-        body.active,
-    ])
+    await _call(
+        "update_task_template",
+        [
+            template_id,
+            body.title,
+            body.description,
+            body.priority if body.priority != 128 else 2,  # sentinel for no change
+            body.repo,
+            body.roadmap_item,
+            body.required_skills,
+            body.cron_schedule,
+            body.active,
+        ],
+    )
     rows = await _sql_param("SELECT * FROM task_templates WHERE id = '{id}'", id=template_id)
     return _row_to_template(rows[0]) if rows else None
 
@@ -1692,7 +1910,7 @@ async def delete_task_template(template_id: str):
         return {"status": "deleted"}
     except RuntimeError as e:
         if "not found" in str(e).lower():
-            raise HTTPException(404, "Template not found")
+            raise HTTPException(404, "Template not found") from e
         raise
 
 
@@ -1701,21 +1919,17 @@ async def trigger_task_templates():
     """Check all active templates and create tasks for due ones. Returns stats."""
     try:
         await _call("trigger_task_templates", [])
-        # Read the most recent trigger log to get stats
-        logs = await _sql("SELECT * FROM task_logs WHERE action = 'trigger_task_templates' ORDER BY timestamp DESC LIMIT 1")
+        # Read the most recent trigger log to get stats.
+        # NOTE: STDB SQL does not support ORDER BY ... DESC LIMIT — fetch the
+        # filtered rows and pick the latest client-side instead.
+        logs = await _sql("SELECT * FROM task_logs WHERE action = 'trigger_task_templates'")
         if logs:
-            return {"status": "triggered", "notes": logs[0].get("notes", "")}
+            latest = max(logs, key=lambda r: r.get("timestamp", 0) or 0)
+            return {"status": "triggered", "notes": latest.get("notes", "")}
         return {"status": "triggered", "notes": "completed"}
     except Exception as e:
-        raise HTTPException(500, f"Trigger failed: {e}")
+        raise HTTPException(500, f"Trigger failed: {e}") from e
 
-
-# ─── Auto-star GitHub repo on startup ────────────────────────────────────────
-
-import threading as _threading
-import urllib.request as _urllib_request
-import os as _os
-import logging as _logging
 
 _logger = _logging.getLogger(__name__)
 
@@ -1745,7 +1959,7 @@ def _auto_star(repo: str):
                 _logger.info(f"⭐ Already starred {repo}")
             else:
                 _logger.warning(f"Failed to star {repo}: HTTP {resp.status}")
-    except urllib.error.HTTPError as e:
+    except _urllib_error.HTTPError as e:
         if e.code == 204 or e.code == 409:
             return  # success variants
         _logger.warning(f"Failed to star {repo}: HTTP {e.code}")
@@ -1754,6 +1968,7 @@ def _auto_star(repo: str):
 
 
 # ── Task Archive / Unarchive ──────────────────────────────────────────
+
 
 @app.post("/api/tasks/{task_id}/archive", dependencies=[Depends(verify_auth)])
 async def archive_task(task_id: str):
@@ -1771,6 +1986,7 @@ async def unarchive_task(task_id: str):
 
 # ── Sprint Management ─────────────────────────────────────────────────
 
+
 @app.post("/api/tasks/{task_id}/sprint", dependencies=[Depends(verify_auth)])
 async def set_task_sprint(task_id: str, body: SprintRequest):
     """Set a task's sprint assignment."""
@@ -1779,6 +1995,7 @@ async def set_task_sprint(task_id: str, body: SprintRequest):
 
 
 # ── Time Estimates ────────────────────────────────────────────────────
+
 
 @app.post("/api/tasks/{task_id}/time-estimates", dependencies=[Depends(verify_auth)])
 async def set_task_time_estimates(task_id: str, body: TimeEstimatesRequest):
@@ -1793,6 +2010,7 @@ async def set_task_time_estimates(task_id: str, body: TimeEstimatesRequest):
 
 
 # ── Task Relations ────────────────────────────────────────────────────
+
 
 @app.get("/api/tasks/{task_id}/relations", response_model=list[TaskRelationOut])
 async def list_task_relations(task_id: str):
@@ -1835,6 +2053,7 @@ async def remove_task_relation(task_id: str, relation_id: str):
 
 # ── Automation Rules ──────────────────────────────────────────────────
 
+
 @app.get("/api/rules", response_model=list[AutomationRuleOut])
 async def list_automation_rules():
     """List all automation rules."""
@@ -1861,18 +2080,22 @@ async def list_automation_rules():
 async def create_automation_rule(body: AutomationRuleCreate):
     """Create a new automation rule."""
     import uuid as _uuid
+
     rule_id = body.id or f"rule_{_uuid.uuid4().hex[:16]}"
-    await _call("create_automation_rule", [
-        rule_id,
-        body.name,
-        body.description,
-        body.trigger_event,
-        body.condition,
-        body.action_type,
-        body.action_config,
-        body.repo,
-        body.active,
-    ])
+    await _call(
+        "create_automation_rule",
+        [
+            rule_id,
+            body.name,
+            body.description,
+            body.trigger_event,
+            body.condition,
+            body.action_type,
+            body.action_config,
+            body.repo,
+            body.active,
+        ],
+    )
     return {"status": "created", "id": rule_id}
 
 
@@ -1912,17 +2135,35 @@ async def update_automation_rule(rule_id: str, body: AutomationRuleUpdate):
         raise HTTPException(404, "Rule not found")
     existing = rows[0]
     name = body.name if body.name is not None else existing.get("name", "")
-    description = body.description if body.description is not None else existing.get("description", "")
-    trigger_event = body.trigger_event if body.trigger_event is not None else existing.get("trigger_event", "")
+    description = (
+        body.description if body.description is not None else existing.get("description", "")
+    )
+    trigger_event = (
+        body.trigger_event if body.trigger_event is not None else existing.get("trigger_event", "")
+    )
     condition = body.condition if body.condition is not None else existing.get("condition") or ""
-    action_type = body.action_type if body.action_type is not None else existing.get("action_type", "")
-    action_config = body.action_config if body.action_config is not None else existing.get("action_config", "")
+    action_type = (
+        body.action_type if body.action_type is not None else existing.get("action_type", "")
+    )
+    action_config = (
+        body.action_config if body.action_config is not None else existing.get("action_config", "")
+    )
     repo = body.repo if body.repo is not None else existing.get("repo") or ""
     active = body.active if body.active is not None else existing.get("active", True)
-    await _call("update_automation_rule", [
-        rule_id, name, description, trigger_event, condition,
-        action_type, action_config, repo, active,
-    ])
+    await _call(
+        "update_automation_rule",
+        [
+            rule_id,
+            name,
+            description,
+            trigger_event,
+            condition,
+            action_type,
+            action_config,
+            repo,
+            active,
+        ],
+    )
     return {"status": "updated", "id": rule_id}
 
 
@@ -1934,6 +2175,7 @@ async def delete_automation_rule(rule_id: str):
 
 
 # ── API Keys ─────────────────────────────────────────────────────────
+
 
 @app.get("/api/api-keys", response_model=list[ApiKeyOut])
 async def list_api_keys():
@@ -1959,15 +2201,19 @@ async def list_api_keys():
 async def create_api_key(body: ApiKeyCreate):
     """Create a new API key."""
     import uuid as _uuid
+
     key_id = body.id or f"apikey_{_uuid.uuid4().hex[:16]}"
-    await _call("create_api_key", [
-        key_id,
-        body.key_hash,
-        body.name,
-        body.repo_scope,
-        body.permissions,
-        body.created_by,
-    ])
+    await _call(
+        "create_api_key",
+        [
+            key_id,
+            body.key_hash,
+            body.name,
+            body.repo_scope,
+            body.permissions,
+            body.created_by,
+        ],
+    )
     return {"status": "created", "id": key_id}
 
 
@@ -1980,6 +2226,7 @@ async def revoke_api_key(key_id: str):
 
 # ── Calendar ──────────────────────────────────────────────────────────
 
+
 @app.get("/api/calendar", response_model=list[TaskOut])
 async def calendar_tasks():
     """Return tasks that have due_by dates set."""
@@ -1991,6 +2238,7 @@ async def calendar_tasks():
 
 # ── Cross-Project Aggregation ─────────────────────────────────────────
 
+
 @app.get("/api/cross-project")
 async def cross_project_aggregation():
     """Return aggregate counts per repo."""
@@ -1999,7 +2247,15 @@ async def cross_project_aggregation():
     for r in rows:
         repo = r.get("repo") or "(none)"
         if repo not in repos:
-            repos[repo] = {"repo": repo, "total": 0, "available": 0, "in_progress": 0, "blocked": 0, "done": 0, "archived": 0}
+            repos[repo] = {
+                "repo": repo,
+                "total": 0,
+                "available": 0,
+                "in_progress": 0,
+                "blocked": 0,
+                "done": 0,
+                "archived": 0,
+            }
         repos[repo]["total"] += 1
         status = r.get("status", "unknown")
         if status in repos[repo]:
@@ -2010,6 +2266,7 @@ async def cross_project_aggregation():
 
 
 # ── Schema Migrations ─────────────────────────────────────────────────
+
 
 @app.get("/api/migrations", response_model=list[MigrationOut])
 async def list_migrations():
@@ -2030,10 +2287,31 @@ async def list_migrations():
 @app.post("/api/migrations", status_code=201, dependencies=[Depends(verify_auth)])
 async def record_migration(body: MigrationCreate):
     """Record a schema migration."""
-    await _call("record_migration", [
-        body.version, body.description, body.applied_by, body.checksum,
-    ])
+    await _call(
+        "record_migration",
+        [
+            body.version,
+            body.description,
+            body.applied_by,
+            body.checksum,
+        ],
+    )
     return {"status": "recorded", "version": body.version}
+
+
+# ── Route Modules ────────────────────────────────────────────────────
+# Registered after inline endpoints so main.py handlers take priority
+# on overlapping paths. Route-module-only endpoints (analytics/burndown,
+# analytics/calendar, git webhooks, agent capabilities) become active.
+
+app.include_router(agents_router)
+app.include_router(analytics_router)
+app.include_router(github_router)
+app.include_router(labels_router)
+app.include_router(logs_router)
+app.include_router(projects_router)
+app.include_router(tasks_router)
+app.include_router(templates_router)
 
 
 # ── Main ─────────────────────────────────────────────────────────────
@@ -2041,9 +2319,7 @@ async def record_migration(body: MigrationCreate):
 if __name__ == "__main__":
     import uvicorn
 
-    _threading.Thread(
-        target=_auto_star, args=("omiinaya/spacetimedb-kanban",), daemon=True
-    ).start()
+    _threading.Thread(target=_auto_star, args=("omiinaya/spacetimedb-kanban",), daemon=True).start()
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
