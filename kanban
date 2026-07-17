@@ -5,7 +5,7 @@ Zero external dependencies (stdlib only). Works from any directory.
 Install: copy this file to ~/.local/bin/kanban and chmod +x.
 
 Configuration via environment variables:
-  KANBAN_API_BASE   — default: http://localhost:8725
+  KANBAN_API_BASE   — default: http://localhost:8727
   KANBAN_AGENT_ID   — default: auto-detect (whoami or git user.name)
 
 Usage:

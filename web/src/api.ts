@@ -21,6 +21,7 @@ export interface Task {
   fail_reason?: string | null
   subtask_of?: string | null
   subtasks?: string | null
+  archived?: boolean
 }
 
 export interface LogEntry {
@@ -244,6 +245,10 @@ export const api = {
       apiPost<{ status: string; task_id: string; skills: string | null }>(`/tasks/${id}/skills`, { skills }),
     delete: (id: string) =>
       apiDelete<{ status: string }>(`/tasks/${id}`),
+    archive: (id: string) =>
+      apiPost<{ status: string; task_id: string }>(`/tasks/${id}/archive`),
+    unarchive: (id: string) =>
+      apiPost<{ status: string; task_id: string }>(`/tasks/${id}/unarchive`),
     seed: () => apiPost<{ status: string }>('/tasks/seed'),
     reorder: (task_id: string, position: number) =>
       apiPost<{ status: string; task_id: string; position: number }>('/tasks/reorder', { task_id, position }),
