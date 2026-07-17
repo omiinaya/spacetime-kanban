@@ -11,7 +11,7 @@ import sys
 import urllib.error
 import urllib.request
 
-API_BASE = os.environ.get("KANBAN_API", "http://localhost:8728")
+API_BASE = os.environ.get("KANBAN_API", "http://localhost:8727")
 AGENT_ID = os.environ.get("KANBAN_AGENT_ID", "hermes")
 
 

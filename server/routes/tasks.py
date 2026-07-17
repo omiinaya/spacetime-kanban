@@ -15,7 +15,9 @@ from shared import (
     BatchLabelsRequest,
     BlockRequest,
     BlockWithReasonRequest,
+    BulkArchiveRequest,
     BulkReorderRequest,
+    BulkRetryRequest,
     ChecklistItemCreate,
     ChecklistItemOut,
     ClaimRequest,
@@ -485,6 +487,44 @@ async def split_task(task_id: str, body: SplitTaskRequest):
 async def reset_fail_count(task_id: str):
     await _call("reset_fail_count", [task_id])
     return {"status": "reset", "task_id": task_id}
+
+
+@router.post("/api/tasks/bulk-retry", dependencies=[Depends(verify_auth)])
+async def bulk_retry_tasks(body: BulkRetryRequest):
+    """Return blocked tasks to available (optionally resetting fail_count).
+
+    Used by the dispatcher's auto-retry sweep and the triage page to recover
+    circuit-breaker-blocked tasks. Each task gets unclaim (blocked → available)
+    plus reset_fail_count so the circuit breaker gives it a fresh budget.
+    """
+    retried, failed = 0, []
+    for task_id in body.task_ids:
+        try:
+            if body.reset_fails:
+                await _call("reset_fail_count", [task_id])
+            await _call("unclaim_task", [task_id])
+            retried += 1
+        except Exception as e:
+            failed.append({"task_id": task_id, "error": str(e)[:100]})
+    return {"status": "ok", "retried": retried, "failed": failed}
+
+
+@router.post("/api/tasks/bulk-archive", dependencies=[Depends(verify_auth)])
+async def bulk_archive_tasks(body: BulkArchiveRequest):
+    """Archive a list of tasks (only unarchived ones are toggled)."""
+    archived, failed = 0, []
+    for task_id in body.task_ids:
+        try:
+            rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
+            if not rows:
+                failed.append({"task_id": task_id, "error": "not found"})
+                continue
+            if not rows[0].get("archived", False):
+                await _call("toggle_archive", [task_id])
+                archived += 1
+        except Exception as e:
+            failed.append({"task_id": task_id, "error": str(e)[:100]})
+    return {"status": "ok", "archived": archived, "failed": failed}
 
 
 @router.post("/api/tasks/{task_id}/max-attempts", dependencies=[Depends(verify_auth)])
