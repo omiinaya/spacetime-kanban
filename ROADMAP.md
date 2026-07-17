@@ -36,7 +36,7 @@
 - [x] Real-time status output — heartbeat ticks, suggestion picks
 
 ## Phase 7 — Native Hermes Integration ✅
-- [x] MCP server — 18 tools covering full kanban API (list, create, claim, complete, block, suggest, swarm, logs)
+- [x] MCP server — 36 tools covering full kanban API (list, create, claim, complete, block, suggest, swarm, logs)
 - [x] `add_log` STDB reducer + `POST /api/tasks/{task_id}/log` endpoint
 - [x] MCP tools registered in Hermes config — auto-discovered on every session
 - [x] Hermes registered in swarm as agent `hermes` with full capability tags
@@ -261,9 +261,9 @@
 |----------|---|------------|
 | Core Features (task CRUD, state machine, swarm, labels, comments, checklists, ordering) | 95% | All phases implemented and connected. Edge cases untested. |
 | Frontend UX | 90% | 12 pages, DnD, keyboard shortcuts, bulk ops, templates, filters, saved views, mobile-responsive. Minor polish items remain. |
-| Integrations (webhooks 4-provider, GitHub sync, MCP 27 tools, CLI) | 85% | All wired. MCP error handling uses `{"error":...}` dicts instead of proper exceptions. |
+| Integrations (webhooks 4-provider, GitHub sync, MCP 36 tools, CLI) | 85% | All wired. MCP error handling uses `{"error":...}` dicts instead of proper exceptions. |
 | **Test Coverage** | **80%** | **83 tests** (all mocked STDB) covering CRUD, auth, webhooks, labels, comments, checklists, error paths, analytics, and all Phase 5C endpoints. `server/tests/` has proper conftest.py with fixtures. CI runs tests as a required step. |
-| Code Organization & Maintainability | 90% | `main.py` (2,326 lines) delegates to `routes/` (8 modules, 1,679 lines). Models extracted to `models.py`. `shared.py` pure service layer. Ruff + mypy clean. |
+| Code Organization & Maintainability | 90% | `main.py` (338 lines) fully delegates to `routes/` (13 modules). Models extracted to `models.py`. `shared.py` pure service layer. Ruff + mypy clean. |
 | STDB Best Practices | 85% | Delete-then-insert is STDB's standard update pattern — reducers are transactional so data loss isn't possible. All `find_*` helpers use indexed primary-key access via `.iter().filter().find()`. |
 | CI/CD Maturity | 80% | CI builds + runs all 83 unit tests. CD pipeline (cd.yml) automates wasm build + publish + deploy. |
 | Security | 72% | Auth (optional) via `X-API-Key` header. SQL injection fixed — parameterized `_sql_param()` used everywhere. Bare `except: pass` eliminated from all app code. |

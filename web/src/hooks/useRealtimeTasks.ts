@@ -97,7 +97,10 @@ export function useRealtimeTasks() {
 
     function syncFromCache(conn: DbConnection) {
       try {
-        const all = Array.from(conn.db.tasks.iter()) as Task[]
+        // The live STDB tasks table has an `archived` flag (generated client
+        // types are stale and don't include it yet) — hide archived tasks.
+        const all = (Array.from(conn.db.tasks.iter()) as Task[])
+          .filter(t => !(t as unknown as { archived?: boolean }).archived)
         setTasksIfChanged(all)
         if (all.length > 0) setLoading(false)  // Data with content arrived from STDB
       } catch (e: unknown) {
