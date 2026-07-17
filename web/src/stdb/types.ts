@@ -65,6 +65,10 @@ export const Task = __t.object("Task", {
   subtaskOf: __t.option(__t.string()),
   subtasks: __t.option(__t.string()),
   dueBy: __t.option(__t.u64()),
+  sprint: __t.option(__t.string()),
+  archived: __t.bool(),
+  estimatedHours: __t.option(__t.u32()),
+  spentHours: __t.option(__t.u32()),
 });
 export type Task = __Infer<typeof Task>;
 
