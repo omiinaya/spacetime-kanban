@@ -52,8 +52,13 @@ export default function AgentHealthPage() {
 
   useEffect(() => {
     load()
-    const interval = setInterval(() => load(true), 15000)
-    return () => clearInterval(interval)
+    const interval = setInterval(() => {
+      if (document.hidden) return
+      load(true)
+    }, 15000)
+    const onVis = () => { if (document.hidden) clearInterval(interval) }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVis) }
   }, [])
 
   const handleRefresh = () => {

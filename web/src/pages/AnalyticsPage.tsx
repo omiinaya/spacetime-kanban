@@ -57,8 +57,13 @@ export default function AnalyticsPage() {
       }
     }
     load()
-    const interval = setInterval(load, 30000)
-    return () => clearInterval(interval)
+    const interval = setInterval(() => {
+      if (document.hidden) return
+      load()
+    }, 30000)
+    const onVis = () => { if (document.hidden) clearInterval(interval) }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVis) }
   }, [])
 
   if (loading) return (
