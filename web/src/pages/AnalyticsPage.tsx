@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { BarChart3, CheckCircle2, Clock, Users, AlertCircle, Layers, Loader2, Download } from 'lucide-react'
+import { BarChart3, CheckCircle2, Clock, Users, AlertCircle, Layers, Loader2, Download, Activity } from 'lucide-react'
 import type { ComponentType } from 'react'
 
 interface Overview {
@@ -11,6 +11,9 @@ interface Overview {
   total_done: number
   repos: Record<string, { total: number; done: number; in_progress: number; blocked: number; available: number }>
   agent_count: number
+  claims_last_hour?: number
+  completions_last_hour?: number
+  claim_complete_ratio?: number
 }
 
 interface ThroughputPoint { date: string; completed: number }
@@ -103,11 +106,20 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard icon={Layers} label="Total Tasks" value={overview.total} color="#3b82f6" />
         <StatCard icon={CheckCircle2} label="Completed" value={overview.total_done} sub={`${overview.completed_today} today · ${overview.completed_week} this week`} color="#8b5cf6" />
         <StatCard icon={Clock} label="Available" value={overview.by_status.available || 0} color="#22c55e" />
         <StatCard icon={Users} label="Agents" value={overview.agent_count} color="#f59e0b" />
+        {overview.claim_complete_ratio !== undefined && (
+          <StatCard
+            icon={Activity}
+            label="Claim:Complete (1h)"
+            value={overview.claim_complete_ratio}
+            sub={`${overview.claims_last_hour} claims · ${overview.completions_last_hour} done`}
+            color={overview.claim_complete_ratio > 10 ? '#ef4444' : overview.claim_complete_ratio > 3 ? '#f59e0b' : '#22c55e'}
+          />
+        )}
       </div>
 
       {/* Status breakdown */}

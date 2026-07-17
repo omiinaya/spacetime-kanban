@@ -355,6 +355,39 @@ async def test_analytics_overview(client, mock_all):
     assert "total" in data
     assert "by_status" in data
     assert "repos" in data
+    assert "claims_last_hour" in data
+    assert "completions_last_hour" in data
+    assert "claim_complete_ratio" in data
+
+
+@pytest.mark.asyncio
+async def test_analytics_claim_churn(client, mock_all):
+    """Claim-churn endpoint flags hot-looping tasks, excludes completed ones."""
+    import time as _time
+
+    now_ms = int(_time.time() * 1000)
+    recent = now_ms - 60_000  # 1 min ago — inside the window
+    logs = [
+        # t1: claimed 4x, never completed → churning
+        *[{"task_id": "t1", "action": "claimed", "timestamp": recent}] * 4,
+        # t2: claimed 5x but completed → excluded
+        *[{"task_id": "t2", "action": "claimed", "timestamp": recent}] * 5,
+        {"task_id": "t2", "action": "completed", "timestamp": recent},
+        # t3: claimed 2x — below threshold → excluded
+        *[{"task_id": "t3", "action": "claimed", "timestamp": recent}] * 2,
+        # t4: claimed 4x but OUTSIDE the window → excluded
+        *[{"task_id": "t4", "action": "claimed", "timestamp": now_ms - 7_200_000}] * 4,
+    ]
+    with patch("routes.analytics._sql", new_callable=AsyncMock) as mock_sql:
+        # Endpoint filters in SQL; emulate by returning only in-window rows
+        mock_sql.return_value = [l for l in logs if l["timestamp"] > now_ms - 3_600_000]
+        resp = await client.get("/api/analytics/claim-churn?minutes=60&threshold=3")
+    assert resp.status_code == 200
+    data = resp.json()
+    churning = {c["task_id"]: c["claims"] for c in data["churning"]}
+    assert churning == {"t1": 4}
+    assert data["total_claims"] == 11
+    assert data["total_completed"] == 1
 
 
 # ════════════════════════════════════════════════════════════════════════
