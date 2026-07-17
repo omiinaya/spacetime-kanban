@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react'
 import { Plus, Loader2, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, Link,
   Cpu, History, GitBranch, ExternalLink, X, Github,
-  Tag,
-  MessageSquare, Send, CheckSquare
+  Tag, Archive,
 } from 'lucide-react'
-import { api, type KanbanLabel, type TaskComment, type ChecklistItem, type LogEntry } from '../api'
+import { api, type KanbanLabel, type LogEntry } from '../api'
 import { type Task } from '../hooks/useRealtimeTasks'
 import { Link as RouterLink } from 'react-router-dom'
 import { PRIORITY_LABELS, PRIORITY_COLORS, STATUS_LABELS } from './constants'
+import { TaskComments } from './board/TaskComments'
+import { TaskChecklist } from './board/TaskChecklist'
 
 /** Convert epoch ms to YYYY-MM-DD for a date input. */
 function epochMsToDateInput(ms: number | null | undefined): string {
@@ -104,7 +105,7 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
 
 export function TaskDetailDialog({
   taskId, tasks, onClose,
-  onClaim, onUnclaim, onComplete, onBlock, onDelete,
+  onClaim, onUnclaim, onComplete, onBlock, onDelete, onArchive,
   onSetDependency, onSetSkills,
   allLabels = [], taskLabelMap = new Map(),
 }: {
@@ -116,6 +117,7 @@ export function TaskDetailDialog({
   onComplete: (id: string) => void
   onBlock: (id: string) => void
   onDelete: (id: string) => void
+  onArchive?: (id: string) => void
   onSetDependency: (id: string) => void
   onSetSkills: (id: string) => void
   allLabels?: KanbanLabel[]
@@ -127,18 +129,6 @@ export function TaskDetailDialog({
   const [loadingIssue, setLoadingIssue] = useState(true)
   const [currentLabelIds, setCurrentLabelIds] = useState<Set<string>>(new Set())
   const [labelSaving, setLabelSaving] = useState(false)
-
-  // ── Comments state ─────────────────────────────────────────────────
-  const [comments, setComments] = useState<TaskComment[]>([])
-  const [loadingComments, setLoadingComments] = useState(true)
-  const [newComment, setNewComment] = useState('')
-  const [sendingComment, setSendingComment] = useState(false)
-
-  // ── Checklist state ────────────────────────────────────────────────
-  const [checklist, setChecklist] = useState<ChecklistItem[]>([])
-  const [loadingChecklist, setLoadingChecklist] = useState(true)
-  const [newChecklistText, setNewChecklistText] = useState('')
-  const [savingChecklist, setSavingChecklist] = useState(false)
 
   const task = tasks.find(t => t.id === taskId)
   const downstream = tasks.filter(t => t.dependsOn === taskId)
@@ -167,96 +157,6 @@ export function TaskDetailDialog({
     const labels = taskLabelMap.get(taskId) || []
     setCurrentLabelIds(new Set(labels.map(l => l.id)))
   }, [taskId, taskLabelMap])
-
-  // Load comments
-  useEffect(() => {
-    let cancelled = false
-    setLoadingComments(true)
-    api.comments.list(taskId).then(c => {
-      if (!cancelled) { setComments(c); setLoadingComments(false) }
-    }).catch(() => { if (!cancelled) setLoadingComments(false) })
-    return () => { cancelled = true }
-  }, [taskId])
-
-  const handleAddComment = async () => {
-    const text = newComment.trim()
-    if (!text) return
-    setSendingComment(true)
-    try {
-      const result = await api.comments.add(taskId, text, 'web-user')
-      if (result.id) {
-        setComments(prev => [...prev, {
-          id: result.id,
-          task_id: taskId,
-          author: 'web-user',
-          body: text,
-          created_at: Date.now(),
-        }])
-        setNewComment('')
-      }
-    } catch (e: unknown) {
-      alert(`Failed to add comment: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setSendingComment(false)
-    }
-  }
-
-  // Load checklist
-  useEffect(() => {
-    let cancelled = false
-    setLoadingChecklist(true)
-    api.checklist.list(taskId).then(items => {
-      if (!cancelled) { setChecklist(items); setLoadingChecklist(false) }
-    }).catch(() => { if (!cancelled) setLoadingChecklist(false) })
-    return () => { cancelled = true }
-  }, [taskId])
-
-  const handleAddChecklistItem = async () => {
-    const text = newChecklistText.trim()
-    if (!text) return
-    setSavingChecklist(true)
-    try {
-      const result = await api.checklist.add(taskId, text)
-      if (result.id) {
-        setChecklist(prev => [...prev, {
-          id: result.id,
-          task_id: taskId,
-          text,
-          completed: false,
-          position: prev.length,
-          created_at: Date.now(),
-        }])
-        setNewChecklistText('')
-      }
-    } catch (e: unknown) {
-      alert(`Failed to add checklist item: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setSavingChecklist(false)
-    }
-  }
-
-  const handleToggleChecklist = async (itemId: string) => {
-    setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i))
-    try {
-      await api.checklist.toggle(taskId, itemId)
-    } catch (e: unknown) {
-      // Revert on failure
-      setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i))
-      alert(`Failed to toggle: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
-
-  const handleRemoveChecklistItem = async (itemId: string) => {
-    if (!confirm('Remove this checklist item?')) return
-    setChecklist(prev => prev.filter(i => i.id !== itemId))
-    try {
-      await api.checklist.remove(taskId, itemId)
-    } catch (e: unknown) {
-      alert(`Failed to remove: ${e instanceof Error ? e.message : String(e)}`)
-      // Reload on failure
-      api.checklist.list(taskId).then(items => setChecklist(items))
-    }
-  }
 
   const toggleLabel = async (labelId: string) => {
     setLabelSaving(true)
@@ -527,129 +427,10 @@ export function TaskDetailDialog({
           </div>
 
           {/* Comments */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-2 flex items-center gap-1">
-              <MessageSquare className="w-3 h-3" /> Comments
-            </p>
-            {loadingComments ? (
-              <div className="flex items-center gap-2 text-xs text-[var(--color-muted)] py-2">
-                <Loader2 className="w-3 h-3 animate-spin" /> Loading...
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto mb-3">
-                {comments.length === 0 ? (
-                  <p className="text-xs text-[var(--color-muted)] py-1">No comments yet.</p>
-                ) : (
-                  comments.map(cmt => (
-                    <div key={cmt.id} className="flex items-start gap-2 p-2 rounded bg-white/[0.03] border border-[var(--color-border)]">
-                      <div className="w-6 h-6 rounded-full bg-[var(--color-primary)]/20 text-[var(--color-primary)] flex items-center justify-center text-[10px] font-semibold shrink-0 mt-0.5">
-                        {cmt.author.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium">{cmt.author}</span>
-                          <span className="text-[10px] text-[var(--color-muted)]">
-                            {new Date(cmt.created_at).toLocaleString()}
-                          </span>
-                        </div>
-                        <p className="text-sm text-[var(--color-muted-foreground)] mt-0.5 whitespace-pre-wrap break-words">{cmt.body}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-            <div className="flex items-start gap-2">
-              <textarea
-                value={newComment}
-                onChange={e => setNewComment(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleAddComment()
-                  }
-                }}
-                placeholder="Add a comment... (Enter to send, Shift+Enter for newline)"
-                rows={2}
-                className="flex-1 px-3 py-2 text-xs rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] placeholder:text-[var(--color-muted)]"
-              />
-              <button
-                onClick={handleAddComment}
-                disabled={!newComment.trim() || sendingComment}
-                className="flex items-center gap-1 text-xs px-3 py-2 rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
-              >
-                {sendingComment ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                Send
-              </button>
-            </div>
-          </div>
+          <TaskComments taskId={task.id} />
 
           {/* Checklist / Subtasks */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-2 flex items-center gap-1">
-              <CheckSquare className="w-3 h-3" /> Checklist
-              {checklist.length > 0 && (
-                <span className="text-[10px] text-[var(--color-muted)] font-normal">
-                  {checklist.filter(i => i.completed).length}/{checklist.length}
-                </span>
-              )}
-            </p>
-            {loadingChecklist ? (
-              <div className="flex items-center gap-2 text-xs text-[var(--color-muted)] py-2">
-                <Loader2 className="w-3 h-3 animate-spin" /> Loading...
-              </div>
-            ) : (
-              <div className="space-y-1 mb-3 max-h-48 overflow-y-auto">
-                {checklist.length === 0 ? (
-                  <p className="text-xs text-[var(--color-muted)] py-1">No checklist items.</p>
-                ) : (
-                  checklist.map(item => (
-                    <div key={item.id} className="flex items-start gap-2 px-1 py-1 rounded hover:bg-white/[0.03] group">
-                      <button
-                        onClick={() => handleToggleChecklist(item.id)}
-                        className={`mt-0.5 shrink-0 rounded transition-colors ${
-                          item.completed ? 'text-emerald-400' : 'text-[var(--color-muted)] hover:text-[var(--color-foreground)]'
-                        }`}
-                      >
-                        <CheckSquare className={`w-4 h-4 ${item.completed ? 'fill-emerald-400/20' : ''}`} />
-                      </button>
-                      <span className={`flex-1 text-sm ${item.completed ? 'line-through text-[var(--color-muted)]' : 'text-[var(--color-muted-foreground)]'}`}>
-                        {item.text}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveChecklistItem(item.id)}
-                        className="opacity-0 group-hover:opacity-100 text-[var(--color-muted)] hover:text-red-400 transition-all shrink-0"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <input
-                value={newChecklistText}
-                onChange={e => setNewChecklistText(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleAddChecklistItem()
-                  }
-                }}
-                placeholder="Add checklist item..."
-                className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] placeholder:text-[var(--color-muted)]"
-              />
-              <button
-                onClick={handleAddChecklistItem}
-                disabled={!newChecklistText.trim() || savingChecklist}
-                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
-              >
-                {savingChecklist ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                Add
-              </button>
-            </div>
-          </div>
+          <TaskChecklist taskId={task.id} />
         </div>
 
         {/* Action Footer */}
@@ -689,9 +470,16 @@ export function TaskDetailDialog({
             ><RotateCcw className="w-3 h-3" /> Release back to available</button>
           )}
           {task.status === 'done' && (
-            <button onClick={() => { if (confirm('Delete this task?')) onDelete(task.id) }}
-              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded text-red-400 hover:bg-red-500/20 transition-colors ml-auto"
-            ><Trash2 className="w-3 h-3" /> Delete</button>
+            <>
+              {onArchive && (
+                <button onClick={() => onArchive(task.id)}
+                  className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-white/10 text-[var(--color-muted-foreground)] hover:bg-white/15 transition-colors"
+                ><Archive className="w-3 h-3" /> Archive</button>
+              )}
+              <button onClick={() => { if (confirm('Delete this task?')) onDelete(task.id) }}
+                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded text-red-400 hover:bg-red-500/20 transition-colors ml-auto"
+              ><Trash2 className="w-3 h-3" /> Delete</button>
+            </>
           )}
         </div>
       </div>

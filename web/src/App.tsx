@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban, LayoutDashboard, CalendarDays, Key } from 'lucide-react'
+import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban, LayoutDashboard, CalendarDays, Key, LifeBuoy } from 'lucide-react'
 
 const BoardPage = lazy(() => import('./pages/BoardPage'))
 const LogsPage = lazy(() => import('./pages/LogsPage'))
@@ -13,9 +13,11 @@ const ProjectsPage = lazy(() => import('./pages/ProjectsPage'))
 const CrossProjectPage = lazy(() => import('./pages/CrossProjectPage'))
 const CalendarPage = lazy(() => import('./pages/CalendarPage'))
 const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'))
+const TriagePage = lazy(() => import('./pages/TriagePage'))
 
 const navItems = [
   { path: '/', label: 'Board', icon: KanbanSquare },
+  { path: '/triage', label: 'Triage', icon: LifeBuoy },
   { path: '/projects', label: 'Projects', icon: FolderKanban },
   { path: '/labels', label: 'Labels', icon: Tag },
   { path: '/issues', label: 'GitHub Issues', icon: Github },
@@ -115,6 +117,7 @@ export default function App() {
         }>
           <Routes>
             <Route path="/" element={<BoardPage />} />
+            <Route path="/triage" element={<TriagePage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/labels" element={<LabelsPage />} />
             <Route path="/issues" element={<IssuesPage />} />
