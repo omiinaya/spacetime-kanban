@@ -32,4 +32,9 @@ export default __t.row({
   failReason: __t.option(__t.string()).name("fail_reason"),
   subtaskOf: __t.option(__t.string()).name("subtask_of"),
   subtasks: __t.option(__t.string()),
+  dueBy: __t.option(__t.u64()).name("due_by"),
+  sprint: __t.option(__t.string()),
+  archived: __t.bool(),
+  estimatedHours: __t.option(__t.u32()).name("estimated_hours"),
+  spentHours: __t.option(__t.u32()).name("spent_hours"),
 });

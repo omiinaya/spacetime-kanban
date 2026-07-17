@@ -12,6 +12,7 @@ function clusterKey(reason: string | null | undefined): string {
     .replace(/\(\d+\/\d+\)/g, '(n/m)') // (4/3) attempt counters
     .replace(/cycled \d+x/g, 'cycled Nx') // cycle counters
     .replace(/task_[a-f0-9]+/gi, 'task_…') // task ids
+    .replace(/^Split into \d+ subtask\(s\):.*$/i, 'Split into subtasks (parent closed)') // split parents
     .trim()
 }
 

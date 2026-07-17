@@ -82,6 +82,10 @@ export function useRealtimeTasks() {
           subtaskOf: d.subtask_of ?? undefined,
           subtasks: d.subtasks ?? undefined,
           dueBy: d.due_by ?? undefined,
+          sprint: d.sprint ?? undefined,
+          archived: d.archived ?? false,
+          estimatedHours: d.estimated_hours ?? undefined,
+          spentHours: d.spent_hours ?? undefined,
         })) as Task[]
         setTasksIfChanged(mapped)
         if (mapped.length > 0) setLoading(false)  // Data with content arrived
@@ -97,10 +101,8 @@ export function useRealtimeTasks() {
 
     function syncFromCache(conn: DbConnection) {
       try {
-        // The live STDB tasks table has an `archived` flag (generated client
-        // types are stale and don't include it yet) — hide archived tasks.
         const all = (Array.from(conn.db.tasks.iter()) as Task[])
-          .filter(t => !(t as unknown as { archived?: boolean }).archived)
+          .filter(t => !t.archived)
         setTasksIfChanged(all)
         if (all.length > 0) setLoading(false)  // Data with content arrived from STDB
       } catch (e: unknown) {
