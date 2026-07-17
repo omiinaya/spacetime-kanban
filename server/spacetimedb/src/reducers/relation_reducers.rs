@@ -46,7 +46,6 @@ pub fn add_task_relation(ctx: &ReducerContext, task_id: String, related_task_id:
 pub fn remove_task_relation(ctx: &ReducerContext, relation_id: String) -> Result<(), String> {
     let old: Vec<TaskRelation> = ctx.db.task_relations().iter()
         .filter(|r| r.id == relation_id)
-        .map(|r| r.clone())
         .collect();
     for r in old {
         ctx.db.task_relations().delete(r);

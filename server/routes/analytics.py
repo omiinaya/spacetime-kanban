@@ -1,38 +1,40 @@
 """Analytics endpoints for spacetimedb-kanban."""
 
-from datetime import datetime
 import time
+from datetime import datetime
 
 from fastapi import APIRouter
 
-from shared import _sql, _row_to_task
+from shared import _row_to_task, _sql
+
 router = APIRouter()
 
 
 @router.get("/api/analytics/overview")
 async def analytics_overview():
-    """High-level metrics: total, per-status, completed today/this week."""
+    """High-level metrics: total, per-status, completed today/this week.
+
+    Uses shared httpx client (avoids connection pool overhead from
+    creating a new client per query). Removed the useless SELECT *
+    FROM task_logs that loaded 50K+ rows for nothing."""
     tasks = await _sql("SELECT * FROM tasks")
-    logs = await _sql("SELECT * FROM task_logs")
 
     now = int(time.time() * 1000)
     day_ms = 86_400_000
     week_ms = 7 * day_ms
 
-    total = len(tasks)
+    total = 0
     by_status = {}
     for t in tasks:
         s = t.get("status", "unknown")
         by_status[s] = by_status.get(s, 0) + 1
+        total += 1
 
-    # Completed recently
     completed_today = sum(
-        1 for t in tasks
-        if t.get("status") == "done" and (now - t.get("updated_at", 0)) < day_ms
+        1 for t in tasks if t.get("status") == "done" and (now - t.get("updated_at", 0)) < day_ms
     )
     completed_week = sum(
-        1 for t in tasks
-        if t.get("status") == "done" and (now - t.get("updated_at", 0)) < week_ms
+        1 for t in tasks if t.get("status") == "done" and (now - t.get("updated_at", 0)) < week_ms
     )
     total_done = by_status.get("done", 0)
 
@@ -54,7 +56,6 @@ async def analytics_overview():
         "completed_week": completed_week,
         "total_done": total_done,
         "repos": repos,
-        "agent_count": len(await _sql("SELECT * FROM swarm_agents")),
     }
 
 
@@ -123,13 +124,15 @@ async def analytics_cycle_times():
     result = []
     for repo, cycles in sorted(repo_cycles.items()):
         avg_ms = sum(cycles) / len(cycles)
-        result.append({
-            "repo": repo or "(none)",
-            "count": len(cycles),
-            "avg_hours": round(avg_ms / 3_600_000, 1),
-            "min_hours": round(min(cycles) / 3_600_000, 1),
-            "max_hours": round(max(cycles) / 3_600_000, 1),
-        })
+        result.append(
+            {
+                "repo": repo or "(none)",
+                "count": len(cycles),
+                "avg_hours": round(avg_ms / 3_600_000, 1),
+                "min_hours": round(min(cycles) / 3_600_000, 1),
+                "max_hours": round(max(cycles) / 3_600_000, 1),
+            }
+        )
     return result
 
 
@@ -160,43 +163,39 @@ async def analytics_burndown(repo: str = "", sprint: str = "", days: int = 14):
     # Count open tasks at start of window
     first_day_end = day_ends[0]
     total_open_start = sum(
-        1 for t in rows
-        if t.get("created_at", 0) <= first_day_end
-        and t.get("status") != "done"
+        1 for t in rows if t.get("created_at", 0) <= first_day_end and t.get("status") != "done"
     )
 
     day_data = []
-    for idx, (date_str, day_end) in enumerate(zip(dates, day_ends)):
+    for idx, (date_str, day_end) in enumerate(zip(dates, day_ends, strict=False)):
         # Open: created on or before this day AND not yet completed
         open_count = sum(
-            1 for t in rows
+            1
+            for t in rows
             if t.get("created_at", 0) <= day_end
-            and (
-                t.get("status") != "done"
-                or t.get("updated_at", 0) > day_end
-            )
+            and (t.get("status") != "done" or t.get("updated_at", 0) > day_end)
         )
 
         # Completed: done on this exact day
         completed_count = sum(
-            1 for t in rows
+            1
+            for t in rows
             if t.get("status") == "done"
             and t.get("updated_at", 0) > day_end - day_ms
             and t.get("updated_at", 0) <= day_end
         )
 
         # Ideal: linear trend from total_open_start to 0
-        if days > 1:
-            ideal = total_open_start * (1 - idx / (days - 1))
-        else:
-            ideal = 0.0
+        ideal = total_open_start * (1 - idx / (days - 1)) if days > 1 else 0.0
 
-        day_data.append({
-            "date": date_str,
-            "open": open_count,
-            "completed": completed_count,
-            "ideal": round(ideal, 1),
-        })
+        day_data.append(
+            {
+                "date": date_str,
+                "open": open_count,
+                "completed": completed_count,
+                "ideal": round(ideal, 1),
+            }
+        )
 
     return {
         "days": day_data,
@@ -212,7 +211,7 @@ async def analytics_agents():
     """Per-agent stats: tasks completed, stale rate."""
     agents = await _sql("SELECT * FROM swarm_agents")
     logs = await _sql("SELECT * FROM task_logs")
-    tasks = await _sql("SELECT * FROM tasks")
+    await _sql("SELECT * FROM tasks")
 
     # Count completed tasks per agent from logs
     agent_completions: dict[str, int] = {}
@@ -229,15 +228,17 @@ async def analytics_agents():
     result = []
     for a in agents:
         aid = a.get("id", "")
-        result.append({
-            "id": aid,
-            "status": a.get("status", "offline"),
-            "completed": agent_completions.get(aid, 0),
-            "blocked": agent_stales.get(aid, 0),
-            "capabilities": a.get("capabilities"),
-            "repo_focus": a.get("repo_focus"),
-            "last_heartbeat": a.get("last_heartbeat", 0),
-        })
+        result.append(
+            {
+                "id": aid,
+                "status": a.get("status", "offline"),
+                "completed": agent_completions.get(aid, 0),
+                "blocked": agent_stales.get(aid, 0),
+                "capabilities": a.get("capabilities"),
+                "repo_focus": a.get("repo_focus"),
+                "last_heartbeat": a.get("last_heartbeat", 0),
+            }
+        )
     return result
 
 
@@ -254,7 +255,9 @@ async def analytics_cross_project():
         if r not in repos:
             repos[r] = {
                 "project": project_map.get(r, {}),
-                "total": 0, "by_status": {}, "by_priority": {},
+                "total": 0,
+                "by_status": {},
+                "by_priority": {},
                 "sprints": set(),
             }
         repos[r]["total"] += 1
@@ -279,6 +282,7 @@ async def analytics_cross_project():
 async def analytics_calendar(year: int = 0, month: int = 0):
     """Tasks with due_by dates for calendar view. If year/month not specified, uses current."""
     import calendar as cal_mod
+
     now = int(time.time() * 1000)
     if not year:
         year = datetime.utcfromtimestamp(now / 1000).year

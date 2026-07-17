@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Loader2, AlertCircle, Plus, X, Palette, FolderKanban, ChevronUp, ChevronDown, Eye, EyeOff, Trash2, Save } from 'lucide-react'
+import { Loader2, AlertCircle, Plus, FolderKanban, ChevronUp, ChevronDown, Eye, EyeOff, Trash2, Save } from 'lucide-react'
 import { api, Project } from '../api'
 
 const PRIORITY_LABELS: Record<number, string> = {
@@ -41,8 +41,8 @@ export default function ProjectsPage() {
       setError(null)
       const data = await api.projects.list()
       setProjects(data)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
@@ -68,8 +68,8 @@ export default function ProjectsPage() {
       setNewPriority(2)
       setShowCreate(false)
       await load()
-    } catch (e: any) {
-      alert(`Create failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -80,8 +80,8 @@ export default function ProjectsPage() {
     try {
       await api.projects.update(p.id, { priority: newPrio })
       await load()
-    } catch (e: any) {
-      alert(`Update failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Update failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -90,8 +90,8 @@ export default function ProjectsPage() {
     try {
       await api.projects.update(p.id, { priority: newPrio })
       await load()
-    } catch (e: any) {
-      alert(`Update failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Update failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -99,8 +99,8 @@ export default function ProjectsPage() {
     try {
       await api.projects.update(p.id, { active: !p.active })
       await load()
-    } catch (e: any) {
-      alert(`Update failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Update failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -109,8 +109,8 @@ export default function ProjectsPage() {
     try {
       await api.projects.delete(p.id)
       await load()
-    } catch (e: any) {
-      alert(`Delete failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Delete failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

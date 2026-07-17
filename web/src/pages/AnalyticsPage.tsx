@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { BarChart3, CheckCircle2, Clock, Users, AlertCircle, Layers, Loader2, Download } from 'lucide-react'
+import type { ComponentType } from 'react'
 
 interface Overview {
   total: number
@@ -49,8 +50,8 @@ export default function AnalyticsPage() {
         setCycleTimes(ct)
         setAgentStats(as)
         setBurndown(bd)
-      } catch (e: any) {
-        setError(e.message)
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e))
       } finally {
         setLoading(false)
       }
@@ -315,7 +316,7 @@ export default function AnalyticsPage() {
   )
 }
 
-function StatCard({ icon: Icon, label, value, sub, color }: { icon: any; label: string; value: number; sub?: string; color: string }) {
+function StatCard({ icon: Icon, label, value, sub, color }: { icon: ComponentType<{ className?: string; style?: React.CSSProperties }>; label: string; value: number; sub?: string; color: string }) {
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4">
       <div className="flex items-center gap-2 mb-2">

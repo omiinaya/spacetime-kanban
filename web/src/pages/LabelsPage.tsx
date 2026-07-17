@@ -31,8 +31,8 @@ export default function LabelsPage() {
       setError(null)
       const data = await api.labels.list()
       setLabels(data)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
@@ -51,8 +51,8 @@ export default function LabelsPage() {
       setNewDesc('')
       setShowCreate(false)
       await load()
-    } catch (e: any) {
-      alert(`Create failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -65,8 +65,8 @@ export default function LabelsPage() {
       await api.labels.update(id, { name: editName.trim(), color: editColor, description: editDesc.trim() })
       setEditingId(null)
       await load()
-    } catch (e: any) {
-      alert(`Update failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Update failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -77,8 +77,8 @@ export default function LabelsPage() {
     try {
       await api.labels.delete(id)
       await load()
-    } catch (e: any) {
-      alert(`Delete failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Delete failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

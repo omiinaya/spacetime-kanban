@@ -7,17 +7,21 @@ Auto-releases them back to available and logs the event.
 
 HTTP 409/404 on release is expected (concurrent unclaim) — silently ignored.
 """
-import httpx
-import time
-import sys
+
 import os
+import sys
+import time
+
+import httpx
 
 API_BASE = os.environ.get("KANBAN_API_BASE", "http://localhost:8727")
 STALE_THRESHOLD_MINUTES = int(os.environ.get("STALE_THRESHOLD_MINUTES", "30"))
 SILENT_IF_EMPTY = os.environ.get("SILENT_IF_EMPTY", "1") == "1"
 
+
 def now_ms() -> int:
     return int(time.time() * 1000)
+
 
 def main():
     try:
@@ -54,7 +58,9 @@ def main():
             )
             if r.status_code == 200:
                 released.append((task_id, title, agent, age_minutes))
-                print(f"  RELEASED: {task_id[:20]} \"{title}\" (agent={agent}, age={age_minutes:.0f}m)")
+                print(
+                    f'  RELEASED: {task_id[:20]} "{title}" (agent={agent}, age={age_minutes:.0f}m)'
+                )
             elif r.status_code in (409, 404):
                 # Concurrent unclaim or task already gone — not an error
                 pass
@@ -65,13 +71,13 @@ def main():
 
     if errors:
         print("⚠ WATCHDOG PARTIAL: some releases had issues")
-        for e in errors:
-            print(e)
+        for err in errors:
+            print(err)
         sys.exit(1)
 
-    if not released:
-        if not SILENT_IF_EMPTY:
-            print(f"✓ All {len(tasks)} in_progress tasks are active (under {STALE_THRESHOLD_MINUTES}m)")
+    if not released and not SILENT_IF_EMPTY:
+        print(f"✓ All {len(tasks)} in_progress tasks are active (under {STALE_THRESHOLD_MINUTES}m)")
+
 
 if __name__ == "__main__":
     main()

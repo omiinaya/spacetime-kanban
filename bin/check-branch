@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""
+Branch name validator for spacetimedb-kanban.
+
+Enforces the branch naming convention:
+  {type}/kanban-{task_id}--{slug}
+
+Examples:
+  feature/kanban-task_1748397912_abc12345--my-feature
+  fix/kanban-task_1748397913_abc12345--auth-bug
+  chore/kanban-task_1748397914_abc12345--ci-fix
+
+Usage:
+  bin/check-branch <branch-name>
+  bin/check-branch --pre-push    (read refs from stdin, like a git hook)
+"""
+
+import re
+import sys
+import urllib.request
+import json
+
+KANBAN_API = "http://localhost:8727/api/tasks"
+
+BRANCH_RE = re.compile(
+    r"^(?P<type>feature|fix|chore|refactor|docs|test|perf)/"
+    r"kanban-(?P<task_id>task_\d+_[a-zA-Z0-9]+)--"
+    r"(?P<slug>[a-z0-9]+(?:-[a-z0-9]+)*)$"
+)
+
+
+def check_task(task_id: str) -> dict | None:
+    """Check if a kanban task exists."""
+    try:
+        url = f"{KANBAN_API}/{task_id}"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read())
+    except Exception:
+        return None
+
+
+def validate(branch: str) -> tuple[bool, str]:
+    branch = branch.strip().removeprefix("refs/heads/")
+    m = BRANCH_RE.match(branch)
+    if not m:
+        return False, (
+            f"Invalid branch format: '{branch}'\n"
+            "Expected: {type}/kanban-{task_id}--{slug}\n"
+            "Example:  feature/kanban-task_1748397912_abc12345--my-feature"
+        )
+
+    task_id = m.group("task_id")
+    task = check_task(task_id)
+    if task is None:
+        return False, (
+            f"Task '{task_id}' not found in kanban.\n"
+            "Create the task first before creating a branch for it."
+        )
+
+    status = task.get("status", "")
+    assigned = task.get("assigned_to", "")
+    notes = []
+    if status == "done" or status == "completed":
+        notes.append(f"⚠️  Task is already {status}")
+    elif status == "blocked":
+        notes.append(f"⚠️  Task is blocked")
+    elif status == "available" and not assigned:
+        notes.append("ℹ️  Task is unclaimed — claim it first")
+
+    if notes:
+        return True, f"✓ Branch matches task {task_id}. {'; '.join(notes)}"
+    return True, f"✓ Branch matches task {task_id} (status: {status})"
+
+
+def pre_push_hook():
+    """Git pre-push hook: read refs from stdin and validate."""
+    has_errors = False
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            local_ref = parts[0]
+            branch = local_ref.removeprefix("refs/heads/")
+            if branch == "main" or branch == "dev":
+                continue
+            ok, msg = validate(branch)
+            if not ok:
+                print(f"❌ {msg}")
+                has_errors = True
+            else:
+                print(f"ℹ️  {msg}")
+    if has_errors:
+        sys.exit(1)
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: check-branch <branch-name>", file=sys.stderr)
+        print("   or: check-branch --pre-push", file=sys.stderr)
+        sys.exit(1)
+
+    if sys.argv[1] == "--pre-push":
+        pre_push_hook()
+    else:
+        ok, msg = validate(sys.argv[1])
+        print(msg)
+        sys.exit(0 if ok else 1)
+
+
+if __name__ == "__main__":
+    main()

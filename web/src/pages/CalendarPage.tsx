@@ -37,8 +37,8 @@ export default function CalendarPage() {
       try {
         const result = await api.calendar.get(year, month)
         setTasks(result.tasks)
-      } catch (e: any) {
-        setError(e.message)
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e))
       } finally {
         setLoading(false)
       }

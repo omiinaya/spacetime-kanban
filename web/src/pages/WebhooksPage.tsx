@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type Webhook, type WebhookDelivery } from '../api'
 import {
   WebhookIcon, Plus, Loader2, AlertCircle, Trash2, Send,
-  CheckCircle2, XCircle, X, ExternalLink, Zap, Edit3, History, ChevronDown, ChevronUp
+  CheckCircle2, XCircle, X, Zap, Edit3, History, ChevronDown, ChevronUp
 } from 'lucide-react'
 
 const WEBHOOK_TYPES = ['discord', 'slack', 'telegram', 'generic']
@@ -39,8 +39,8 @@ export default function WebhooksPage() {
     try {
       const whs = await api.webhooks.list()
       setWebhooks(whs)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
@@ -61,8 +61,8 @@ export default function WebhooksPage() {
       setCreateType('discord')
       setCreateEvents(['created', 'claimed', 'completed', 'blocked'])
       await load()
-    } catch (e: any) {
-      alert(`Create failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -72,8 +72,8 @@ export default function WebhooksPage() {
       await api.webhooks.delete(id)
       setTestResults(prev => { const r = { ...prev }; delete r[id]; return r })
       await load()
-    } catch (e: any) {
-      alert(`Delete failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Delete failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -82,8 +82,8 @@ export default function WebhooksPage() {
     try {
       const result = await api.webhooks.test(id)
       setTestResults(prev => ({ ...prev, [id]: { ok: true, msg: `HTTP ${result.response_code}` } }))
-    } catch (e: any) {
-      setTestResults(prev => ({ ...prev, [id]: { ok: false, msg: e.message } }))
+    } catch (e: unknown) {
+      setTestResults(prev => ({ ...prev, [id]: { ok: false, msg: e instanceof Error ? e.message : String(e) } }))
     } finally {
       setTestingId(null)
     }
@@ -100,8 +100,8 @@ export default function WebhooksPage() {
       await api.webhooks.update(id, { events: editEvents, label: editLabel || undefined })
       setEditingId(null)
       await load()
-    } catch (e: any) {
-      alert(`Update failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Update failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -117,7 +117,7 @@ export default function WebhooksPage() {
         try {
           const data = await api.webhooks.deliveries(id, 10)
           setDeliveries(prev => ({ ...prev, [id]: data }))
-        } catch {}
+        } catch { /* ignore fetch errors */ }
         setLoadingDeliveries(prev => { const n = new Set(prev); n.delete(id); return n })
       }
     }

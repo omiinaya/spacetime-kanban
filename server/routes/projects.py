@@ -4,8 +4,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from shared import _call, _sql, _sql_param, verify_auth
-from shared import ProjectCreate, ProjectOut, ProjectUpdate
+from shared import ProjectCreate, ProjectOut, ProjectUpdate, _call, _sql, _sql_param, verify_auth
 
 router = APIRouter()
 
@@ -34,18 +33,29 @@ async def create_project(body: ProjectCreate):
     """Register a new project/repo with priority."""
     if not body.id:
         raise HTTPException(400, "id (repo slug) is required")
-    result = await _call("add_project", [
-        body.id, body.name, body.description, body.color,
-        body.priority, body.active,
-    ])
+    await _call(
+        "add_project",
+        [
+            body.id,
+            body.name,
+            body.description,
+            body.color,
+            body.priority,
+            body.active,
+        ],
+    )
     rows = await _sql_param("SELECT * FROM kanban_projects WHERE id = '{id}'", id=body.id)
     if rows:
         r = rows[0]
         return ProjectOut(
-            id=r["id"], name=r.get("name", r["id"]),
-            description=r.get("description", ""), color=r.get("color", "#6b7280"),
-            priority=r.get("priority", 2), active=r.get("active", True),
-            created_at=r.get("created_at", 0), updated_at=r.get("updated_at", 0),
+            id=r["id"],
+            name=r.get("name", r["id"]),
+            description=r.get("description", ""),
+            color=r.get("color", "#6b7280"),
+            priority=r.get("priority", 2),
+            active=r.get("active", True),
+            created_at=r.get("created_at", 0),
+            updated_at=r.get("updated_at", 0),
         )
     return {"status": "created"}
 
@@ -55,22 +65,37 @@ async def update_project(project_id: str, body: ProjectUpdate):
     """Update a project's priority, name, colour, or active status."""
     # If priority wasn't provided, fetch current value from DB
     if body.priority is None:
-        rows = await _sql_param("SELECT priority FROM kanban_projects WHERE id = '{project_id}'", project_id=project_id)
+        rows = await _sql_param(
+            "SELECT priority FROM kanban_projects WHERE id = '{project_id}'", project_id=project_id
+        )
         prio = rows[0]["priority"] if rows else 2
     else:
         prio = body.priority
-    await _call("update_project", [
-        project_id, body.name, body.description, body.color,
-        prio, body.active,
-    ])
-    rows = await _sql_param("SELECT * FROM kanban_projects WHERE id = '{project_id}'", project_id=project_id)
+    await _call(
+        "update_project",
+        [
+            project_id,
+            body.name,
+            body.description,
+            body.color,
+            prio,
+            body.active,
+        ],
+    )
+    rows = await _sql_param(
+        "SELECT * FROM kanban_projects WHERE id = '{project_id}'", project_id=project_id
+    )
     if rows:
         r = rows[0]
         return ProjectOut(
-            id=r["id"], name=r.get("name", r["id"]),
-            description=r.get("description", ""), color=r.get("color", "#6b7280"),
-            priority=r.get("priority", 2), active=r.get("active", True),
-            created_at=r.get("created_at", 0), updated_at=r.get("updated_at", 0),
+            id=r["id"],
+            name=r.get("name", r["id"]),
+            description=r.get("description", ""),
+            color=r.get("color", "#6b7280"),
+            priority=r.get("priority", 2),
+            active=r.get("active", True),
+            created_at=r.get("created_at", 0),
+            updated_at=r.get("updated_at", 0),
         )
     return {"status": "updated"}
 
@@ -112,12 +137,14 @@ async def suggest_by_project(limit: int = 10):
             parts.append(f"project_boost={proj_boost}")
         if stale_bonus > 0:
             parts.append(f"stale_bonus={stale_bonus}")
-        scored.append({
-            "task_id": t["id"],
-            "repo": repo,
-            "title": t["title"],
-            "score": score,
-            "reason": " + ".join(parts),
-        })
+        scored.append(
+            {
+                "task_id": t["id"],
+                "repo": repo,
+                "title": t["title"],
+                "score": score,
+                "reason": " + ".join(parts),
+            }
+        )
     scored.sort(key=lambda x: -x["score"])
     return scored[:limit]

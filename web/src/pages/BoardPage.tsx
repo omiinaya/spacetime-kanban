@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Plus, Loader2, AlertCircle, Trash2, Play, CheckCircle2,
-  Ban, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff, Link, Lightbulb,
-  Users, Cpu, Info, History, GitBranch, ExternalLink, X, Search, Github, Download,
-  CheckSquare, Square, LayoutGrid, List, SlidersHorizontal, Tag, Keyboard, Save, Bookmark,
-  MessageSquare, Send
+import { Plus, AlertCircle, Trash2, Play, CheckCircle2,
+  Ban, RotateCcw, Wifi, WifiOff, Lightbulb,
+  Users, X, Search, Download,
+  CheckSquare, LayoutGrid, List, SlidersHorizontal, Tag, Keyboard, Save, Bookmark,
 } from 'lucide-react'
 
 interface SavedFilterView {
@@ -16,20 +15,20 @@ interface SavedFilterView {
   filterLabels: string[]
 }
 
-import { api, type SuggestResult, type Agent, type Task as ApiTask, type KanbanLabel, type IssueLink, type TaskComment, type ChecklistItem } from '../api'
+import { api, type SuggestResult, type Agent, type KanbanLabel, type IssueLink } from '../api'
 import { useRealtimeTasks, type TaskStatus, type Task } from '../hooks/useRealtimeTasks'
 import KanbanColumn from '../components/KanbanColumn'
 import { KanbanBoardSkeleton, ListViewSkeleton } from '../components/Skeleton'
 import ListView from '../components/ListView'
 import DependencyGraph from './DependencyGraph'
-import { PRIORITY_LABELS, PRIORITY_COLORS, STATUS_COLUMNS, STATUS_LABELS, type TaskTemplate, BUILT_IN_TEMPLATES } from '../components/constants'
+import { PRIORITY_LABELS, PRIORITY_COLORS, STATUS_COLUMNS, STATUS_LABELS } from '../components/constants'
 import { CreateTaskDialog } from '../components/CreateTaskDialog'
 import { TaskDetailDialog } from '../components/TaskDetailDialog'
 
 export default function BoardPage() {
-  const { tasks, connected, error: stdbError, loading } = useRealtimeTasks()
+  const { tasks, connected, loading } = useRealtimeTasks()
   const [showCreate, setShowCreate] = useState(false)
-  const [claiming, setClaiming] = useState<string | null>(null)
+  const [, setClaiming] = useState<string | null>(null)
   const [repoFilter, setRepoFilter] = useState<string>('')
   const [mobileStatusTab, setMobileStatusTab] = useState<TaskStatus>('available')
   const [suggestions, setSuggestions] = useState<SuggestResult[]>([])
@@ -65,9 +64,9 @@ export default function BoardPage() {
     try {
       const stored = JSON.parse(localStorage.getItem('kanban_column_order') || 'null')
       if (Array.isArray(stored) && stored.length === STATUS_COLUMNS.length &&
-          stored.every((s: string) => STATUS_COLUMNS.includes(s as any)))
+          stored.every((s: string) => STATUS_COLUMNS.includes(s as TaskStatus)))
         return stored
-    } catch {}
+    } catch { /* ignore invalid stored value */ }
     return [...STATUS_COLUMNS]
   })
 
@@ -78,9 +77,8 @@ export default function BoardPage() {
   const [filterPriorities, setFilterPriorities] = useState<Set<number>>(new Set())
   const [filterAssignees, setFilterAssignees] = useState<Set<string>>(new Set())
   const [filterLabels, setFilterLabels] = useState<Set<string>>(new Set())
-  const [sprintFilter, setSprintFilter] = useState<string>('')
   const [allLabels, setAllLabels] = useState<KanbanLabel[]>([])
-  const [taskLabelMap, setTaskLabelMap] = useState<Map<string, KanbanLabel[]>>(new Map())
+  const [taskLabelMap] = useState<Map<string, KanbanLabel[]>>(new Map())
   const [issueLinks, setIssueLinks] = useState<Record<string, IssueLink>>({})
   const [showShortcuts, setShowShortcuts] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -136,9 +134,6 @@ export default function BoardPage() {
     setSavedViews(prev => prev.filter(v => v.id !== id))
   }
 
-  // Build a lookup map: taskId -> task title
-  const taskTitleMap = new Map(tasks.map(t => [t.id, t.title]))
-
   // Extract unique repos sorted by frequency
   const repos = [...new Set(tasks.map(t => t.repo).filter(Boolean))]
   repos.sort((a, b) => {
@@ -152,8 +147,8 @@ export default function BoardPage() {
     try {
       await api.tasks.claim(taskId, agentId)
       // STDB subscription will push the update — no manual refresh needed
-    } catch (e: any) {
-      alert(`Claim failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Claim failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setClaiming(null)
     }
@@ -162,16 +157,16 @@ export default function BoardPage() {
   const handleUnclaim = async (taskId: string) => {
     try {
       await api.tasks.unclaim(taskId)
-    } catch (e: any) {
-      alert(`Unclaim failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Unclaim failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   const handleComplete = async (taskId: string) => {
     try {
       await api.tasks.complete(taskId, 'Done via web UI')
-    } catch (e: any) {
-      alert(`Complete failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Complete failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -180,8 +175,8 @@ export default function BoardPage() {
     if (reason === null) return
     try {
       await api.tasks.block(taskId, reason || 'Blocked')
-    } catch (e: any) {
-      alert(`Block failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Block failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -230,8 +225,8 @@ export default function BoardPage() {
           }
           break
       }
-    } catch (e: any) {
-      alert(`Drop failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Drop failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -263,7 +258,7 @@ export default function BoardPage() {
     const items = reordered.map((t, i) => ({ task_id: t.id, position: i * 100 }))
     try {
       await api.tasks.bulkReorder(items)
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Reorder failed:', e)
     }
   }
@@ -328,8 +323,8 @@ export default function BoardPage() {
       }
       setShowLabelPicker(false)
       setSelectedLabelIds(new Set())
-    } catch (e: any) {
-      alert(`Failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Failed: ${e instanceof Error ? e.message : String(e)}`)
     }
     setBatchProcessing(false)
   }
@@ -346,8 +341,8 @@ export default function BoardPage() {
       } else {
         await api.tasks.create({ title: trimmed, status })
       }
-    } catch (e: any) {
-      alert(`Create failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -355,8 +350,8 @@ export default function BoardPage() {
     if (!confirm('Delete this task?')) return
     try {
       await api.tasks.delete(taskId)
-    } catch (e: any) {
-      alert(`Delete failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Delete failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -365,8 +360,8 @@ export default function BoardPage() {
     if (depId === null) return
     try {
       await api.tasks.setDependency(taskId, depId.trim())
-    } catch (e: any) {
-      alert(`Set dependency failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Set dependency failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -375,8 +370,8 @@ export default function BoardPage() {
     if (skills === null) return
     try {
       await api.tasks.setSkills(taskId, skills.trim())
-    } catch (e: any) {
-      alert(`Set skills failed: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Set skills failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -422,7 +417,7 @@ export default function BoardPage() {
         ])
         setSuggestions(s)
         setAgents(a)
-      } catch {}
+      } catch { /* silently ignore polling errors */ }
     }
     load()
     const interval = setInterval(load, 30000)
@@ -433,7 +428,7 @@ export default function BoardPage() {
 
   // Load labels once (they rarely change)
   useEffect(() => {
-    api.labels.list().then(setAllLabels).catch(() => {})
+    api.labels.list().then(setAllLabels).catch(() => { /* ignore */ })
   }, [])
 
   // Load issue links for board badges — 30s polling, skip when tab hidden
@@ -448,7 +443,7 @@ export default function BoardPage() {
           map[link.kanban_task_id] = link
         }
         setIssueLinks(map)
-      } catch {}
+      } catch { /* silently ignore polling errors */ }
     }
     load()
     const interval = setInterval(load, 30000)
@@ -587,17 +582,8 @@ export default function BoardPage() {
     return () => window.removeEventListener('keydown', handler)
   })
 
-  const renderDependencyBadge = (depId: string | null | undefined) => {
-    if (!depId) return null
-    const depTitle = taskTitleMap.get(depId)
-    return (
-      <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400/80 font-medium truncate max-w-[180px]" title={depId}>
-        ⬆ {depTitle || depId}
-      </span>
-    )
-  }
 
-  // Sort: position asc (nulls last), then priority asc, then createdAt desc
+  // Keyboard shortcuts
   const sorted = useMemo(() =>
     [...tasks].sort((a, b) => {
       const posA = a.position ?? 999999
@@ -830,7 +816,7 @@ export default function BoardPage() {
                     <button key={p}
                       onClick={() => setFilterPriorities(prev => {
                         const next = new Set(prev)
-                        next.has(p) ? next.delete(p) : next.add(p)
+                        if (next.has(p)) next.delete(p); else next.add(p)
                         return next
                       })}
                       className={`text-xs px-2 py-1 rounded-md border transition-colors ${
@@ -856,7 +842,7 @@ export default function BoardPage() {
                     <button key={a}
                       onClick={() => setFilterAssignees(prev => {
                         const next = new Set(prev)
-                        next.has(a) ? next.delete(a) : next.add(a)
+                        if (next.has(a)) next.delete(a); else next.add(a)
                         return next
                       })}
                       className={`text-xs px-2 py-1 rounded-md border transition-colors ${
@@ -883,7 +869,7 @@ export default function BoardPage() {
                       <button key={lbl.id}
                         onClick={() => setFilterLabels(prev => {
                           const next = new Set(prev)
-                          next.has(lbl.id) ? next.delete(lbl.id) : next.add(lbl.id)
+                          if (next.has(lbl.id)) next.delete(lbl.id); else next.add(lbl.id)
                           return next
                         })}
                         className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${
@@ -1059,7 +1045,6 @@ export default function BoardPage() {
         <TaskDetailDialog
           taskId={detailTaskId}
           tasks={tasks}
-          taskTitleMap={taskTitleMap}
           allLabels={allLabels}
           taskLabelMap={taskLabelMap}
           onClose={() => setDetailTaskId(null)}
@@ -1136,7 +1121,6 @@ export default function BoardPage() {
               selectMode={selectMode}
               taskLabelMap={taskLabelMap}
               issueLinks={issueLinks}
-              allLabels={allLabels}
               onToggleSelect={toggleSelect}
               onClaim={(id) => handleClaim(id, 'web-user')}
               onComplete={handleComplete}
@@ -1146,9 +1130,9 @@ export default function BoardPage() {
               onClick={(id) => setDetailTaskId(id)}
             />
           )
-        } catch (e: any) {
+        } catch (e: unknown) {
           console.error('ListView crash:', e)
-          return <div className="p-4 text-red-400 text-sm">List view error: {e.message}</div>
+          return <div className="p-4 text-red-400 text-sm">List view error: {e instanceof Error ? e.message : String(e)}</div>
         }
       })()}
 

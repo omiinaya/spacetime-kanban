@@ -34,13 +34,22 @@ test:  ## Run backend tests
 test-frontend:  ## Run frontend tests
 	cd web && npm test 2>/dev/null || echo "npm test not configured"
 
-lint:  ## Lint Python backend
-	cd server && python3 -m flake8 --statistics 2>/dev/null || echo "flake8 not installed"
+lint:  ## Lint Python backend (ruff)
+	cd server && python3 -m ruff check . 2>/dev/null || ruff check server/
 
-fmt:  ## Format code
-	cd server && python3 -m black . 2>/dev/null || echo "black not installed"
+fmt:  ## Format code (ruff)
+	cd server && python3 -m ruff format . 2>/dev/null || ruff format server/
+
+fmt-check:  ## Check formatting without modifying
+	cd server && python3 -m ruff format --check . 2>/dev/null || ruff format --check server/
 
 fix: fmt lint  ## Fix auto-fixable issues
+
+install-hooks:  ## Install pre-commit + git hooks
+	cd server && pip install pre-commit 2>/dev/null; true
+	git config core.hooksPath .githooks
+	@echo "Git hooks configured to use .githooks/"
+	@echo "Install pre-commit: pip install pre-commit && pre-commit install"
 
 # ── Dev Environment ─────────────────────────────────────────────────────
 dev-up:  ## Start backend dev server

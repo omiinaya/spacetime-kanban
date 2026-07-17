@@ -4,10 +4,10 @@ Stores webhook subscriptions in STDB (webhook_subscriptions table).
 Supports Discord embeds, Slack messages, Telegram, and generic JSON POST.
 """
 
-import json
 import uuid
+from contextlib import suppress
 from datetime import datetime
-from typing import Optional
+from typing import Any
 
 import httpx
 
@@ -26,8 +26,12 @@ def _sql_param(query_template: str, **params) -> list[dict]:
     return _stdb_sql(query)
 
 
-STDB_SQL_URL = f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/sql"
-STDB_CALL_URL = f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/call"
+STDB_SQL_URL = (
+    f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/sql"
+)
+STDB_CALL_URL = (
+    f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/call"
+)
 
 
 def _stdb_sql(query: str) -> list[dict]:
@@ -64,10 +68,7 @@ def _parse_rows(resp_json: list[dict]) -> list[dict]:
         for i, val in enumerate(row):
             key = col_names[i] if i < len(col_names) else f"col_{i}"
             if isinstance(val, list) and len(val) == 2:
-                if val[0] == 0:
-                    val = val[1] if val[1] and val[1] != [] else None
-                else:
-                    val = None
+                val = (val[1] if val[1] and val[1] != [] else None) if val[0] == 0 else None
             row_dict[key] = val
         result.append(row_dict)
     return result
@@ -97,20 +98,24 @@ def list_webhooks() -> list[dict]:
     # Convert DB rows to the same dict format the API expects
     result = []
     for r in rows:
-        result.append({
-            "id": r.get("id", ""),
-            "url": r.get("url", ""),
-            "type": r.get("wh_type", "generic"),
-            "events": r.get("events", "").split(",") if r.get("events") else [],
-            "label": r.get("label", ""),
-            "created_at": r.get("created_at", 0),
-        })
+        result.append(
+            {
+                "id": r.get("id", ""),
+                "url": r.get("url", ""),
+                "type": r.get("wh_type", "generic"),
+                "events": r.get("events", "").split(",") if r.get("events") else [],
+                "label": r.get("label", ""),
+                "created_at": r.get("created_at", 0),
+            }
+        )
     return result
 
 
-def get_webhook(webhook_id: str) -> Optional[dict]:
+def get_webhook(webhook_id: str) -> dict | None:
     """Get a specific webhook subscription."""
-    rows = _sql_param("SELECT * FROM webhook_subscriptions WHERE id = '{webhook_id}'", webhook_id=webhook_id)
+    rows = _sql_param(
+        "SELECT * FROM webhook_subscriptions WHERE id = '{webhook_id}'", webhook_id=webhook_id
+    )
     if not rows:
         return None
     r = rows[0]
@@ -124,8 +129,9 @@ def get_webhook(webhook_id: str) -> Optional[dict]:
     }
 
 
-def add_webhook(url: str, wh_type: str = "generic", events: Optional[list[str]] = None,
-                label: str = "") -> dict:
+def add_webhook(
+    url: str, wh_type: str = "generic", events: list[str] | None = None, label: str = ""
+) -> dict:
     """Register a new webhook subscription in STDB."""
     wh_id = f"wh_{uuid.uuid4().hex[:12]}"
     events_str = ",".join(events or ["created", "claimed", "unclaimed", "completed", "blocked"])
@@ -154,7 +160,7 @@ def remove_webhook(webhook_id: str) -> bool:
         raise
 
 
-def update_webhook(webhook_id: str, updates: dict) -> Optional[dict]:
+def update_webhook(webhook_id: str, updates: dict) -> dict | None:
     """Update a webhook's events, label, or URL in STDB."""
     # Load current state
     current = get_webhook(webhook_id)
@@ -177,40 +183,59 @@ def update_webhook(webhook_id: str, updates: dict) -> Optional[dict]:
 def _format_discord(action: str, task: dict, extra: str = "") -> dict:
     """Format as Discord webhook embed."""
     emoji = {
-        "created": "🆕", "claimed": "👤", "unclaimed": "↩️",
-        "completed": "✅", "blocked": "🚧", "linked": "🔗", "test": "🔔",
+        "created": "🆕",
+        "claimed": "👤",
+        "unclaimed": "↩️",
+        "completed": "✅",
+        "blocked": "🚧",
+        "linked": "🔗",
+        "test": "🔔",
     }.get(action, "🔔")
     color = {
-        "created": 0x5865F2, "claimed": 0xFEE75C, "unclaimed": 0x808080,
-        "completed": 0x57F287, "blocked": 0xED4245, "linked": 0x5865F2, "test": 0x5865F2,
+        "created": 0x5865F2,
+        "claimed": 0xFEE75C,
+        "unclaimed": 0x808080,
+        "completed": 0x57F287,
+        "blocked": 0xED4245,
+        "linked": 0x5865F2,
+        "test": 0x5865F2,
     }.get(action, 0x5865F2)
     title = task.get("title", "?")
     task_id = task.get("id", "?")
     repo = task.get("repo", "")
     agent = task.get("assigned_to", extra) or extra
-    embed = {
-        "embeds": [{
-            "title": f"{emoji} {action.title()} — {title}",
-            "color": color,
-            "fields": [
-                {"name": "Task", "value": f"`{task_id}`", "inline": True},
-                {"name": "Repo", "value": repo or "—", "inline": True},
-            ],
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-        }]
+    embed: dict[str, Any] = {
+        "embeds": [
+            {
+                "title": f"{emoji} {action.title()} — {title}",
+                "color": color,
+                "fields": [
+                    {"name": "Task", "value": f"`{task_id}`", "inline": True},
+                    {"name": "Repo", "value": repo or "—", "inline": True},
+                ],
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            }
+        ]
     }
     if agent and action not in ("blocked", "completed"):
         embed["embeds"][0]["fields"].append({"name": "Agent", "value": agent, "inline": True})
     if extra and action in ("blocked", "completed", "linked"):
-        embed["embeds"][0]["fields"].append({"name": "Notes", "value": extra[:500], "inline": False})
+        embed["embeds"][0]["fields"].append(
+            {"name": "Notes", "value": extra[:500], "inline": False}
+        )
     return embed
 
 
 def _format_slack(action: str, task: dict, extra: str = "") -> dict:
     """Format as Slack webhook message."""
     emoji = {
-        "created": ":new:", "claimed": ":bust_in_silhouette:", "unclaimed": ":leftwards_arrow_with_hook:",
-        "completed": ":white_check_mark:", "blocked": ":no_entry:", "linked": ":link:", "test": ":bell:",
+        "created": ":new:",
+        "claimed": ":bust_in_silhouette:",
+        "unclaimed": ":leftwards_arrow_with_hook:",
+        "completed": ":white_check_mark:",
+        "blocked": ":no_entry:",
+        "linked": ":link:",
+        "test": ":bell:",
     }.get(action, ":bell:")
     title = task.get("title", "?")
     task_id = task.get("id", "?")
@@ -226,15 +251,22 @@ def _format_slack(action: str, task: dict, extra: str = "") -> dict:
         fields.append({"type": "mrkdwn", "text": f"*Notes:* {extra[:500]}"})
     return {
         "text": f"{emoji} *{action.title()}* — {title}",
-        "attachments": [{"color": "#5865F2", "fields": fields, "ts": int(datetime.utcnow().timestamp())}],
+        "attachments": [
+            {"color": "#5865F2", "fields": fields, "ts": int(datetime.utcnow().timestamp())}
+        ],
     }
 
 
 def _format_telegram(action: str, task: dict, extra: str = "") -> dict:
     """Format as Telegram message payload."""
     emoji = {
-        "created": "🆕", "claimed": "👤", "unclaimed": "↩️",
-        "completed": "✅", "blocked": "🚧", "linked": "🔗", "test": "🔔",
+        "created": "🆕",
+        "claimed": "👤",
+        "unclaimed": "↩️",
+        "completed": "✅",
+        "blocked": "🚧",
+        "linked": "🔗",
+        "test": "🔔",
     }.get(action, "🔔")
     title = task.get("title", "?")
     task_id = task.get("id", "?")
@@ -285,16 +317,21 @@ MAX_RETRIES = 3
 BASE_DELAY = 1.0  # seconds
 
 
-def _deliver_with_retry(wh_type: str, url: str, payload: dict, max_retries: int = MAX_RETRIES) -> tuple[int, str, bool]:
+def _deliver_with_retry(
+    wh_type: str, url: str, payload: dict, max_retries: int = MAX_RETRIES
+) -> tuple[int, str, bool]:
     """Send a webhook with exponential backoff retry."""
     import time
+
     last_error = ""
     for attempt in range(max_retries):
         try:
             if wh_type == "telegram":
                 resp = httpx.post(url, json=payload, timeout=5)
             elif wh_type == "generic":
-                resp = httpx.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=5)
+                resp = httpx.post(
+                    url, json=payload, headers={"Content-Type": "application/json"}, timeout=5
+                )
             else:
                 resp = httpx.post(url, json=payload, timeout=5)
             if resp.status_code < 500:
@@ -304,7 +341,7 @@ def _deliver_with_retry(wh_type: str, url: str, payload: dict, max_retries: int 
         except Exception as e:
             last_error = str(e)[:200]
         if attempt < max_retries - 1:
-            time.sleep(BASE_DELAY * (2 ** attempt))
+            time.sleep(BASE_DELAY * (2**attempt))
     # All retries exhausted
     return 0, last_error, False
 
@@ -335,29 +372,32 @@ async def notify(action: str, task: dict, extra: str = ""):
                 wh_id = wh["id"]
                 break
 
-        deliveries.append({
-            "webhook_id": wh_id,
-            "event": action,
-            "url": url,
-            "status_code": code,
-            "response_body": body,
-            "success": success,
-        })
+        deliveries.append(
+            {
+                "webhook_id": wh_id,
+                "event": action,
+                "url": url,
+                "status_code": code,
+                "response_body": body,
+                "success": success,
+            }
+        )
 
     # Log deliveries to STDB (fire-and-forget)
     for d in deliveries:
-        try:
-            _call("log_webhook_delivery", [
-                "",
-                d["webhook_id"],
-                d["event"],
-                d["url"],
-                d["status_code"],
-                d["response_body"],
-                d["success"],
-            ])
-        except Exception:
-            pass  # best-effort for logging too
+        with suppress(Exception):
+            _call(
+                "log_webhook_delivery",
+                [
+                    "",
+                    d["webhook_id"],
+                    d["event"],
+                    d["url"],
+                    d["status_code"],
+                    d["response_body"],
+                    d["success"],
+                ],
+            )  # best-effort for logging too
 
 
 def list_webhook_deliveries(webhook_id: str, limit: int = 20) -> list[dict]:
@@ -368,14 +408,16 @@ def list_webhook_deliveries(webhook_id: str, limit: int = 20) -> list[dict]:
     rows.sort(key=lambda r: -(r.get("delivered_at", 0)))
     result = []
     for r in rows[:limit]:
-        result.append({
-            "id": r.get("id", ""),
-            "webhook_id": r.get("webhook_id", ""),
-            "event": r.get("event", ""),
-            "url": r.get("url", ""),
-            "status_code": r.get("status_code", 0),
-            "response_body": r.get("response_body", ""),
-            "success": r.get("success", False),
-            "delivered_at": r.get("delivered_at", 0),
-        })
+        result.append(
+            {
+                "id": r.get("id", ""),
+                "webhook_id": r.get("webhook_id", ""),
+                "event": r.get("event", ""),
+                "url": r.get("url", ""),
+                "status_code": r.get("status_code", 0),
+                "response_body": r.get("response_body", ""),
+                "success": r.get("success", False),
+                "delivered_at": r.get("delivered_at", 0),
+            }
+        )
     return result

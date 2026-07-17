@@ -2,8 +2,7 @@
 
 from fastapi import APIRouter
 
-from shared import _row_to_log, _sql
-from shared import LogOut
+from shared import LogOut, _row_to_log, _sql
 
 router = APIRouter()
 
@@ -25,26 +24,29 @@ async def list_logs(
 
     # Apply filters
     if task_id:
-        logs = [l for l in logs if l.task_id == task_id]
+        logs = [rec for rec in logs if rec.task_id == task_id]
     if action:
         action_set = set(a.strip() for a in action.split(",") if a.strip())
-        logs = [l for l in logs if l.action in action_set]
+        logs = [rec for rec in logs if rec.action in action_set]
     if agent_id:
-        logs = [l for l in logs if l.agent_id == agent_id]
+        logs = [rec for rec in logs if rec.agent_id == agent_id]
     if search:
         q = search.lower()
-        logs = [l for l in logs if
-                (l.notes and q in l.notes.lower()) or
-                q in l.task_id.lower() or
-                q in l.action.lower()]
+        logs = [
+            rec
+            for rec in logs
+            if (rec.notes and q in rec.notes.lower())
+            or q in rec.task_id.lower()
+            or q in rec.action.lower()
+        ]
     if since:
-        logs = [l for l in logs if l.timestamp >= since]
+        logs = [rec for rec in logs if rec.timestamp >= since]
     if until:
-        logs = [l for l in logs if l.timestamp <= until]
+        logs = [rec for rec in logs if rec.timestamp <= until]
 
-    logs.sort(key=lambda l: -l.timestamp)
-    total = len(logs)
-    page = logs[offset:offset + limit]
+    logs.sort(key=lambda rec: -rec.timestamp)
+    len(logs)
+    page = logs[offset : offset + limit]
     return page
 
 
@@ -59,20 +61,20 @@ async def logs_stats():
     now_ms = int(time.time() * 1000)
     day_ms = 86_400_000
 
-    today = [l for l in logs if l.timestamp >= now_ms - day_ms]
+    today = [rec for rec in logs if rec.timestamp >= now_ms - day_ms]
 
     action_counts: dict[str, int] = {}
     agent_counts: dict[str, int] = {}
-    for l in logs:
-        action_counts[l.action] = action_counts.get(l.action, 0) + 1
-        if l.agent_id:
-            agent_counts[l.agent_id] = agent_counts.get(l.agent_id, 0) + 1
+    for rec in logs:
+        action_counts[rec.action] = action_counts.get(rec.action, 0) + 1
+        if rec.agent_id:
+            agent_counts[rec.agent_id] = agent_counts.get(rec.agent_id, 0) + 1
 
     # Get unique agents who have been active today
     today_agents = set()
-    for l in today:
-        if l.agent_id:
-            today_agents.add(l.agent_id)
+    for rec in today:
+        if rec.agent_id:
+            today_agents.add(rec.agent_id)
 
     return {
         "total_events": len(logs),

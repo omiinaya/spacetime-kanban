@@ -7,8 +7,8 @@ use crate::tables::*;
 // ── Thread-local Counters ───────────────────────────────────────────
 
 thread_local! {
-    pub(crate) static LOG_COUNTER: Cell<u64> = Cell::new(0);
-    pub(crate) static ID_COUNTER: Cell<u64> = Cell::new(0);
+    pub(crate) static LOG_COUNTER: Cell<u64> = const { Cell::new(0) };
+    pub(crate) static ID_COUNTER: Cell<u64> = const { Cell::new(0) };
 }
 
 // ── Timestamp Helper ────────────────────────────────────────────────
@@ -65,7 +65,6 @@ pub(crate) fn update_task_in_db(ctx: &ReducerContext, task: &Task) {
         .tasks()
         .iter()
         .filter(|t| t.id == task.id)
-        .map(|t| t.clone())
         .collect();
     for t in old {
         ctx.db.tasks().delete(t);
@@ -79,7 +78,6 @@ pub(crate) fn delete_logs_for_task(ctx: &ReducerContext, task_id: &str) {
         .task_logs()
         .iter()
         .filter(|l| l.task_id == task_id)
-        .map(|l| l.clone())
         .collect();
     for log in logs {
         ctx.db.task_logs().delete(log);
@@ -92,7 +90,6 @@ pub(crate) fn update_agent_in_db(ctx: &ReducerContext, agent: &SwarmAgent) {
         .swarm_agents()
         .iter()
         .filter(|a| a.id == agent.id)
-        .map(|a| a.clone())
         .collect();
     for a in old {
         ctx.db.swarm_agents().delete(a);
@@ -106,7 +103,6 @@ pub(crate) fn update_project_in_db(ctx: &ReducerContext, project: &KanbanProject
         .kanban_projects()
         .iter()
         .filter(|p| p.id == project.id)
-        .map(|p| p.clone())
         .collect();
     for p in old {
         ctx.db.kanban_projects().delete(p);
@@ -120,7 +116,6 @@ pub(crate) fn update_template_in_db(ctx: &ReducerContext, template: &TaskTemplat
         .task_templates()
         .iter()
         .filter(|t| t.id == template.id)
-        .map(|t| t.clone())
         .collect();
     for t in old {
         ctx.db.task_templates().delete(t);

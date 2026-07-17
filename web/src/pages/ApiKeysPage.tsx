@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api, type ApiKeyItem, type ApiKeyItemFull } from '../api'
 import { Key, Loader2, AlertCircle, Plus, Trash2, Copy, Check, X } from 'lucide-react'
-import { PRIORITY_COLORS } from '../components/constants'
 
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKeyItem[]>([])
@@ -18,8 +17,8 @@ export default function ApiKeysPage() {
       setLoading(true)
       const result = await api.apiKeys.list()
       setKeys(result)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
@@ -36,8 +35,8 @@ export default function ApiKeysPage() {
       setShowCreate(false)
       setNewKey({ name: '', permissions: 'read', scope: '*' })
       loadKeys()
-    } catch (e: any) {
-      alert(`Failed to create key: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Failed to create key: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setCreating(false)
     }
@@ -48,8 +47,8 @@ export default function ApiKeysPage() {
     try {
       await api.apiKeys.revoke(keyId)
       loadKeys()
-    } catch (e: any) {
-      alert(`Failed to revoke: ${e.message}`)
+    } catch (e: unknown) {
+      alert(`Failed to revoke: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

@@ -16,3 +16,4 @@ server/venv/
 web/test-results/
 web/playwright-report/
 web/playwright/.cache/
+web/coverage/

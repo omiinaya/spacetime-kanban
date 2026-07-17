@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+
 
 class Settings(BaseSettings):
     stdb_host: str = "localhost"
@@ -20,5 +20,6 @@ class Settings(BaseSettings):
         return f"{self.stdb_base_url}/v1/database/{self.stdb_db}/sql"
 
     model_config = {"env_file": ".env"}
+
 
 settings = Settings()
