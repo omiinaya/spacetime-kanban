@@ -87,12 +87,13 @@ async def trigger_task_templates():
     try:
         await _call("trigger_task_templates", [])
         # Read the most recent trigger log to get stats
+        # STDB SQL doesn't support ORDER BY + LIMIT — fetch all and sort in Python
         logs = await _sql(
             "SELECT * FROM task_logs"
             " WHERE action = 'trigger_task_templates'"
-            " ORDER BY timestamp DESC LIMIT 1"
         )
         if logs:
+            logs.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
             return {"status": "triggered", "notes": logs[0].get("notes", "")}
         return {"status": "triggered", "notes": "completed"}
     except Exception as e:
