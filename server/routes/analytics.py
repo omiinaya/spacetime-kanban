@@ -49,6 +49,17 @@ async def analytics_overview():
         if s in repos[r]:
             repos[r][s] += 1
 
+    # Claim churn canary (last hour) — detects claim→fail→unclaim hot loops.
+    # 2026-07-17: worktree collision loop ran 500+ claim cycles per task while
+    # completed_today>0 made the board look "healthy". Ratio ~1-2 is normal.
+    hour_ago = now - 3_600_000
+    churn_logs = await _sql(
+        f"SELECT * FROM task_logs WHERE timestamp > {hour_ago}"
+        " AND (action = 'claimed' OR action = 'completed')"
+    )
+    claims_last_hour = sum(1 for l in churn_logs if l.get("action") == "claimed")
+    completions_last_hour = sum(1 for l in churn_logs if l.get("action") == "completed")
+
     return {
         "total": total,
         "by_status": by_status,
@@ -56,6 +67,45 @@ async def analytics_overview():
         "completed_week": completed_week,
         "total_done": total_done,
         "repos": repos,
+        "claims_last_hour": claims_last_hour,
+        "completions_last_hour": completions_last_hour,
+        "claim_complete_ratio": round(claims_last_hour / max(completions_last_hour, 1), 1),
+    }
+
+
+@router.get("/api/analytics/claim-churn")
+async def analytics_claim_churn(minutes: int = 60, threshold: int = 6):
+    """Tasks claimed >=threshold times in the last N minutes without completing.
+
+    Poison-pill detector: catches claim→fail→unclaim loops that never
+    increment fail_count (unclaim path) and cycle too fast for the
+    dispatcher's per-tick zombie tracker to observe."""
+    now = int(time.time() * 1000)
+    since = now - minutes * 60_000
+    logs = await _sql(
+        f"SELECT * FROM task_logs WHERE timestamp > {since}"
+        " AND (action = 'claimed' OR action = 'completed')"
+    )
+    claims: dict[str, int] = {}
+    completed: set[str] = set()
+    for log in logs:
+        tid = log.get("task_id", "")
+        if log.get("action") == "claimed":
+            claims[tid] = claims.get(tid, 0) + 1
+        elif log.get("action") == "completed":
+            completed.add(tid)
+
+    churning = [
+        {"task_id": tid, "claims": count}
+        for tid, count in sorted(claims.items(), key=lambda kv: -kv[1])
+        if count >= threshold and tid not in completed
+    ]
+    return {
+        "window_minutes": minutes,
+        "threshold": threshold,
+        "churning": churning,
+        "total_claims": sum(claims.values()),
+        "total_completed": len(completed),
     }
 
 
