@@ -4,6 +4,7 @@ Shared service helpers, Pydantic models, and auth for spacetimedb-kanban.
 Originally extracted from main.py. Imported by both main.py and routes/*.py.
 """
 
+import asyncio
 import time
 from typing import Any
 
@@ -41,7 +42,10 @@ async def _sql(query: str) -> list[dict[str, Any]]:
     )
     if resp.status_code >= 400:
         raise HTTPException(502, f"SQL query failed: {resp.text[:300]}")
-    return _parse_sats_rows(resp.json())
+    # Parse off the event loop: large result sets (e.g. unfiltered task_logs
+    # at 460K+ rows) take tens of seconds of pure-Python SATS parsing and
+    # would otherwise stall every concurrent request.
+    return await asyncio.to_thread(_parse_sats_rows, resp.json())
 
 
 async def _sql_param(query_template: str, **params: str) -> list[dict[str, Any]]:
