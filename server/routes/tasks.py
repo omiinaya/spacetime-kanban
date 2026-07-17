@@ -90,7 +90,7 @@ async def list_tasks(
     repo: str | None = None,
     label: str | None = None,
     search: str | None = None,
-    limit: int = 500,
+    limit: int = 2000,
 ):
     # If label filter provided, first get task IDs with that label
     label_task_ids: set[str] | None = None
@@ -111,8 +111,8 @@ async def list_tasks(
         params["repo"] = repo
     if filters:
         sql += " WHERE " + " AND ".join(filters)
-    # Add server-side LIMIT to prevent loading all rows
-    sql += f" LIMIT {min(limit, 1000)}"
+    # Server-side LIMIT — 2000 default, 5000 hard cap
+    sql += f" LIMIT {min(limit, 5000)}"
     if params:
         rows = await _sql_param(sql, **params)
     else:
@@ -120,7 +120,7 @@ async def list_tasks(
     tasks = [_row_to_task(r) for r in rows]
     if label_task_ids is not None:
         tasks = [t for t in tasks if t.id in label_task_ids]
-    # Apply client-side search filter
+    # Apply client-side search filter (STDB SQL has no ILIKE — do it in Python)
     if search:
         q = search.lower()
         tasks = [
