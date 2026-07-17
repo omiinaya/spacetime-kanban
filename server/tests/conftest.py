@@ -22,6 +22,10 @@ _ROUTE_HELPER_MAP = {
     "routes.projects": ["_sql", "_sql_param", "_call"],
     "routes.tasks": ["_sql", "_sql_param", "_call", "_notify"],
     "routes.templates": ["_sql", "_sql_param", "_call"],
+    "routes.ops": ["_sql", "_call"],
+    "routes.dispatcher": ["_sql", "_sql_param", "_call"],
+    "routes.rules": ["_sql", "_sql_param", "_call"],
+    "routes.apikeys": ["_sql", "_call"],
 }
 
 
@@ -47,11 +51,12 @@ def mock_stdb():
     The dict keys are: ``sql``, ``param``, ``call``, ``notify``.
     """
     with ExitStack() as stack:
-        sql = stack.enter_context(patch("main._sql", new_callable=AsyncMock))
-        param = stack.enter_context(patch("main._sql_param", new_callable=AsyncMock))
-        call = stack.enter_context(patch("main._call", new_callable=AsyncMock))
-        notify = stack.enter_context(patch("main._notify", new_callable=AsyncMock))
         _patch_route_modules(stack)
+
+        sql = stack.enter_context(patch("routes.tasks._sql", new_callable=AsyncMock))
+        param = stack.enter_context(patch("routes.tasks._sql_param", new_callable=AsyncMock))
+        call = stack.enter_context(patch("routes.tasks._call", new_callable=AsyncMock))
+        notify = stack.enter_context(patch("routes.tasks._notify", new_callable=AsyncMock))
 
         # Set default return values on ALL mocks (both main and route modules)
         sql.return_value = []
