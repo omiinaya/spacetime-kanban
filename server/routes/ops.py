@@ -68,7 +68,8 @@ async def import_roadmap(body: RoadmapImportRequest):
                     sanitized_repo = t["repo"].replace("'", "''")
                     existing_rows = await _sql_param(
                         "SELECT id FROM tasks WHERE title = '{title}' AND repo = '{repo}' AND status != 'done' LIMIT 1",
-                        title=sanitized_title, repo=sanitized_repo,
+                        title=sanitized_title,
+                        repo=sanitized_repo,
                     )
                     if existing_rows:
                         continue
@@ -93,7 +94,8 @@ async def import_roadmap(body: RoadmapImportRequest):
         sanitized_repo = t["repo"].replace("'", "''")
         existing_rows = await _sql_param(
             "SELECT id FROM tasks WHERE title = '{title}' AND repo = '{repo}' AND status != 'done' LIMIT 1",
-            title=sanitized_title, repo=sanitized_repo,
+            title=sanitized_title,
+            repo=sanitized_repo,
         )
         if existing_rows:
             continue

@@ -16,6 +16,7 @@ Scheduler loops:
   metrics_collector   :300s — board metrics snapshot, fire webhook
   template_trigger    :900s — fire recurring task templates
 """
+
 import asyncio
 import json
 import os
@@ -176,17 +177,19 @@ async def task_dispatcher(interval: int):
 
             # Filter out doomed and backoff tasks
             eligible = [
-                t for t in available
-                if t.get("fail_count", 0) < t.get("max_attempts", 3)
-                and not t.get("fail_reason")
+                t
+                for t in available
+                if t.get("fail_count", 0) < t.get("max_attempts", 3) and not t.get("fail_reason")
             ]
 
             # Sort: priority asc (P0 first), then fail_count asc, then oldest first
-            eligible.sort(key=lambda t: (
-                t.get("priority", 5),
-                t.get("fail_count", 0),
-                t.get("created_at", 0),
-            ))
+            eligible.sort(
+                key=lambda t: (
+                    t.get("priority", 5),
+                    t.get("fail_count", 0),
+                    t.get("created_at", 0),
+                )
+            )
 
             slots = settings.max_workers - worker_count
             for task in eligible[:slots]:
@@ -250,20 +253,22 @@ async def stale_watcher(interval: int):
                 hb_age_min = (now_ms - hb_ts) / 60000 if hb_ts else 999
 
                 force_release = claim_age_min > 60
-                stale_release = (
-                    claim_age_min > settings.stale_minutes
-                    and (hb_ts is None or hb_age_min > 10)
+                stale_release = claim_age_min > settings.stale_minutes and (
+                    hb_ts is None or hb_age_min > 10
                 )
 
                 if force_release or stale_release:
                     # Fire webhook before unclaiming
                     if stale_release:
-                        await fire_event(EVENT_WORKER_STALE, {
-                            "task_id": tid,
-                            "title": t.get("title", "?")[:80],
-                            "age_minutes": claim_age_min,
-                            "repo": t.get("repo", "?"),
-                        })
+                        await fire_event(
+                            EVENT_WORKER_STALE,
+                            {
+                                "task_id": tid,
+                                "title": t.get("title", "?")[:80],
+                                "age_minutes": claim_age_min,
+                                "repo": t.get("repo", "?"),
+                            },
+                        )
 
                     # Unclaim via bulk-retry to also reset fail_count
                     result = await _api_post(
@@ -309,29 +314,35 @@ async def dead_board_monitor(interval: int):
             # Check: 0 completions + work exists
             if completions == 0 and (ip > 0 or avail > 0):
                 if now_ms - last_alert_ms > alert_cooldown_ms:
-                    await fire_event(EVENT_BOARD_DEAD, {
-                        "total": overview.get("total", 0),
-                        "available": avail,
-                        "in_progress": ip,
-                        "blocked": overview.get("by_status", {}).get("blocked", 0),
-                        "done": overview.get("total_done", 0),
-                        "completions_last_hour": 0,
-                        "claims_last_hour": claims,
-                        "claim_complete_ratio": overview.get("claim_complete_ratio", 0),
-                    })
+                    await fire_event(
+                        EVENT_BOARD_DEAD,
+                        {
+                            "total": overview.get("total", 0),
+                            "available": avail,
+                            "in_progress": ip,
+                            "blocked": overview.get("by_status", {}).get("blocked", 0),
+                            "done": overview.get("total_done", 0),
+                            "completions_last_hour": 0,
+                            "claims_last_hour": claims,
+                            "claim_complete_ratio": overview.get("claim_complete_ratio", 0),
+                        },
+                    )
                     last_alert_ms = now_ms
 
             # Stalled check: abnormally high claim:complete ratio
             ratio = overview.get("claim_complete_ratio", 0)
             if ratio > 20 and claims > 50 and completions == 0:
                 if now_ms - last_alert_ms > alert_cooldown_ms:
-                    await fire_event(EVENT_BOARD_STALLED, {
-                        "claims_last_hour": claims,
-                        "completions_last_hour": 0,
-                        "claim_complete_ratio": ratio,
-                        "in_progress": ip,
-                        "available": avail,
-                    })
+                    await fire_event(
+                        EVENT_BOARD_STALLED,
+                        {
+                            "claims_last_hour": claims,
+                            "completions_last_hour": 0,
+                            "claim_complete_ratio": ratio,
+                            "in_progress": ip,
+                            "available": avail,
+                        },
+                    )
                     last_alert_ms = now_ms
 
         except asyncio.CancelledError:
@@ -354,16 +365,19 @@ async def metrics_collector(interval: int):
             if not overview:
                 continue
 
-            await fire_event(EVENT_METRICS_SNAPSHOT, {
-                "total": overview.get("total", 0),
-                "available": overview.get("by_status", {}).get("available", 0),
-                "in_progress": overview.get("by_status", {}).get("in_progress", 0),
-                "blocked": overview.get("by_status", {}).get("blocked", 0),
-                "done": overview.get("total_done", 0),
-                "completions_last_hour": overview.get("completions_last_hour", 0),
-                "claims_last_hour": overview.get("claims_last_hour", 0),
-                "claim_complete_ratio": overview.get("claim_complete_ratio", 0),
-            })
+            await fire_event(
+                EVENT_METRICS_SNAPSHOT,
+                {
+                    "total": overview.get("total", 0),
+                    "available": overview.get("by_status", {}).get("available", 0),
+                    "in_progress": overview.get("by_status", {}).get("in_progress", 0),
+                    "blocked": overview.get("by_status", {}).get("blocked", 0),
+                    "done": overview.get("total_done", 0),
+                    "completions_last_hour": overview.get("completions_last_hour", 0),
+                    "claims_last_hour": overview.get("claims_last_hour", 0),
+                    "claim_complete_ratio": overview.get("claim_complete_ratio", 0),
+                },
+            )
 
         except asyncio.CancelledError:
             break

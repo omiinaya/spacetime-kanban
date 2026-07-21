@@ -12,6 +12,7 @@ Each event has:
 Designed to be Discord-compatible by default — the payload includes
 a "message" field with a human-readable summary suitable for chat.
 """
+
 import asyncio
 import json
 import time
@@ -61,7 +62,7 @@ def _format_message(event: str, data: dict) -> str:
         )
     elif event == EVENT_WORKER_STALE:
         return (
-            f"⏰ **Stale Worker** — task `{data.get('task_id','?')[:30]}` "
+            f"⏰ **Stale Worker** — task `{data.get('task_id', '?')[:30]}` "
             f"claimed {data.get('age_minutes', 0):.0f}m ago with no heartbeat"
         )
     elif event == EVENT_METRICS_SNAPSHOT:
@@ -125,9 +126,11 @@ async def fire_event(
             last_error = str(e)
 
         if attempt < settings.webhook_max_retries - 1:
-            await asyncio.sleep(2 ** attempt)  # 1s, 2s, 4s backoff
+            await asyncio.sleep(2**attempt)  # 1s, 2s, 4s backoff
 
-    print(f"[webhook] Failed to deliver {event} after {settings.webhook_max_retries} attempts: {last_error}")
+    print(
+        f"[webhook] Failed to deliver {event} after {settings.webhook_max_retries} attempts: {last_error}"
+    )
     return False
 
 
