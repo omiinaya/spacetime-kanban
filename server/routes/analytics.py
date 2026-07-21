@@ -146,9 +146,7 @@ async def analytics_cycle_times():
     Filters server-side: task_logs has 460K+ rows (93% claim/unclaim churn);
     we only need created/completed (~1.3K rows). Unfiltered this endpoint
     took ~38s and blocked the event loop parsing SATS rows."""
-    logs = await _sql(
-        "SELECT * FROM task_logs WHERE action = 'created' OR action = 'completed'"
-    )
+    logs = await _sql("SELECT * FROM task_logs WHERE action = 'created' OR action = 'completed'")
 
     # Group logs by task_id and find created vs completed timestamps
     task_times: dict[str, dict] = {}
@@ -268,9 +266,7 @@ async def analytics_agents():
     agents = await _sql("SELECT * FROM swarm_agents")
     # Only completed/blocked actions are used — filter out the 460K-row
     # claim/unclaim churn server-side (was ~37s unfiltered).
-    logs = await _sql(
-        "SELECT * FROM task_logs WHERE action = 'completed' OR action = 'blocked'"
-    )
+    logs = await _sql("SELECT * FROM task_logs WHERE action = 'completed' OR action = 'blocked'")
 
     # Count completed tasks per agent from logs
     agent_completions: dict[str, int] = {}
