@@ -17,7 +17,7 @@ import shlex
 import subprocess
 import time
 
-from server.workers.base import WorkerContext
+from workers.base import WorkerContext
 
 
 # ── Config ──────────────────────────────────────────────────────────

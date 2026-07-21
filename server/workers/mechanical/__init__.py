@@ -11,7 +11,7 @@ import subprocess
 import sys
 from typing import Callable
 
-from server.workers.base import WorkerContext
+from workers.base import WorkerContext
 
 
 # ── Handler registry ────────────────────────────────────────────────
