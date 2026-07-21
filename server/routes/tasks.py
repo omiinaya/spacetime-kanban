@@ -47,7 +47,7 @@ from shared import (
     _sql_param,
     verify_auth,
 )
-from webhook_dispatcher import fire_event, EVENT_TASK_BLOCKED, EVENT_TASK_COMPLETED
+from webhook_dispatcher import fire_event, EVENT_TASK_BLOCKED, EVENT_TASK_COMPLETED, EVENT_TASK_DELETED
 
 router = APIRouter()
 
@@ -398,7 +398,15 @@ async def patch_task(task_id: str, body: TaskUpdate):
 
 @router.delete("/api/tasks/{task_id}", dependencies=[Depends(verify_auth)])
 async def delete_task(task_id: str):
+    # Fetch task data before deleting so we can fire webhook
+    rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     await _call("delete_task", [task_id])
+    if rows:
+        asyncio.ensure_future(fire_event(EVENT_TASK_DELETED, {
+            "task_id": task_id,
+            "title": rows[0].get("title", "?")[:80],
+            "repo": rows[0].get("repo", "?"),
+        }))
     return {"status": "deleted"}
 
 
@@ -471,12 +479,17 @@ async def complete_task(task_id: str, body: CompleteRequest | None = None):
     if rows:
         asyncio.ensure_future(_notify("completed", rows[0], body.result_notes))
         asyncio.ensure_future(_sync_to_github(task_id, "completed", body.result_notes))
-        asyncio.ensure_future(fire_event(EVENT_TASK_COMPLETED, {
-            "task_id": task_id,
-            "title": rows[0].get("title", "?")[:80],
-            "repo": rows[0].get("repo", "?"),
-            "result_notes": body.result_notes or "",
-        }))
+        asyncio.ensure_future(
+            fire_event(
+                EVENT_TASK_COMPLETED,
+                {
+                    "task_id": task_id,
+                    "title": rows[0].get("title", "?")[:80],
+                    "repo": rows[0].get("repo", "?"),
+                    "result_notes": body.result_notes or "",
+                },
+            )
+        )
     return {"status": "completed", "task_id": task_id}
 
 
@@ -488,12 +501,17 @@ async def block_task(task_id: str, body: BlockRequest | None = None):
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
         asyncio.ensure_future(_notify("blocked", rows[0], body.reason))
-        asyncio.ensure_future(fire_event(EVENT_TASK_BLOCKED, {
-            "task_id": task_id,
-            "title": rows[0].get("title", "?")[:80],
-            "repo": rows[0].get("repo", "?"),
-            "reason": body.reason or "",
-        }))
+        asyncio.ensure_future(
+            fire_event(
+                EVENT_TASK_BLOCKED,
+                {
+                    "task_id": task_id,
+                    "title": rows[0].get("title", "?")[:80],
+                    "repo": rows[0].get("repo", "?"),
+                    "reason": body.reason or "",
+                },
+            )
+        )
     return {"status": "blocked", "task_id": task_id}
 
 
@@ -503,12 +521,17 @@ async def block_task_with_reason(task_id: str, body: BlockWithReasonRequest):
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
         asyncio.ensure_future(_notify("blocked", rows[0], body.reason))
-        asyncio.ensure_future(fire_event(EVENT_TASK_BLOCKED, {
-            "task_id": task_id,
-            "title": rows[0].get("title", "?")[:80],
-            "repo": rows[0].get("repo", "?"),
-            "reason": body.reason or "",
-        }))
+        asyncio.ensure_future(
+            fire_event(
+                EVENT_TASK_BLOCKED,
+                {
+                    "task_id": task_id,
+                    "title": rows[0].get("title", "?")[:80],
+                    "repo": rows[0].get("repo", "?"),
+                    "reason": body.reason or "",
+                },
+            )
+        )
     return {"status": "blocked", "task_id": task_id, "reason": body.reason}
 
 
