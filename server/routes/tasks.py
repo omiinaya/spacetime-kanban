@@ -47,7 +47,12 @@ from shared import (
     _sql_param,
     verify_auth,
 )
-from webhook_dispatcher import fire_event, EVENT_TASK_BLOCKED, EVENT_TASK_COMPLETED, EVENT_TASK_DELETED
+from webhook_dispatcher import (
+    fire_event,
+    EVENT_TASK_BLOCKED,
+    EVENT_TASK_COMPLETED,
+    EVENT_TASK_DELETED,
+)
 
 router = APIRouter()
 
@@ -402,11 +407,16 @@ async def delete_task(task_id: str):
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     await _call("delete_task", [task_id])
     if rows:
-        asyncio.ensure_future(fire_event(EVENT_TASK_DELETED, {
-            "task_id": task_id,
-            "title": rows[0].get("title", "?")[:80],
-            "repo": rows[0].get("repo", "?"),
-        }))
+        asyncio.ensure_future(
+            fire_event(
+                EVENT_TASK_DELETED,
+                {
+                    "task_id": task_id,
+                    "title": rows[0].get("title", "?")[:80],
+                    "repo": rows[0].get("repo", "?"),
+                },
+            )
+        )
     return {"status": "deleted"}
 
 

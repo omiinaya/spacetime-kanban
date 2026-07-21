@@ -9,6 +9,7 @@ Each event has:
 Discord-compatible by default — the payload uses `content` for message text
 and Discord ignores unknown fields like `_event`, `_data`.
 """
+
 import asyncio
 import json
 import time
@@ -106,9 +107,7 @@ async def fire_event(
     last_error = None
     for attempt in range(settings.webhook_max_retries):
         try:
-            async with httpx.AsyncClient(
-                timeout=settings.webhook_timeout_seconds
-            ) as client:
+            async with httpx.AsyncClient(timeout=settings.webhook_timeout_seconds) as client:
                 resp = await client.post(
                     url,
                     content=body,

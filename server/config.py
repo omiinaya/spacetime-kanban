@@ -28,11 +28,12 @@ class Settings(BaseSettings):
 
     # ── Worker adapter ──
     worker_command: str = "python3"
-    worker_script: str = ""  # Path to worker script
-    min_workers: int = 4
-    max_workers: int = 24
+    worker_script: str = ""  # Path to worker entry point script (absolute or relative to server/)
+    worker_args: str = ""  # Extra args passed to worker_command (e.g. "-m server.workers.run")
+    min_workers: int = 1
+    max_workers: int = 3
     max_memory_pct: int = 80
-    stale_minutes: int = 20
+    stale_minutes: int = 10
 
     # ── Agent identity ──
     agent_id: str = "hermes"
@@ -45,7 +46,7 @@ class Settings(BaseSettings):
     def stdb_sql_url(self) -> str:
         return f"{self.stdb_base_url}/v1/database/{self.stdb_db}/sql"
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()
