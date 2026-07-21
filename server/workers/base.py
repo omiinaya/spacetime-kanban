@@ -90,7 +90,12 @@ class WorkerContext:
         """Send a heartbeat via activity log. Returns False on failure."""
         result = api_post(
             f"/api/tasks/{self.task_id}/log",
-            {"action": "heartbeat", "details": f"worker heartbeat #{self._heartbeat_count}"},
+            {
+                "task_id": self.task_id,
+                "action": "heartbeat",
+                "agent_id": AGENT_ID,
+                "notes": f"worker heartbeat #{self._heartbeat_count}",
+            },
         )
         if result:
             self._heartbeat_count += 1
@@ -100,7 +105,12 @@ class WorkerContext:
         """Add an activity log entry."""
         api_post(
             f"/api/tasks/{self.task_id}/log",
-            {"action": action, "details": details},
+            {
+                "task_id": self.task_id,
+                "action": action,
+                "agent_id": AGENT_ID,
+                "notes": details,
+            },
         )
 
     def complete(self, notes: str = "") -> bool:

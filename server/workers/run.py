@@ -25,9 +25,9 @@ server_dir = os.path.dirname(script_dir)
 if server_dir not in sys.path:
     sys.path.insert(0, server_dir)
 
-from server.workers.base import WorkerContext, run_worker
-from server.workers.mechanical import match_handler
-from server.workers.llm import run_llm_worker
+from workers.base import WorkerContext, run_worker
+from workers.mechanical import match_handler
+from workers.llm import run_llm_worker
 
 
 def route_task(ctx: WorkerContext) -> tuple[bool, str]:
