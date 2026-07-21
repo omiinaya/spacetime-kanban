@@ -14,7 +14,13 @@ stdb: true
 2|
 3|This file is read by AI coding agents. For Claude Code specifically, also see [CLAUDE.md](./CLAUDE.md). Complements [README.md](./README.md).
 4|
-5|This kanban coordinates **multiple AI agents** working on the same repo's roadmap simultaneously. Each agent claims tasks atomically via the REST API — no two agents can grab the same task.
+5|## 📌 Architecture (Jul 2026)
+6|
+7|This kanban server is **fully self-contained** — no external cron jobs or Hermes dependencies.
+8|
+9|See `server/.env.example` for configuration. Alerts fire via webhook to Discord.
+10|
+11|This kanban coordinates **multiple AI agents** working on the same repo's roadmap simultaneously. Each agent claims tasks atomically via the REST API — no two agents can grab the same task.
 6|
 7|## How to Use (for Agents)
 8|

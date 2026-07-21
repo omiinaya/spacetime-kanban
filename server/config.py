@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     stale_check_interval_seconds: int = 120
     dead_board_interval_seconds: int = 900
     template_interval_seconds: int = 900
-    metrics_interval_seconds: int = 300
+    metrics_interval_seconds: int = 900
 
     # ── Webhook alerts ──
     webhook_default_url: str = ""  # Default alert destination (Discord, Slack, etc.)

@@ -1,22 +1,17 @@
 """Webhook event dispatcher — fires HTTP POSTs to subscribed URLs.
 
 The kanban server fires events when significant state changes happen.
-Webhook subscriptions are stored in the webhook_subs STDB table,
-plus a default_url in config for catch-all alert routing.
-
 Each event has:
   - event: str (e.g. "task.blocked", "board.dead", "worker.stale")
   - timestamp: int (epoch ms)
   - data: dict (event-specific payload)
 
-Designed to be Discord-compatible by default — the payload includes
-a "message" field with a human-readable summary suitable for chat.
+Discord-compatible by default — the payload uses `content` for message text
+and Discord ignores unknown fields like `_event`, `_data`.
 """
-
 import asyncio
 import json
 import time
-from typing import Any
 
 import httpx
 
@@ -27,6 +22,7 @@ from config import settings
 EVENT_TASK_BLOCKED = "task.blocked"
 EVENT_TASK_COMPLETED = "task.completed"
 EVENT_TASK_CLAIMED = "task.claimed"
+EVENT_TASK_DELETED = "task.deleted"
 EVENT_BOARD_DEAD = "board.dead"
 EVENT_BOARD_STALLED = "board.stalled"
 EVENT_WORKER_STALE = "worker.stale"
@@ -44,6 +40,10 @@ def _format_message(event: str, data: dict) -> str:
         t = data.get("title", "?")
         repo = data.get("repo", "?")
         return f"✅ **Completed**: `{t[:80]}` (repo: {repo})"
+    elif event == EVENT_TASK_DELETED:
+        t = data.get("title", "?")
+        repo = data.get("repo", "?")
+        return f"🗑️ **Deleted**: `{t[:80]}` (repo: {repo})"
     elif event == EVENT_BOARD_DEAD:
         ip = data.get("in_progress", 0)
         avail = data.get("available", 0)
@@ -85,24 +85,17 @@ async def fire_event(
     """Fire a webhook event to the configured URL.
 
     If webhook_url is None, uses settings.webhook_default_url.
-    Returns True if at least one delivery succeeded.
+    Discord-compatible: uses 'content' field for messages,
+    'embeds' for rich embeds (future). Unknown fields are silently ignored.
 
-    Uses Discord-compatible payload format:
-      - 'content' for plain text messages
-      - 'embeds' for rich embeds (future)
-    Also sends the structured JSON as a fallback.
+    Returns True if at least one delivery succeeded.
     """
     url = webhook_url or settings.webhook_default_url
     if not url:
         return False  # No webhook configured — silent
 
-    message = _format_message(event, data)
-
-    # Discord-compatible payload: content field for messages
     payload = {
-        "content": message,
-        # Also include the structured data as non-Discord fields
-        # (Discord ignores unknown fields, other webhook targets can use them)
+        "content": _format_message(event, data),
         "_event": event,
         "_timestamp": int(time.time() * 1000),
         "_data": data,
@@ -113,7 +106,9 @@ async def fire_event(
     last_error = None
     for attempt in range(settings.webhook_max_retries):
         try:
-            async with httpx.AsyncClient(timeout=settings.webhook_timeout_seconds) as client:
+            async with httpx.AsyncClient(
+                timeout=settings.webhook_timeout_seconds
+            ) as client:
                 resp = await client.post(
                     url,
                     content=body,
@@ -129,15 +124,7 @@ async def fire_event(
             await asyncio.sleep(2**attempt)  # 1s, 2s, 4s backoff
 
     print(
-        f"[webhook] Failed to deliver {event} after {settings.webhook_max_retries} attempts: {last_error}"
+        f"[webhook] Failed to deliver {event} "
+        f"after {settings.webhook_max_retries} attempts: {last_error}"
     )
     return False
-
-
-async def fire_event_parallel(
-    events: list[tuple[str, dict]],
-    webhook_url: str | None = None,
-) -> list[bool]:
-    """Fire multiple events in parallel."""
-    tasks = [fire_event(event, data, webhook_url) for event, data in events]
-    return await asyncio.gather(*tasks)
