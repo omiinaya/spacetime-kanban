@@ -12,6 +12,7 @@ from shared import (
     _call,
     _row_to_task,
     _sql,
+    _sql_param,
     verify_auth,
 )
 
@@ -62,6 +63,15 @@ async def import_roadmap(body: RoadmapImportRequest):
 
             if len(tasks) >= 5:
                 for t in tasks:
+                    # Dedup: skip if task with same title+repo already exists
+                    sanitized_title = t["title"].replace("'", "''")
+                    sanitized_repo = t["repo"].replace("'", "''")
+                    existing_rows = await _sql_param(
+                        "SELECT id FROM tasks WHERE title = '{title}' AND repo = '{repo}' AND status != 'done' LIMIT 1",
+                        title=sanitized_title, repo=sanitized_repo,
+                    )
+                    if existing_rows:
+                        continue
                     await _call(
                         "add_task",
                         [
@@ -78,6 +88,15 @@ async def import_roadmap(body: RoadmapImportRequest):
                 tasks = []
 
     for t in tasks:
+        # Dedup: skip if task with same title+repo already exists
+        sanitized_title = t["title"].replace("'", "''")
+        sanitized_repo = t["repo"].replace("'", "''")
+        existing_rows = await _sql_param(
+            "SELECT id FROM tasks WHERE title = '{title}' AND repo = '{repo}' AND status != 'done' LIMIT 1",
+            title=sanitized_title, repo=sanitized_repo,
+        )
+        if existing_rows:
+            continue
         await _call(
             "add_task",
             [

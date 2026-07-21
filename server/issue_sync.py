@@ -207,6 +207,39 @@ def _gh_request(method: str, url: str, token: str, body: dict | None = None) -> 
         raise RuntimeError(f"GitHub API HTTP {e.code}: {err_body}") from e
 
 
+def search_issues(token: str, repo: str, query: str) -> list[dict]:
+    """Search GitHub issues in a repo using the GitHub API search.
+
+    Returns a list of matching issues (title, number, html_url, state).
+    """
+    url = f"{GITHUB_API}/search/issues?q=repo:{repo}+{query}&per_page=10"
+    result = _gh_request("GET", url, token)
+    items = result.get("items", [])
+    return [
+        {
+            "number": i["number"],
+            "title": i.get("title", ""),
+            "html_url": i.get("html_url", ""),
+            "state": i.get("state", "open"),
+        }
+        for i in items
+    ]
+
+
+def find_existing_issue(token: str, repo: str, task_id: str) -> dict | None:
+    """Search GitHub for an existing issue that already links to a kanban task.
+
+    The kanban stores the task ID in the issue body as:
+      _Created from kanban task `{task_id}`_
+
+    Search for this string and return the first open match, or None.
+    """
+    results = search_issues(token, repo, f'"kanban task `{task_id}`"+state:open')
+    if results:
+        return results[0]
+    return None
+
+
 def create_issue(
     token: str,
     repo: str,
@@ -214,8 +247,26 @@ def create_issue(
     body: str = "",
     labels: list[str] | None = None,
     assignee: str | None = None,
+    task_id: str | None = None,
 ) -> dict:
-    """Create a GitHub issue and return {number, html_url, issue_url, ...}."""
+    """Create a GitHub issue and return {number, html_url, issue_url, ...}.
+
+    If task_id is provided, first checks GitHub for an existing issue
+    that already links to this kanban task (via the body marker). If
+    found, returns the existing issue instead of creating a duplicate.
+    This is the primary dedup mechanism — survives kanban STDB resets.
+    """
+    # Dedup: check GitHub for existing issue with this task ID
+    if task_id:
+        existing = find_existing_issue(token, repo, task_id)
+        if existing:
+            return {
+                "issue_number": existing["number"],
+                "html_url": existing["html_url"],
+                "issue_url": f"{GITHUB_API}/repos/{repo}/issues/{existing['number']}",
+                "state": existing["state"],
+            }
+
     payload: dict[str, Any] = {"title": title}
     if body:
         payload["body"] = body

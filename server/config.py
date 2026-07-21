@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic_settings import BaseSettings
 
 
@@ -10,6 +12,30 @@ class Settings(BaseSettings):
     github_token: str = ""
     github_default_repo: str = ""
     api_key: str = ""  # Set API_KEY env var to require auth on mutation endpoints
+
+    # ── Scheduler (background tasks inside server process) ──
+    scheduler_enabled: bool = True
+    dispatcher_interval_seconds: int = 30
+    stale_check_interval_seconds: int = 120
+    dead_board_interval_seconds: int = 900
+    template_interval_seconds: int = 900
+    metrics_interval_seconds: int = 300
+
+    # ── Webhook alerts ──
+    webhook_default_url: str = ""  # Default alert destination (Discord, Slack, etc.)
+    webhook_max_retries: int = 3
+    webhook_timeout_seconds: int = 10
+
+    # ── Worker adapter ──
+    worker_command: str = "python3"
+    worker_script: str = ""  # Path to worker script
+    min_workers: int = 4
+    max_workers: int = 24
+    max_memory_pct: int = 80
+    stale_minutes: int = 20
+
+    # ── Agent identity ──
+    agent_id: str = "hermes"
 
     @property
     def stdb_base_url(self) -> str:

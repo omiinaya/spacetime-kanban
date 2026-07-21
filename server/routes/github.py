@@ -102,7 +102,8 @@ async def create_issue_from_task(body: IssueCreateRequest):
     issue_body += meta
 
     result = issue_sync.create_issue(
-        token, repo_full, task["title"], issue_body, label_list, body.assignee or None
+        token, repo_full, task["title"], issue_body, label_list, body.assignee or None,
+        task_id=body.task_id,
     )
     issue_sync.link_issue(
         body.task_id, repo_full, result["issue_number"], result["issue_url"], result["html_url"]
