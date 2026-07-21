@@ -20,10 +20,8 @@ Scheduler loops:
 import asyncio
 import json
 import os
-import signal
 import subprocess
 import time
-from datetime import datetime
 from typing import Any
 
 import httpx
@@ -82,6 +80,7 @@ def _now_ms() -> int:
 _worker_processes: dict[str, subprocess.Popen] = {}  # task_id -> Popen
 _worker_spawn_times: dict[str, float] = {}  # task_id -> time.monotonic()
 _worker_crash_counts: dict[str, int] = {}  # task_id -> consecutive immediate crashes
+_worker_stderr_data: dict[str, bytes] = {}  # task_id -> captured stderr on crash
 _CRASH_RESET_INTERVAL = 3600  # Reset crash count after 1 hour
 _IMMEDIATE_CRASH_THRESHOLD = 3.0  # seconds — die within this = crash-on-launch
 
@@ -97,8 +96,8 @@ def _spawn_worker(task_id: str, title: str, repo: str) -> bool:
       1. worker_script is a .py file → python3 <script> <task_id>
       2. worker_args is set → python3 <args> <task_id> (e.g. -m module.path)
 
-    Returns True if spawned successfully.
-    Returns False if no worker is configured (manual mode — just manage lifecycle).
+    Returns True if spawned (process may still die — death_watcher handles).
+    Returns False if no worker is configured (manual mode).
     """
     script = settings.worker_script
     args = settings.worker_args
@@ -120,7 +119,7 @@ def _spawn_worker(task_id: str, title: str, repo: str) -> bool:
             cmd,
             cwd=os.path.dirname(server_dir),
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             env={
                 **os.environ,
                 "KANBAN_API": f"http://localhost:{settings.server_port}",
@@ -129,30 +128,6 @@ def _spawn_worker(task_id: str, title: str, repo: str) -> bool:
         )
         _worker_processes[task_id] = proc
         _worker_spawn_times[task_id] = time.monotonic()
-
-        # Quick aliveness check: if the process died within 500ms of spawn,
-        # unclaim immediately and return False
-        try:
-            proc.wait(timeout=0.5)
-            # Process exited immediately — crash on launch
-            exit_code = proc.poll()
-            crash_count = _worker_crash_counts.get(task_id, 0) + 1
-            _worker_crash_counts[task_id] = crash_count
-            print(f"[scheduler] Worker for {task_id[:20]} crashed on launch (exit={exit_code}, crash#{crash_count})")
-            _worker_processes.pop(task_id, None)
-            _worker_spawn_times.pop(task_id, None)
-
-            # If this task has crashed >= 3 times, block it so we stop retrying
-            if crash_count >= 3:
-                print(f"[scheduler] Worker for {task_id[:20]} reached {crash_count} crashes — will block")
-                # Don't reset here — let dispatcher handle the block + reset
-                return False
-
-            return False
-        except subprocess.TimeoutExpired:
-            # Process is still alive after 500ms — good
-            pass
-
         return True
     except Exception as e:
         print(f"[scheduler] Failed to spawn worker for {task_id[:20]}: {e}")
@@ -160,57 +135,37 @@ def _spawn_worker(task_id: str, title: str, repo: str) -> bool:
 
 
 def _get_worker_count() -> int:
-    """Count live worker processes. Prunes dead entries."""
+    """Count live worker processes. Does NOT prune — death watcher owns that."""
     alive = 0
-    dead = []
-    now = time.monotonic()
     for tid, proc in _worker_processes.items():
-        if proc.poll() is None:
+        if proc and proc.poll() is None:
             alive += 1
-        else:
-            dead.append(tid)
-    for tid in dead:
-        _worker_processes.pop(tid, None)
-        _worker_spawn_times.pop(tid, None)
-    # Periodic crash count reset for stale entries
-    for tid in list(_worker_crash_counts.keys()):
-        if tid not in _worker_spawn_times:
-            # Task no longer has a live worker — cleanup over time
-            pass
     return alive
 
 
-def _check_crashed_workers() -> list[tuple[str, int]]:
+def _check_crashed_workers() -> list[tuple[str, int, float]]:
     """Detect workers that died without completing their task.
 
-    Returns list of (task_id, exit_code) for recently-dead workers.
+    Returns list of (task_id, exit_code, spawn_time_monotonic).
+    Does NOT pop from dicts — the caller (worker_death_watcher) owns cleanup.
     """
     now = time.monotonic()
-    crashed: list[tuple[str, int]] = []
-    dead: list[str] = []
+    crashed: list[tuple[str, int, float]] = []
 
-    for tid, proc in _worker_processes.items():
+    for tid, proc in list(_worker_processes.items()):
         exit_code = proc.poll()
         if exit_code is not None:
             spawn_time = _worker_spawn_times.get(tid, now)
-            age = now - spawn_time
 
-            dead.append(tid)
-
-            if age < _IMMEDIATE_CRASH_THRESHOLD:
+            if now - spawn_time < _IMMEDIATE_CRASH_THRESHOLD:
                 # Died within threshold — definitely a launch crash
                 count = _worker_crash_counts.get(tid, 0) + 1
                 _worker_crash_counts[tid] = count
             else:
-                # Died after running for a bit — could be natural completion
-                # or a crash during execution; let the stale_watcher handle it
+                # Died after running — wasn't caught by 500ms check
                 _worker_crash_counts.pop(tid, None)
 
-            crashed.append((tid, exit_code))
-
-    for tid in dead:
-        _worker_processes.pop(tid, None)
-        _worker_spawn_times.pop(tid, None)
+            crashed.append((tid, exit_code, spawn_time))
 
     return crashed
 
@@ -253,6 +208,8 @@ async def task_dispatcher(interval: int):
 
             worker_count = _get_worker_count()
             if worker_count >= settings.max_workers:
+                if worker_count % 60 == 0:  # Log ~every 2 min at 30s interval
+                    print(f"[scheduler:dispatcher] All {settings.max_workers} worker slots full — waiting")
                 continue
 
             # Check memory pressure
@@ -306,22 +263,7 @@ async def task_dispatcher(interval: int):
                     {"agent_id": settings.agent_id},
                 )
                 if result and "error" not in str(result):
-                    spawned = _spawn_worker(tid, title, repo)
-                    if not spawned:
-                        # Worker crashed on launch — unclaim the task
-                        await _api_post(
-                            f"/api/tasks/{tid}/unclaim",
-                            {"agent_id": settings.agent_id},
-                        )
-                        # Track crash — if >5 launch failures for this task, leave it
-                        crash_count = _worker_crash_counts.get(tid, 0)
-                        if crash_count >= 3:
-                            # Mark as blocked so we don't keep retrying
-                            await _api_post(
-                                f"/api/tasks/{tid}/block",
-                                {"reason": f"Worker crashed on launch {crash_count}x — check KANBAN_LLM_WORKER config"},
-                            )
-                            _reset_worker_crash_count(tid)
+                    _spawn_worker(tid, title, repo)
 
         except asyncio.CancelledError:
             break
@@ -522,12 +464,11 @@ async def template_trigger(interval: int):
 async def worker_death_watcher(interval: int):
     """Detect workers that crashed without completing their task.
 
-    Runs every `interval` seconds. For each crashed worker:
-    - Quick death (<3s): Unclaim immediately (crash-on-launch)
-    - Slow death: Let stale_watcher handle it via heartbeat timeout
-    - Track crash count: after 3 crashes for same task in <1hr, block it
+    Runs every `interval` seconds. Owns cleanup of worker process dicts.
+    For each crashed worker:
+    - Quick death (<3s): Unclaim immediately (crash-on-launch), block after 3x
+    - Slow death (>3s): Unclaim, let stale_watcher handle heartbeat timeout
     """
-    now = time.monotonic()
     while True:
         try:
             await asyncio.sleep(interval)
@@ -536,13 +477,27 @@ async def worker_death_watcher(interval: int):
             if not crashed:
                 continue
 
-            for tid, exit_code in crashed:
-                spawn_time = _worker_spawn_times.get(tid, now)
+            now = time.monotonic()
+            for tid, exit_code, spawn_time in crashed:
                 age = now - spawn_time if spawn_time else 0
 
+                # Read stderr from crashed worker
+                proc = _worker_processes.get(tid)
+                stderr_text = ""
+                if proc:
+                    try:
+                        stderr_data = proc.stderr.read()
+                        if stderr_data:
+                            _worker_stderr_data[tid] = stderr_data
+                            decoded = stderr_data.decode("utf-8", errors="replace")[:2000]
+                            if decoded.strip():
+                                stderr_text = f" | stderr: {decoded.strip()[:200]}"
+                    except Exception:
+                        pass
+
                 if age < _IMMEDIATE_CRASH_THRESHOLD:
-                    # Immediate crash — unclaim immediately
-                    print(f"[scheduler:deathwatch] Task {tid[:20]} worker crashed (exit={exit_code}, age={age:.1f}s) — unclaiming")
+                    # Immediate crash — unclaim and potentially block
+                    print(f"[scheduler:deathwatch] Task {tid[:20]} worker crashed (exit={exit_code}, age={age:.1f}s){stderr_text}")
                     await _api_post(
                         f"/api/tasks/{tid}/unclaim",
                         {"agent_id": settings.agent_id},
@@ -550,7 +505,6 @@ async def worker_death_watcher(interval: int):
 
                     crash_count = _worker_crash_counts.get(tid, 0)
                     if crash_count >= 3:
-                        # Block the task to stop crash-looping
                         print(f"[scheduler:deathwatch] Task {tid[:20]} crashed {crash_count}x — blocking")
                         await _api_post(
                             f"/api/tasks/{tid}/block",
@@ -559,11 +513,16 @@ async def worker_death_watcher(interval: int):
                         _reset_worker_crash_count(tid)
                 else:
                     # Worker ran for a while but died — unclaim
-                    print(f"[scheduler:deathwatch] Task {tid[:20]} worker died after {age:.0f}s (exit={exit_code}) — unclaiming")
+                    print(f"[scheduler:deathwatch] Task {tid[:20]} worker died after {age:.0f}s (exit={exit_code}){stderr_text}")
                     await _api_post(
                         f"/api/tasks/{tid}/unclaim",
                         {"agent_id": settings.agent_id},
                     )
+
+                # Clean up process tracking after handling
+                _worker_processes.pop(tid, None)
+                _worker_spawn_times.pop(tid, None)
+                _worker_stderr_data.pop(tid, None)
 
         except asyncio.CancelledError:
             break
