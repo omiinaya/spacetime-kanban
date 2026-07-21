@@ -305,6 +305,22 @@ async def get_task(task_id: str):
 async def create_task(body: TaskCreate):
     import uuid as _uuid
 
+    # ── DEDUP: check for existing task with same title+repo that isn't done ──
+    if body.title and body.repo:
+        sanitized_title = body.title.replace("'", "''")
+        sanitized_repo = body.repo.replace("'", "''")
+        existing = await _sql_param(
+            "SELECT id, status FROM tasks WHERE title = '{title}' "
+            "AND repo = '{repo}' AND status != 'done' LIMIT 1",
+            title=sanitized_title, repo=sanitized_repo,
+        )
+        if existing:
+            return {
+                "status": "exists",
+                "id": existing[0]["id"],
+                "message": f"Task with same title already exists in {body.repo} (status: {existing[0]['status']})",
+            }
+
     task_id = f"task_{_uuid.uuid4().hex[:16]}"
     await _call(
         "add_task",

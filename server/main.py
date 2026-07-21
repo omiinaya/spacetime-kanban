@@ -70,7 +70,16 @@ async def lifespan(app: FastAPI):
     if not stdb_ok:
         print(f"CRITICAL: Could not reach SpacetimeDB at {settings.stdb_base_url} — exiting")
         os._exit(1)
+
+    # ── Start background scheduler ──
+    from scheduler import start_scheduler, stop_scheduler
+
+    await start_scheduler()
+
     yield
+
+    # ── Stop background scheduler on shutdown ──
+    await stop_scheduler()
 
 
 app = FastAPI(
