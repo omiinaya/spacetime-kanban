@@ -124,7 +124,7 @@ export function useRealtimeTasks() {
       if (cancelled()) return
       const attempt = reconnectRef.current
       const delay = RECONNECT_DELAYS[Math.min(attempt, RECONNECT_DELAYS.length - 1)]
-      console.log(`STDB reconnect in ${delay}ms (attempt ${attempt + 1})`)
+      console.warn(`STDB reconnect in ${delay}ms (attempt ${attempt + 1})`)
       reconnectTimer = setTimeout(() => {
         if (cancelled()) return
         reconnectRef.current++

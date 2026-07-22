@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import sys
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import issue_sync
 from config import settings
@@ -161,21 +162,21 @@ async def _sync_to_github(task_id: str, event: str, notes: str = ""):
         return
     try:
         if event == "completed":
-            issue_sync.close_issue(token, repo, issue_number)
+            await issue_sync.close_issue(token, repo, issue_number)
             issue_sync.update_issue_status(task_id, "closed")
             if notes:
                 try:
-                    issue_sync.add_issue_comment(
+                    await issue_sync.add_issue_comment(
                         token, repo, issue_number, f"✅ Kanban task completed: {notes}"
                     )
                 except Exception as e:
                     print(f"[warn] Failed to add comment for issue {issue_number}: {e}")
         elif event == "unclaimed":
-            issue_sync.reopen_issue(token, repo, issue_number)
+            await issue_sync.reopen_issue(token, repo, issue_number)
             issue_sync.update_issue_status(task_id, "open")
             if notes:
                 try:
-                    issue_sync.add_issue_comment(
+                    await issue_sync.add_issue_comment(
                         token, repo, issue_number, f"🔄 Kanban task reopened: {notes}"
                     )
                 except Exception as e:

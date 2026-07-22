@@ -101,7 +101,7 @@ async def create_issue_from_task(body: IssueCreateRequest):
     )
     issue_body += meta
 
-    result = issue_sync.create_issue(
+    result = await issue_sync.create_issue(
         token,
         repo_full,
         task["title"],

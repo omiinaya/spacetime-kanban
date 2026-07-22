@@ -151,7 +151,9 @@ class WorkerContext:
             {"reason": reason or "Blocked by worker"},
         )
         if is_permanent and result:
-            print(f"[worker] Permanent block on {self.task_id[:20]}: {reason[:80]}", file=sys.stderr)
+            print(
+                f"[worker] Permanent block on {self.task_id[:20]}: {reason[:80]}", file=sys.stderr
+            )
         return result is not None
 
     def unclaim(self) -> bool:

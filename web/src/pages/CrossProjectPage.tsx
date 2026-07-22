@@ -10,9 +10,14 @@ const STATUS_COLORS: Record<string, string> = {
   done: '#8b5cf6',
 }
 
+interface ProjectInfo {
+  name?: string
+  color?: string
+  [key: string]: unknown
+}
+
 interface CrossProjectData {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API returns dynamic project fields with no static type
-  project: any
+  project: ProjectInfo
   total: number
   by_status: Record<string, number>
   by_priority: Record<string, number>

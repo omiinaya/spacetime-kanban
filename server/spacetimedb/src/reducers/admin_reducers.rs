@@ -30,7 +30,7 @@ pub fn seed_sample_tasks(ctx: &ReducerContext) -> Result<(), String> {
                         title: title.to_string(),
                         description: desc.to_string(),
                         priority,
-                        status: "available".to_string(),
+                        status: TaskStatus::Available,
                         assigned_to: None,
                         repo: repo.to_string(),
                         branch: None,
@@ -94,7 +94,7 @@ pub fn register_agent(
         existing.host = host;
         existing.capabilities = cap_opt;
         existing.repo_focus = repo_opt;
-        existing.status = "online".to_string();
+        existing.status = SwarmAgentStatus::Online;
         existing.last_heartbeat = now;
         update_agent_in_db(ctx, &existing);
         log_action(ctx, &agent_id, "agent_reconnected", Some(&agent_id), None);
@@ -105,7 +105,7 @@ pub fn register_agent(
             capabilities: cap_opt,
             repo_focus: repo_opt,
             current_task_id: None,
-            status: "online".to_string(),
+            status: SwarmAgentStatus::Online,
             last_heartbeat: now,
             first_seen: now,
         });
@@ -130,10 +130,16 @@ pub fn agent_heartbeat(
     } else {
         Some(current_task_id)
     };
-    let new_status = if status == "busy" || task_opt.is_some() {
-        "busy".to_string()
+    let agent_status = match status.as_str() {
+        "online" => SwarmAgentStatus::Online,
+        "busy" => SwarmAgentStatus::Busy,
+        "offline" => SwarmAgentStatus::Offline,
+        _ => SwarmAgentStatus::Online,
+    };
+    let new_status = if agent_status == SwarmAgentStatus::Busy || task_opt.is_some() {
+        SwarmAgentStatus::Busy
     } else {
-        "online".to_string()
+        SwarmAgentStatus::Online
     };
 
     agent.current_task_id = task_opt;
@@ -293,7 +299,7 @@ pub fn link_issue(
         repo,
         issue_url,
         html_url,
-        status: "open".to_string(),
+        status: IssueLinkStatus::Open,
         linked_at: now,
     });
     Ok(())
@@ -318,7 +324,12 @@ pub fn update_issue_link_status(
 ) -> Result<(), String> {
     let mut link = find_issue_link(ctx, &kanban_task_id)
         .ok_or_else(|| "Issue link not found".to_string())?;
-    link.status = status;
+    let new_status = match status.as_str() {
+        "open" => IssueLinkStatus::Open,
+        "closed" => IssueLinkStatus::Closed,
+        _ => IssueLinkStatus::Open,
+    };
+    link.status = new_status;
     let old: Vec<IssueLink> = ctx
         .db
         .issue_links()

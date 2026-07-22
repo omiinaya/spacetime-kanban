@@ -39,13 +39,33 @@ from webhook_dispatcher import (
 
 API_BASE = f"http://localhost:{settings.server_port}"
 
+# Shared httpx client — reused across all scheduler API calls to avoid
+# creating a fresh connection pool (with TCP handshake) every single tick.
+_client: httpx.AsyncClient | None = None
+_client_limits = httpx.Limits(
+    max_keepalive_connections=10,
+    max_connections=20,
+    keepalive_expiry=30,
+)
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Get or create the shared httpx client."""
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(
+            timeout=httpx.Timeout(15.0, connect=3.0),
+            limits=_client_limits,
+        )
+    return _client
+
 
 async def _api_get(path: str, timeout: float = 15) -> Any:
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.get(f"{API_BASE}{path}")
-            if resp.status_code == 200:
-                return resp.json()
+        client = _get_client()
+        resp = await client.get(f"{API_BASE}{path}", timeout=timeout)
+        if resp.status_code == 200:
+            return resp.json()
         return None
     except Exception:
         return None
@@ -53,10 +73,10 @@ async def _api_get(path: str, timeout: float = 15) -> Any:
 
 async def _api_post(path: str, data: dict, timeout: float = 15) -> dict | None:
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(f"{API_BASE}{path}", json=data)
-            if resp.status_code < 500:
-                return resp.json() if resp.content else {"status": "ok"}
+        client = _get_client()
+        resp = await client.post(f"{API_BASE}{path}", json=data, timeout=timeout)
+        if resp.status_code < 500:
+            return resp.json() if resp.content else {"status": "ok"}
         return None
     except Exception:
         return None
@@ -64,9 +84,9 @@ async def _api_post(path: str, data: dict, timeout: float = 15) -> dict | None:
 
 async def _api_delete(path: str, timeout: float = 15) -> bool:
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.delete(f"{API_BASE}{path}")
-            return resp.status_code == 200
+        client = _get_client()
+        resp = await client.delete(f"{API_BASE}{path}", timeout=timeout)
+        return resp.status_code == 200
     except Exception:
         return False
 
@@ -81,6 +101,7 @@ _worker_processes: dict[str, subprocess.Popen] = {}  # task_id -> Popen
 _worker_spawn_times: dict[str, float] = {}  # task_id -> time.monotonic()
 _worker_crash_counts: dict[str, int] = {}  # task_id -> consecutive immediate crashes
 _worker_stderr_data: dict[str, bytes] = {}  # task_id -> captured stderr on crash
+scheduler_start_time: float | None = None  # set when start_scheduler() runs
 _CRASH_RESET_INTERVAL = 3600  # Reset crash count after 1 hour
 _IMMEDIATE_CRASH_THRESHOLD = 3.0  # seconds — die within this = crash-on-launch
 
@@ -239,11 +260,7 @@ async def task_dispatcher(interval: int):
 
             # Filter out tasks that have exhausted their retry budget
             # (permanent-block tasks go straight to "blocked", not "available")
-            eligible = [
-                t
-                for t in available
-                if t.get("fail_count", 0) < t.get("max_attempts", 3)
-            ]
+            eligible = [t for t in available if t.get("fail_count", 0) < t.get("max_attempts", 3)]
 
             # Sort: priority asc (P0 first), then fail_count asc, then oldest first
             eligible.sort(
@@ -672,10 +689,16 @@ async def start_scheduler():
     Called from the FastAPI lifespan startup.
     Each loop is an independent asyncio task with configurable interval.
     """
-    global _scheduler_tasks
+    global _scheduler_tasks, _client, scheduler_start_time
+    scheduler_start_time = time.time()
     if not settings.scheduler_enabled:
         print("[scheduler] Disabled via config")
         return
+
+    # Pre-create the shared httpx client (with connection pooling) so the
+    # first tick of every loop doesn't pay a lazy-init penalty.
+    _get_client()
+    print("[scheduler] Shared httpx client initialized")
 
     loops = []
 
@@ -711,10 +734,16 @@ async def start_scheduler():
 
 async def stop_scheduler():
     """Cancel all scheduler tasks. Called from lifespan shutdown."""
-    global _scheduler_tasks
+    global _scheduler_tasks, _client
     for task in _scheduler_tasks:
         task.cancel()
     if _scheduler_tasks:
         await asyncio.gather(*_scheduler_tasks, return_exceptions=True)
     _scheduler_tasks = []
     print("[scheduler] All loops stopped")
+
+    # Close the shared httpx client, releasing connection pool
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+        print("[scheduler] Shared httpx client closed")
