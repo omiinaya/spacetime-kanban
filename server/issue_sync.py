@@ -120,9 +120,11 @@ def get_link(task_id: str) -> dict | None:
 
 def get_task_id_for_issue(repo: str, issue_number: int) -> str | None:
     """Reverse lookup: find kanban task ID by GitHub issue."""
-    rows = _stdb_sql(
-        f"SELECT kanban_task_id FROM issue_links "
-        f"WHERE repo = '{repo}' AND issue_number = {issue_number}"
+    rows = _sql_param(
+        "SELECT kanban_task_id FROM issue_links "
+        "WHERE repo = '{repo}' AND issue_number = '{issue_number}'",
+        repo=repo,
+        issue_number=str(issue_number),
     )
     if rows:
         return rows[0].get("kanban_task_id")

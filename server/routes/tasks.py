@@ -99,6 +99,7 @@ async def list_tasks(
     search: str | None = None,
     archived: bool | None = None,
     limit: int = 2000,
+    offset: int = 0,
 ):
     # If label filter provided, first get task IDs with that label
     label_task_ids: set[str] | None = None
@@ -124,6 +125,7 @@ async def list_tasks(
         sql += " WHERE " + " AND ".join(filters)
     # Server-side LIMIT — 2000 default, 5000 hard cap
     sql += f" LIMIT {min(limit, 5000)}"
+    sql += f" OFFSET {max(offset, 0)}"
     if params:
         rows = await _sql_param(sql, **params)
     else:

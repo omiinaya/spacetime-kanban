@@ -130,7 +130,12 @@ def mock_webhooks():
 async def test_health(client):
     resp = await client.get("/api/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    data = resp.json()
+    assert data["status"] == "ok"
+    # Health endpoint now includes scheduler state and board overview
+    assert "workers" in data
+    assert "crashes" in data
+    assert "board" in data
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -200,7 +205,7 @@ async def test_list_tasks_with_repo_and_search(client, mock_all):
 async def test_create_task(client, mock_all):
     """Task creation should return the created task with status=available."""
     mock_all["call"].return_value = {"status": "ok"}
-    mock_all["param"].return_value = [_make_task("task_new", "New task")]
+    mock_all["param"].return_value = []  # empty = no dedup match, create proceeds
     resp = await client.post(
         "/api/tasks", json={"title": "New task", "priority": 5, "repo": "test"}
     )
@@ -228,7 +233,7 @@ async def test_create_task_with_due_by(client, mock_all):
     """Task creation with due_by should preserve the deadline."""
     due_by_ms = 1893456000000  # 2030-01-01
     mock_all["call"].return_value = {"status": "ok"}
-    mock_all["param"].return_value = [_make_task("task_due", "Due task", due_by=due_by_ms)]
+    mock_all["param"].return_value = []  # empty = no dedup match, create proceeds
     resp = await client.post(
         "/api/tasks",
         json={
