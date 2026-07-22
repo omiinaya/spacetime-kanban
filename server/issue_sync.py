@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 from typing import Any
 from urllib.error import HTTPError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 import httpx
@@ -212,7 +213,7 @@ def search_issues(token: str, repo: str, query: str) -> list[dict]:
 
     Returns a list of matching issues (title, number, html_url, state).
     """
-    url = f"{GITHUB_API}/search/issues?q=repo:{repo}+{query}&per_page=10"
+    url = f"{GITHUB_API}/search/issues?q=repo:{repo}+{quote(query)}&per_page=10"
     result = _gh_request("GET", url, token)
     items = result.get("items", [])
     return [

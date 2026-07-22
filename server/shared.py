@@ -179,6 +179,7 @@ from models import (  # noqa: E402, F401
     MaxAttemptsRequest,
     MigrationCreate,
     MigrationOut,
+    PermanentBlockRequest,
     ProjectCreate,
     ProjectOut,
     ProjectUpdate,

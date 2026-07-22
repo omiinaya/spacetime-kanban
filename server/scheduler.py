@@ -209,7 +209,9 @@ async def task_dispatcher(interval: int):
             worker_count = _get_worker_count()
             if worker_count >= settings.max_workers:
                 if worker_count % 60 == 0:  # Log ~every 2 min at 30s interval
-                    print(f"[scheduler:dispatcher] All {settings.max_workers} worker slots full — waiting")
+                    print(
+                        f"[scheduler:dispatcher] All {settings.max_workers} worker slots full — waiting"
+                    )
                 continue
 
             # Check memory pressure
@@ -235,11 +237,12 @@ async def task_dispatcher(interval: int):
             if not available:
                 continue
 
-            # Filter out doomed and backoff tasks
+            # Filter out tasks that have exhausted their retry budget
+            # (permanent-block tasks go straight to "blocked", not "available")
             eligible = [
                 t
                 for t in available
-                if t.get("fail_count", 0) < t.get("max_attempts", 3) and not t.get("fail_reason")
+                if t.get("fail_count", 0) < t.get("max_attempts", 3)
             ]
 
             # Sort: priority asc (P0 first), then fail_count asc, then oldest first
@@ -460,6 +463,7 @@ async def repo_scanner(interval: int):
             print("[scheduler:scanner] Starting repo scan...")
             loop = asyncio.get_event_loop()
             import functools
+
             results = await loop.run_in_executor(None, functools.partial(run_all_scanners))
             total_created = sum(c.get("created", 0) for c in results.values())
             print(f"[scheduler:scanner] Done: {total_created} new task(s) created")
@@ -468,6 +472,7 @@ async def repo_scanner(interval: int):
         except Exception as e:
             print(f"[scheduler:scanner] Error: {e}")
             import traceback
+
             traceback.print_exc()
 
 
@@ -491,7 +496,8 @@ async def task_archiver(interval: int):
             done_tasks = await _api_get(f"/api/tasks?status=done&archived=false&limit=500")
             if done_tasks:
                 old_done = [
-                    t["id"] for t in done_tasks
+                    t["id"]
+                    for t in done_tasks
                     if t.get("updated_at", 0) and (now_ms - t["updated_at"]) > 7 * day_ms
                 ]
                 if old_done:
@@ -503,7 +509,8 @@ async def task_archiver(interval: int):
             blocked_tasks = await _api_get(f"/api/tasks?status=blocked&archived=false&limit=500")
             if blocked_tasks:
                 old_blocked = [
-                    t["id"] for t in blocked_tasks
+                    t["id"]
+                    for t in blocked_tasks
                     if t.get("updated_at", 0) and (now_ms - t["updated_at"]) > day_ms
                 ]
                 if old_blocked:
@@ -515,7 +522,8 @@ async def task_archiver(interval: int):
                 # These were likely blocked by the old buggy /block endpoint
                 # that didn't store fail_reason. Reset them for proper processing.
                 stuck_blocked = [
-                    t["id"] for t in blocked_tasks
+                    t["id"]
+                    for t in blocked_tasks
                     if not t.get("fail_reason") and t.get("assigned_to")
                 ]
                 if stuck_blocked:
@@ -591,7 +599,9 @@ async def worker_death_watcher(interval: int):
 
                 if age < _IMMEDIATE_CRASH_THRESHOLD:
                     # Immediate crash — unclaim and potentially block
-                    print(f"[scheduler:deathwatch] Task {tid[:20]} worker crashed (exit={exit_code}, age={age:.1f}s){stderr_text}")
+                    print(
+                        f"[scheduler:deathwatch] Task {tid[:20]} worker crashed (exit={exit_code}, age={age:.1f}s){stderr_text}"
+                    )
                     await _api_post(
                         f"/api/tasks/{tid}/unclaim",
                         {"agent_id": settings.agent_id},
@@ -599,7 +609,9 @@ async def worker_death_watcher(interval: int):
 
                     crash_count = _worker_crash_counts.get(tid, 0)
                     if crash_count >= 3:
-                        print(f"[scheduler:deathwatch] Task {tid[:20]} crashed {crash_count}x — blocking")
+                        print(
+                            f"[scheduler:deathwatch] Task {tid[:20]} crashed {crash_count}x — blocking"
+                        )
                         await _api_post(
                             f"/api/tasks/{tid}/block",
                             {"reason": f"Worker crashed on launch {crash_count}x"},
@@ -607,7 +619,9 @@ async def worker_death_watcher(interval: int):
                         _reset_worker_crash_count(tid)
                 else:
                     # Worker ran for a while but died — unclaim
-                    print(f"[scheduler:deathwatch] Task {tid[:20]} worker died after {age:.0f}s (exit={exit_code}){stderr_text}")
+                    print(
+                        f"[scheduler:deathwatch] Task {tid[:20]} worker died after {age:.0f}s (exit={exit_code}){stderr_text}"
+                    )
                     await _api_post(
                         f"/api/tasks/{tid}/unclaim",
                         {"agent_id": settings.agent_id},
@@ -622,6 +636,29 @@ async def worker_death_watcher(interval: int):
             break
         except Exception as e:
             print(f"[scheduler:deathwatch] Error: {e}")
+
+
+async def _seed_initial_workers():
+    """Claim and spawn workers immediately on startup (one-shot)."""
+    try:
+        available = await _api_get("/api/tasks?status=available&limit=50")
+        if not available:
+            return
+
+        eligible = [t for t in available if t.get("fail_count", 0) < t.get("max_attempts", 3)]
+        eligible.sort(key=lambda t: (t.get("priority", 5), t.get("created_at", 0)))
+
+        slots = settings.max_workers
+        for task in eligible[:slots]:
+            tid = task.get("id", "")
+            title = task.get("title", "?")
+            repo = task.get("repo", "")
+            result = await _api_post(f"/api/tasks/{tid}/claim", {"agent_id": settings.agent_id})
+            if result and "error" not in str(result):
+                _spawn_worker(tid, title, repo)
+                print(f"[scheduler:seed] Spawned worker for {tid[:20]} — {title[:40]}")
+    except Exception as e:
+        print(f"[scheduler:seed] Error: {e}")
 
 
 # ── Scheduler lifecycle ──────────────────────────────────────────────
@@ -665,6 +702,11 @@ async def start_scheduler():
         print(f"[scheduler] Started '{name}' (every {interval}s)")
 
     print(f"[scheduler] {len(loops)} loops running")
+
+    # Seed initial worker immediately — don't wait for the 30s dispatcher tick
+    if settings.worker_script:
+        print("[scheduler] Seeding initial worker(s)...")
+        asyncio.create_task(_seed_initial_workers())
 
 
 async def stop_scheduler():

@@ -16,6 +16,7 @@ Environment variables:
     AGENT_ID        — agent identity (default: hermes)
     KANBAN_LLM_WORKER — LLM command (default: hermes chat -q)
 """
+
 import sys
 import os
 

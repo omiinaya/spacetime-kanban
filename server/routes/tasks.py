@@ -26,6 +26,7 @@ from shared import (
     CompleteRequest,
     LabelOut,
     MaxAttemptsRequest,
+    PermanentBlockRequest,
     ReorderRequest,
     SetDependencyRequest,
     SetSkillsRequest,
@@ -507,25 +508,35 @@ async def complete_task(task_id: str, body: CompleteRequest | None = None):
     return {"status": "completed", "task_id": task_id}
 
 
+def _maybe_notify_blocked(task_id: str, rows: list[dict], reason: str):
+    """Notify on first block only — skip repeat alerts for retried tasks."""
+    if not rows:
+        return
+    task = rows[0]
+    fail_count = task.get("fail_count", 0)
+    if fail_count != 1:
+        return  # Only alert on first failure (fail_count became 1)
+    asyncio.ensure_future(_notify("blocked", task, reason))
+    asyncio.ensure_future(
+        fire_event(
+            EVENT_TASK_BLOCKED,
+            {
+                "task_id": task_id,
+                "title": task.get("title", "?")[:80],
+                "repo": task.get("repo", "?"),
+                "reason": reason or "",
+            },
+        )
+    )
+
+
 @router.post("/api/tasks/{task_id}/block", dependencies=[Depends(verify_auth)])
 async def block_task(task_id: str, body: BlockRequest | None = None):
     if body is None:
         body = BlockRequest()
     await _call("block_task", [task_id, body.reason])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
-    if rows:
-        asyncio.ensure_future(_notify("blocked", rows[0], body.reason))
-        asyncio.ensure_future(
-            fire_event(
-                EVENT_TASK_BLOCKED,
-                {
-                    "task_id": task_id,
-                    "title": rows[0].get("title", "?")[:80],
-                    "repo": rows[0].get("repo", "?"),
-                    "reason": body.reason or "",
-                },
-            )
-        )
+    _maybe_notify_blocked(task_id, rows, body.reason)
     return {"status": "blocked", "task_id": task_id}
 
 
@@ -533,20 +544,18 @@ async def block_task(task_id: str, body: BlockRequest | None = None):
 async def block_task_with_reason(task_id: str, body: BlockWithReasonRequest):
     await _call("block_task_with_reason", [task_id, body.reason])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
-    if rows:
-        asyncio.ensure_future(_notify("blocked", rows[0], body.reason))
-        asyncio.ensure_future(
-            fire_event(
-                EVENT_TASK_BLOCKED,
-                {
-                    "task_id": task_id,
-                    "title": rows[0].get("title", "?")[:80],
-                    "repo": rows[0].get("repo", "?"),
-                    "reason": body.reason or "",
-                },
-            )
-        )
+    _maybe_notify_blocked(task_id, rows, body.reason)
     return {"status": "blocked", "task_id": task_id, "reason": body.reason}
+
+
+@router.post("/api/tasks/{task_id}/permanent-block", dependencies=[Depends(verify_auth)])
+async def permanent_block_task(task_id: str, body: PermanentBlockRequest):
+    """Block a task permanently (no retry). Sets max_attempts=1 then blocks."""
+    await _call("set_max_attempts", [task_id, 1])
+    await _call("block_task_with_reason", [task_id, body.reason])
+    rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
+    _maybe_notify_blocked(task_id, rows, body.reason)
+    return {"status": "permanently_blocked", "task_id": task_id, "reason": body.reason}
 
 
 @router.post("/api/tasks/{task_id}/split", dependencies=[Depends(verify_auth)])
@@ -739,7 +748,8 @@ async def delete_comment(task_id: str, comment_id: str):
 @router.post("/api/tasks/{task_id}/log", dependencies=[Depends(verify_auth)])
 async def add_task_log(task_id: str, body: AddLogRequest):
     """Add an activity log entry to a task."""
-    await _call("add_log", [body.task_id, body.action, body.agent_id, body.notes])
+    log_task_id = body.task_id or task_id  # Allow body to omit task_id
+    await _call("add_log", [log_task_id, body.action, body.agent_id, body.notes])
     return {"status": "logged", "task_id": task_id}
 
 

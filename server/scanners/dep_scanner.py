@@ -57,26 +57,29 @@ def _check_cargo_deps(repo_name: str, repo_path: str) -> list[dict]:
         deps = data.get("dependencies", {})
         for dep_name, dep_spec in deps.items():
             if isinstance(dep_spec, str) and dep_spec.startswith("="):
-                findings.append({
-                    "title": f"Unpin {dep_name} in {os.path.basename(os.path.dirname(path))}/Cargo.toml",
-                    "description": f"`{dep_name}` is pinned to exact version `{dep_spec}` in {path}. "
-                                  f"Consider using `{dep_spec[1:]}` or a semver range to get bug fixes.",
-                    "priority": 3,
-                    "scanner": "deps",
-                })
+                findings.append(
+                    {
+                        "title": f"Unpin {dep_name} in {os.path.basename(os.path.dirname(path))}/Cargo.toml",
+                        "description": f"`{dep_name}` is pinned to exact version `{dep_spec}` in {path}. "
+                        f"Consider using `{dep_spec[1:]}` or a semver range to get bug fixes.",
+                        "priority": 3,
+                        "scanner": "deps",
+                    }
+                )
 
         # Check for git dependencies (should use crates.io)
-        git_deps = [(n, s) for n, s in deps.items()
-                    if isinstance(s, dict) and "git" in s]
+        git_deps = [(n, s) for n, s in deps.items() if isinstance(s, dict) and "git" in s]
         if git_deps:
             names = ", ".join(n for n, _ in git_deps[:5])
-            findings.append({
-                "title": f"Review {len(git_deps)} git dependencies in {repo_name}",
-                "description": f"{len(git_deps)} dependencies use git URLs instead of crates.io: {names}. "
-                              f"These should be migrated to published versions when available.",
-                "priority": 3,
-                "scanner": "deps",
-            })
+            findings.append(
+                {
+                    "title": f"Review {len(git_deps)} git dependencies in {repo_name}",
+                    "description": f"{len(git_deps)} dependencies use git URLs instead of crates.io: {names}. "
+                    f"These should be migrated to published versions when available.",
+                    "priority": 3,
+                    "scanner": "deps",
+                }
+            )
 
     return findings
 
@@ -98,18 +101,23 @@ def _check_npm_deps(repo_path: str) -> list[dict]:
         deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
 
         # Check for pinned versions (exact with no ^/~)
-        pinned = [(n, v) for n, v in deps.items()
-                  if isinstance(v, str) and re.match(r"^\d+\.\d+\.\d+$", v)]
+        pinned = [
+            (n, v)
+            for n, v in deps.items()
+            if isinstance(v, str) and re.match(r"^\d+\.\d+\.\d+$", v)
+        ]
         if pinned:
             names = ", ".join(f"{n}@{v}" for n, v in pinned[:5])
             rel_root = os.path.relpath(pkg_json, repo_path)
-            findings.append({
-                "title": f"Unpin {len(pinned)} npm deps in {rel_root}",
-                "description": f"{len(pinned)} packages in {rel_root} are pinned to exact versions: {names}. "
-                              f"Use ^ or ~ ranges to get patch/minor updates automatically.",
-                "priority": 3,
-                "scanner": "deps",
-            })
+            findings.append(
+                {
+                    "title": f"Unpin {len(pinned)} npm deps in {rel_root}",
+                    "description": f"{len(pinned)} packages in {rel_root} are pinned to exact versions: {names}. "
+                    f"Use ^ or ~ ranges to get patch/minor updates automatically.",
+                    "priority": 3,
+                    "scanner": "deps",
+                }
+            )
 
         # Check for duplicate deps across root and web/
         if root == repo_path and os.path.isfile(os.path.join(repo_path, "web", "package.json")):
@@ -117,17 +125,22 @@ def _check_npm_deps(repo_path: str) -> list[dict]:
             try:
                 with open(web_pkg) as f:
                     web_data = json.load(f)
-                web_deps = {**web_data.get("dependencies", {}), **web_data.get("devDependencies", {})}
+                web_deps = {
+                    **web_data.get("dependencies", {}),
+                    **web_data.get("devDependencies", {}),
+                }
                 duplicates = set(deps.keys()) & set(web_deps.keys())
                 if duplicates:
                     names = ", ".join(sorted(duplicates)[:5])
-                    findings.append({
-                        "title": f"Deduplicate npm deps shared between root and web/",
-                        "description": f"{len(duplicates)} packages appear in both root and web/package.json: {names}. "
-                                      f"Consider hoisting shared deps to the root or using a workspace.",
-                        "priority": 3,
-                        "scanner": "deps",
-                    })
+                    findings.append(
+                        {
+                            "title": f"Deduplicate npm deps shared between root and web/",
+                            "description": f"{len(duplicates)} packages appear in both root and web/package.json: {names}. "
+                            f"Consider hoisting shared deps to the root or using a workspace.",
+                            "priority": 3,
+                            "scanner": "deps",
+                        }
+                    )
             except Exception:
                 pass
 

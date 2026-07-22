@@ -74,6 +74,10 @@ class ClaimRequest(BaseModel):
     agent_id: str
 
 
+class PermanentBlockRequest(BaseModel):
+    reason: str = ""
+
+
 class BlockRequest(BaseModel):
     reason: str = ""
 
@@ -328,7 +332,7 @@ class BatchLabelsRequest(BaseModel):
 
 
 class AddLogRequest(BaseModel):
-    task_id: str
+    task_id: str = ""  # Can also come from URL path
     action: str
     agent_id: str = ""
     notes: str = ""

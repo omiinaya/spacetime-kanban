@@ -21,13 +21,18 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
     findings = []
 
     # ── Python: ruff check for F401 (unused imports) and F841 (unused vars) ──
-    has_python = any(os.path.isfile(os.path.join(repo_path, f)) for f in
-                     ["pyproject.toml", "ruff.toml", "setup.py", "requirements.txt"])
+    has_python = any(
+        os.path.isfile(os.path.join(repo_path, f))
+        for f in ["pyproject.toml", "ruff.toml", "setup.py", "requirements.txt"]
+    )
     if has_python:
         try:
             result = subprocess.run(
                 ["ruff", "check", "--select", "F401,F841", "--output-format=concise", "."],
-                cwd=repo_path, capture_output=True, text=True, timeout=60,
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=60,
             )
             output = result.stdout + result.stderr
             # Count by file
@@ -46,12 +51,14 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
                 if len(files) > 5:
                     file_summary += f"\n  ... and {len(files) - 5} more file(s)"
 
-                findings.append({
-                    "title": f"Remove {total} unused import(s) across {len(files)} file(s) in {repo_name}",
-                    "description": f"Ruff found {total} unused import/variable violations:\\n\\n{file_summary}",
-                    "priority": 2,
-                    "scanner": "unused_code",
-                })
+                findings.append(
+                    {
+                        "title": f"Remove {total} unused import(s) across {len(files)} file(s) in {repo_name}",
+                        "description": f"Ruff found {total} unused import/variable violations:\\n\\n{file_summary}",
+                        "priority": 2,
+                        "scanner": "unused_code",
+                    }
+                )
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
 
@@ -63,19 +70,26 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
         try:
             result = subprocess.run(
                 ["cargo", "check", "--message-format=short", "2>&1"],
-                cwd=target_dir, capture_output=True, text=True, timeout=120,
+                cwd=target_dir,
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
             output = result.stdout + result.stderr
-            dead_code_lines = [l for l in output.split("\n") if "dead_code" in l or "unused import" in l]
+            dead_code_lines = [
+                l for l in output.split("\n") if "dead_code" in l or "unused import" in l
+            ]
             if dead_code_lines and len(dead_code_lines) > 2:  # Ignore boilerplate
-                findings.append({
-                    "title": f"Fix {len(dead_code_lines)} dead_code warnings in {repo_name}",
-                    "description": f"Cargo check reported {len(dead_code_lines)} dead code or unused import warnings. "
-                                  f"Run `cargo fix --allow-dirty` to auto-fix some of these.\n\n"
-                                  f"First warnings:\n" + "\n".join(dead_code_lines[:8]),
-                    "priority": 2,
-                    "scanner": "unused_code",
-                })
+                findings.append(
+                    {
+                        "title": f"Fix {len(dead_code_lines)} dead_code warnings in {repo_name}",
+                        "description": f"Cargo check reported {len(dead_code_lines)} dead code or unused import warnings. "
+                        f"Run `cargo fix --allow-dirty` to auto-fix some of these.\n\n"
+                        f"First warnings:\n" + "\n".join(dead_code_lines[:8]),
+                        "priority": 2,
+                        "scanner": "unused_code",
+                    }
+                )
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
 
@@ -86,7 +100,10 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
         try:
             result = subprocess.run(
                 ["npx", "--yes", "ts-prune", "--summary"],
-                cwd=web_dir, capture_output=True, text=True, timeout=30,
+                cwd=web_dir,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             output = result.stdout + result.stderr
             # Parse ts-prune output for count
@@ -94,13 +111,15 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
             if count_match:
                 count = int(count_match.group(1))
                 if count > 3:
-                    findings.append({
-                        "title": f"Remove {count} unused exports in {repo_name}/web",
-                        "description": f"ts-prune found {count} unused exports in the web frontend. "
-                                      f"Cleaning these up reduces bundle size and improves clarity.",
-                        "priority": 3,
-                        "scanner": "unused_code",
-                    })
+                    findings.append(
+                        {
+                            "title": f"Remove {count} unused exports in {repo_name}/web",
+                            "description": f"ts-prune found {count} unused exports in the web frontend. "
+                            f"Cleaning these up reduces bundle size and improves clarity.",
+                            "priority": 3,
+                            "scanner": "unused_code",
+                        }
+                    )
         except Exception:
             pass
 
