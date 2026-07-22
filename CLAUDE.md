@@ -45,12 +45,15 @@ Validate with: `kanban check-branch`
 
 ## Stale Task Watchdog
 
-A cron auto-releases tasks stuck `in_progress` for >30 minutes. If working on something long-running, update the task periodically:
+The server-side scheduler releases tasks stuck `in_progress` for >35 minutes without a heartbeat. If working on something long-running, send a heartbeat:
 
 ```bash
-kanban complete <task-id> --notes="Checkpoint — still working"
-# Then immediately claim a new task for the remaining work
+curl -s -X POST http://localhost:8727/api/agents/claude-vscode/heartbeat \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "claude-vscode", "status": "busy", "current_task_id": "<task-id>"}'
 ```
+
+On server restart, `_recover_stale_tasks()` immediately unclaims any `in_progress` tasks so nothing gets permanently stuck.
 
 ## Full Reference
 

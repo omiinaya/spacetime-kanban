@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban, LayoutDashboard, CalendarDays, Key, LifeBuoy } from 'lucide-react'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 const BoardPage = lazy(() => import('./pages/BoardPage'))
 const LogsPage = lazy(() => import('./pages/LogsPage'))
@@ -115,20 +116,22 @@ export default function App() {
             <div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
           </div>
         }>
-          <Routes>
-            <Route path="/" element={<BoardPage />} />
-            <Route path="/triage" element={<TriagePage />} />
-            <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/labels" element={<LabelsPage />} />
-            <Route path="/issues" element={<IssuesPage />} />
-            <Route path="/webhooks" element={<WebhooksPage />} />
-            <Route path="/agents" element={<AgentHealthPage />} />
-            <Route path="/logs" element={<LogsPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/cross-project" element={<CrossProjectPage />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/api-keys" element={<ApiKeysPage />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<ErrorBoundary><BoardPage /></ErrorBoundary>} />
+              <Route path="/triage" element={<ErrorBoundary><TriagePage /></ErrorBoundary>} />
+              <Route path="/projects" element={<ErrorBoundary><ProjectsPage /></ErrorBoundary>} />
+              <Route path="/labels" element={<ErrorBoundary><LabelsPage /></ErrorBoundary>} />
+              <Route path="/issues" element={<ErrorBoundary><IssuesPage /></ErrorBoundary>} />
+              <Route path="/webhooks" element={<ErrorBoundary><WebhooksPage /></ErrorBoundary>} />
+              <Route path="/agents" element={<ErrorBoundary><AgentHealthPage /></ErrorBoundary>} />
+              <Route path="/logs" element={<ErrorBoundary><LogsPage /></ErrorBoundary>} />
+              <Route path="/analytics" element={<ErrorBoundary><AnalyticsPage /></ErrorBoundary>} />
+              <Route path="/cross-project" element={<ErrorBoundary><CrossProjectPage /></ErrorBoundary>} />
+              <Route path="/calendar" element={<ErrorBoundary><CalendarPage /></ErrorBoundary>} />
+              <Route path="/api-keys" element={<ErrorBoundary><ApiKeysPage /></ErrorBoundary>} />
+            </Routes>
+          </ErrorBoundary>
         </Suspense>
       </main>
     </div>
