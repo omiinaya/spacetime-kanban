@@ -391,8 +391,7 @@ async def dead_board_monitor(interval: int):
             now_ms = _now_ms()
 
             # Check: 0 completions + work exists
-            if completions == 0 and (ip > 0 or avail > 0):
-                if now_ms - last_alert_ms > alert_cooldown_ms:
+            if completions == 0 and (ip > 0 or avail > 0) and now_ms - last_alert_ms > alert_cooldown_ms:
                     await fire_event(
                         EVENT_BOARD_DEAD,
                         {
@@ -410,8 +409,7 @@ async def dead_board_monitor(interval: int):
 
             # Stalled check: abnormally high claim:complete ratio
             ratio = overview.get("claim_complete_ratio", 0)
-            if ratio > 20 and claims > 50 and completions == 0:
-                if now_ms - last_alert_ms > alert_cooldown_ms:
+            if ratio > 20 and claims > 50 and completions == 0 and now_ms - last_alert_ms > alert_cooldown_ms:
                     await fire_event(
                         EVENT_BOARD_STALLED,
                         {

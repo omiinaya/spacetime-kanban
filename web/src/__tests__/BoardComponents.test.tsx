@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import TaskCard from '../components/board/TaskCard'
 import ListView from '../components/ListView'
-import type { Task, TaskStatus } from '../hooks/useRealtimeTasks'
+import type { Task } from '../hooks/useRealtimeTasks'
 import type { KanbanLabel, IssueLink } from '../api'
 
 // Mock IntersectionObserver (needed by ListView via useLazyLoad)
@@ -105,8 +105,6 @@ describe('TaskCard', () => {
     const { container } = render(<TaskCard {...baseProps} task={task} />)
     // In detailed mode, repo renders in a div with flex-wrap — verify no repo text appears
     // The component checks `task.repo &&` so empty string means no badge
-    const repoElements = container.querySelectorAll('.bg-white\\/8')
-    // There might be bg-white/8 for other elements, but none should contain repo text
     const badgeRepos = Array.from(container.querySelectorAll('span')).filter(
       el => el.textContent === 'test-repo'
     )
@@ -241,7 +239,7 @@ describe('TaskCard', () => {
       { id: 'lbl-2', name: 'feature', color: '#00ff00', description: '', created_at: 0 },
     ]
     const task = createTask()
-    const { container } = render(<TaskCard {...baseProps} task={task} labels={labels} />)
+    render(<TaskCard {...baseProps} task={task} labels={labels} />)
     // Labels render as colored dots in compact mode, or as tag badges in detailed mode
     // In detailed mode, label names should appear
     expect(screen.getByText('bug')).toBeInTheDocument()
@@ -258,7 +256,7 @@ describe('TaskCard', () => {
 
   it('does not show dependency badge when no dependsOn', () => {
     const task = createTask({ dependsOn: undefined })
-    const { container } = render(<TaskCard {...baseProps} task={task} />)
+    render(<TaskCard {...baseProps} task={task} />)
     expect(screen.queryByTitle(/Depends on:/)).not.toBeInTheDocument()
   })
 })

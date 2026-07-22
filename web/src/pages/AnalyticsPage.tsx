@@ -219,7 +219,7 @@ export default function AnalyticsPage() {
 
           // Build SVG path strings
           const openPath = days.map((d, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(d.open).toFixed(1)}`).join(' ')
-          const completedPath = days.map((d, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(cumCompleted[i]).toFixed(1)}`).join(' ')
+          const completedPath = days.map((_, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(cumCompleted[i]).toFixed(1)}`).join(' ')
           const idealPath = days.map((d, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(d.ideal).toFixed(1)}`).join(' ')
 
           // Y-axis ticks (5 ticks)

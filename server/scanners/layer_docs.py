@@ -150,9 +150,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
             )
 
     # ── CONTRIBUTING check ──
-    if not os.path.isfile(os.path.join(repo_path, "CONTRIBUTING.md")):
-        # Only flag if README exists (project is reasonably mature)
-        if readme_age is not None:
+    if not os.path.isfile(os.path.join(repo_path, "CONTRIBUTING.md")) and readme_age is not None:
             findings.append(
                 {
                     "title": f"Add CONTRIBUTING.md to {repo_name}",

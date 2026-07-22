@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
       - run: pip install ruff
       - run: ruff check . --exclude=.venv,venv
@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
       - run: pip install ruff
       - run: ruff format --check . --exclude=.venv,venv
@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
       - run: pip install -r requirements.txt pytest pytest-asyncio httpx
       - run: python -m pytest tests/ -v -x --tb=short
@@ -75,7 +75,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npx vitest run --reporter=compact
+      - run: npx vitest run
 
   build-frontend:
     runs-on: ubuntu-latest

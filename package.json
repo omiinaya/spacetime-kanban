@@ -10,7 +10,13 @@
     "build": "npm run build -w web",
     "preview": "npm run preview -w web",
     "test:e2e": "npm run test:e2e -w web",
-    "test:e2e:ui": "npm run test:e2e:ui -w web"
+    "test:e2e:ui": "npm run test:e2e:ui -w web",
+    "lint": "npm run lint -w web",
+    "lint:server": "cd server && ruff check . --exclude=.venv,venv",
+    "typecheck": "npm run build -w web",
+    "format": "npm run format -w web",
+    "format:check": "npm run format:check -w web",
+    "check-all": "npm run lint && npm run typecheck && npm run test && cd server && ruff check . --exclude=.venv,venv"
   },
   "description": "Monorepo root — TypeScript frontend in web/",
   "license": "MIT"
