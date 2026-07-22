@@ -683,6 +683,34 @@ async def _seed_initial_workers():
 _scheduler_tasks: list[asyncio.Task] = []
 
 
+async def _recover_stale_tasks() -> int:
+    """Unclaim any tasks left in_progress from a previous server lifecycle.
+
+    On server restart/kill, worker processes die but their claimed tasks
+    stay in_progress forever. This releases them back to available so
+    the next dispatcher tick can re-claim them.
+    Returns the number of tasks recovered.
+    """
+    stale = await _api_get("/api/tasks?status=in_progress")
+    if not stale:
+        return 0
+
+    recovered = 0
+    for task in stale:
+        task_id = task.get("id")
+        if not task_id:
+            continue
+        result = await _api_post(f"/api/tasks/{task_id}/unclaim", {})
+        if result is not None:
+            recovered += 1
+            print(
+                f"  Recovered task {task_id[:24]}... "
+                f"'{task.get('title', '?')[:40]}' "
+                f"(was assigned to {task.get('assigned_to', '?')})"
+            )
+    return recovered
+
+
 async def start_scheduler():
     """Start all scheduler background tasks.
 
@@ -725,6 +753,15 @@ async def start_scheduler():
         print(f"[scheduler] Started '{name}' (every {interval}s)")
 
     print(f"[scheduler] {len(loops)} loops running")
+
+    # ── Recover stale in_progress tasks from previous lifecycle ──
+    # On server restart, any tasks that were in_progress when the process
+    # died stay stuck forever. Release them so they can be re-claimed.
+    recovered = await _recover_stale_tasks()
+    if recovered:
+        print(f"[scheduler] Recovered {recovered} stale task(s) from previous lifecycle")
+    else:
+        print("[scheduler] No stale tasks to recover")
 
     # Seed initial worker immediately — don't wait for the 30s dispatcher tick
     if settings.worker_script:
