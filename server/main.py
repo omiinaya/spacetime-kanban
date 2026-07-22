@@ -11,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import issue_sync
 from config import settings
 from routes.agents import router as agents_router

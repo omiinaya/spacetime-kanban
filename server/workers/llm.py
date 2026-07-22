@@ -11,6 +11,7 @@ Flow:
   4. If repo_path given, verify git changes were made
   5. Complete or block via kanban API
 """
+
 import os
 import re
 import shlex
@@ -24,17 +25,18 @@ from workers.base import WorkerContext
 
 LLM_COMMAND_STR = os.environ.get(
     "KANBAN_LLM_WORKER",
-    "hermes chat -Q -q"  # Default: Hermes CLI quiet mode, single query
+    "hermes chat -Q -q",  # Default: Hermes CLI quiet mode, single query
 )
 LLM_COMMAND = shlex.split(LLM_COMMAND_STR)
 
 # Safety limits
-WORK_TIMEOUT = 600       # 10 min max per task
-GIT_TIMEOUT = 15         # git operations timeout
+WORK_TIMEOUT = int(os.environ.get("KANBAN_LLM_TIMEOUT", "1800"))  # 30 min (env-configurable)
+GIT_TIMEOUT = 15  # git operations timeout
 STDERR_LOG_LIMIT = 5000  # max stderr chars to include in block reason
 
 
 # ── Prompt builder ──────────────────────────────────────────────────
+
 
 def _build_prompt(ctx: WorkerContext) -> str:
     """Build the LLM prompt from the task context."""
@@ -59,24 +61,26 @@ def _build_prompt(ctx: WorkerContext) -> str:
     parts.append(f"**PR:** {pr_url}")
     parts.append("")
 
-    parts.extend([
-        "## Rules",
-        "1. Work inside `~/{repo}` — the repo is already cloned",
-        "2. Make changes, run tests, fix bugs — do what the task requires",
-        "3. Use git for status checks; run relevant tests",
-        "4. DO NOT create GitHub issues or PRs",
-        "5. DO NOT send Discord messages",
-        "6. DO NOT edit files outside the repo",
-        "",
-        "## Completion",
-        "When you finish, end your response with exactly:",
-        "WORKER_DONE: <one-line summary of what was done>",
-        "",
-        "If you cannot complete the task (blocked, unclear, missing info), end with:",
-        "WORKER_BLOCKED: <reason>",
-        "",
-        "Work efficiently."
-    ])
+    parts.extend(
+        [
+            "## Rules",
+            "1. Work inside `~/{repo}` — the repo is already cloned",
+            "2. Make changes, run tests, fix bugs — do what the task requires",
+            "3. Use git for status checks; run relevant tests",
+            "4. DO NOT create GitHub issues or PRs",
+            "5. DO NOT send Discord messages",
+            "6. DO NOT edit files outside the repo",
+            "",
+            "## Completion",
+            "When you finish, end your response with exactly:",
+            "WORKER_DONE: <one-line summary of what was done>",
+            "",
+            "If you cannot complete the task (blocked, unclear, missing info), end with:",
+            "WORKER_BLOCKED: <reason>",
+            "",
+            "Work efficiently.",
+        ]
+    )
 
     return "\n".join(parts)
 
@@ -87,7 +91,9 @@ def _has_git_changes(repo_path: str) -> list[str]:
         result = subprocess.run(
             ["git", "diff", "--name-only"],
             cwd=repo_path,
-            capture_output=True, text=True, timeout=GIT_TIMEOUT,
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT,
         )
         files = [f for f in result.stdout.strip().split("\n") if f.strip()]
         return files
@@ -101,7 +107,9 @@ def _has_git_commits_since(repo_path: str, start_ref: str = "HEAD~1") -> bool:
         result = subprocess.run(
             ["git", "log", "--oneline", "-5"],
             cwd=repo_path,
-            capture_output=True, text=True, timeout=GIT_TIMEOUT,
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT,
         )
         return bool(result.stdout.strip())
     except Exception:
@@ -109,6 +117,7 @@ def _has_git_commits_since(repo_path: str, start_ref: str = "HEAD~1") -> bool:
 
 
 # ── Main worker ─────────────────────────────────────────────────────
+
 
 def run_llm_worker(ctx: WorkerContext) -> tuple[bool, str]:
     """Run the LLM worker: single hermes chat query, evaluate response."""
@@ -177,17 +186,28 @@ def run_llm_worker(ctx: WorkerContext) -> tuple[bool, str]:
 
     # Check for explicit completion language
     finished_indicators = [
-        "task is complete", "task completed", "finished the task",
-        "all done", "i have completed", "completed the task",
+        "task is complete",
+        "task completed",
+        "finished the task",
+        "all done",
+        "i have completed",
+        "completed the task",
     ]
     for indicator in finished_indicators:
         if indicator in stdout_lower:
             changes_after = _has_git_changes(repo_path)
             # Check for "nothing to change" or "already done"
-            already_done = any(p in stdout_lower for p in [
-                "was already", "is already", "nothing to do", "no changes needed",
-                "already implemented", "already exists",
-            ])
+            already_done = any(
+                p in stdout_lower
+                for p in [
+                    "was already",
+                    "is already",
+                    "nothing to do",
+                    "no changes needed",
+                    "already implemented",
+                    "already exists",
+                ]
+            )
             if already_done and len(changes_after) == len(changes_before):
                 return True, "No changes needed — task was already satisfied"
             if len(changes_after) > len(changes_before):
@@ -195,8 +215,13 @@ def run_llm_worker(ctx: WorkerContext) -> tuple[bool, str]:
 
     # Check for blocked indicators
     blocked_indicators = [
-        "i cannot", "i'm blocked", "i am blocked", "cannot complete",
-        "unable to", "not possible", "missing information",
+        "i cannot",
+        "i'm blocked",
+        "i am blocked",
+        "cannot complete",
+        "unable to",
+        "not possible",
+        "missing information",
     ]
     for indicator in blocked_indicators:
         if indicator in stdout_lower:

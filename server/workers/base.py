@@ -8,6 +8,7 @@ Every worker follows the same protocol:
   5. Complete or block via API
   6. Exit with exit code (0=done, 1=blocked, 2=error)
 """
+
 import json
 import os
 import sys
@@ -21,6 +22,7 @@ HEARTBEAT_INTERVAL = 15  # seconds between heartbeats
 
 
 # ── API helpers ─────────────────────────────────────────────────────
+
 
 def api_get(path: str, timeout: int = 15) -> dict | list | None:
     try:
@@ -50,6 +52,7 @@ def api_post(path: str, data: dict, timeout: int = 15) -> dict | None:
 
 
 # ── Worker state ────────────────────────────────────────────────────
+
 
 class WorkerContext:
     """Holds state for an active worker session."""
@@ -127,12 +130,28 @@ class WorkerContext:
 
         Uses block-with-reason endpoint which properly sets fail_reason
         and increments fail_count (vs plain /block which discards reason).
+
+        If the reason indicates a definitive/certain failure (nothing to do,
+        no work to be done, etc.), uses permanent-block so the task won't
+        be retried again.
         """
         self._running = False
+        permanent_patterns = [
+            "no indexable fields found",
+            "no unused imports found",
+            "no fields found to index",
+            "no work to do",
+            "nothing found to",
+            "scanner error:",
+        ]
+        is_permanent = any(p in reason.lower() for p in permanent_patterns)
+        endpoint = "/permanent-block" if is_permanent else "/block-with-reason"
         result = api_post(
-            f"/api/tasks/{self.task_id}/block-with-reason",
+            f"/api/tasks/{self.task_id}{endpoint}",
             {"reason": reason or "Blocked by worker"},
         )
+        if is_permanent and result:
+            print(f"[worker] Permanent block on {self.task_id[:20]}: {reason[:80]}", file=sys.stderr)
         return result is not None
 
     def unclaim(self) -> bool:
@@ -143,6 +162,7 @@ class WorkerContext:
 
 
 # ── Heartbeat loop ──────────────────────────────────────────────────
+
 
 def heartbeat_loop(ctx: WorkerContext):
     """Run in a thread: send heartbeats every HEARTBEAT_INTERVAL seconds."""
@@ -160,6 +180,7 @@ def heartbeat_loop(ctx: WorkerContext):
 
 
 # ── Entry helpers ──────────────────────────────────────────────────
+
 
 def run_worker(task_id: str, work_fn):
     """Standard worker entry point.
@@ -196,6 +217,7 @@ def run_worker(task_id: str, work_fn):
         ctx.block(error_msg)
         print(f"[worker] 💥 {error_msg}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         return 2
     finally:

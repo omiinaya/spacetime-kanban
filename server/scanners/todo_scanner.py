@@ -19,7 +19,9 @@ def scan_todos(repo_name: str, repo_path: str) -> list[dict]:
         result = subprocess.run(
             ["git", "grep", "-n", "-c", r"(TODO|FIXME|HACK|XXX)"],
             cwd=repo_path,
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return []
@@ -52,7 +54,10 @@ def scan_todos(repo_name: str, repo_path: str) -> list[dict]:
             for tag in tag_counts:
                 r = subprocess.run(
                     ["git", "grep", "-n", "-c", tag],
-                    cwd=repo_path, capture_output=True, text=True, timeout=15,
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
                 )
                 for l in r.stdout.strip().split("\n"):
                     if ":" in l:
@@ -79,36 +84,54 @@ def scan_todos(repo_name: str, repo_path: str) -> list[dict]:
         if len(file_hits) > 5:
             desc_parts.append(f"  ... and {len(file_hits) - 5} more file(s)")
 
-        desc_parts.append(
-            "\nRun the mechanical 'scan todos' handler after cleanup to verify."
-        )
+        desc_parts.append("\nRun the mechanical 'scan todos' handler after cleanup to verify.")
 
-        findings.append({
-            "title": f"Clean up {total} TODO/FIXME markers in {repo_name}",
-            "description": "\n".join(desc_parts),
-            "priority": 2,
-            "scanner": "todos",
-        })
+        findings.append(
+            {
+                "title": f"Clean up {total} TODO/FIXME markers in {repo_name}",
+                "description": "\n".join(desc_parts),
+                "priority": 2,
+                "scanner": "todos",
+            }
+        )
 
     # Also create tasks for very stale TODOs (>1 year old)
     try:
         r = subprocess.run(
-            ["git", "log", "--diff-filter=A", "--since=1.year.ago",
-             "-S", "TODO", "--name-only", "--pretty=format:", "--", "*.py", "*.rs", "*.ts", "*.tsx"],
-            cwd=repo_path, capture_output=True, text=True, timeout=30,
+            [
+                "git",
+                "log",
+                "--diff-filter=A",
+                "--since=1.year.ago",
+                "-S",
+                "TODO",
+                "--name-only",
+                "--pretty=format:",
+                "--",
+                "*.py",
+                "*.rs",
+                "*.ts",
+                "*.tsx",
+            ],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         new_files = set(f.strip() for f in r.stdout.split("\n") if f.strip())
         new_todo_files = [f for f in new_files if os.path.isfile(os.path.join(repo_path, f))]
         if new_todo_files:
-            findings.append({
-                "title": f"Review recently-added TODOs in {len(new_todo_files)} file(s)",
-                "description": (
-                    f"{len(new_todo_files)} file(s) added in the last year contain TODO markers "
-                    f"that may need review. First files: {', '.join(new_todo_files[:5])}"
-                ),
-                "priority": 2,
-                "scanner": "todos",
-            })
+            findings.append(
+                {
+                    "title": f"Review recently-added TODOs in {len(new_todo_files)} file(s)",
+                    "description": (
+                        f"{len(new_todo_files)} file(s) added in the last year contain TODO markers "
+                        f"that may need review. First files: {', '.join(new_todo_files[:5])}"
+                    ),
+                    "priority": 2,
+                    "scanner": "todos",
+                }
+            )
     except Exception:
         pass
 

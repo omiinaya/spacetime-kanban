@@ -34,8 +34,13 @@ def _find_test_gaps_python(repo_path: str) -> list[str]:
             continue
         for root, dirs, files in os.walk(src_dir):
             # Skip dirs
-            dirs[:] = [d for d in dirs if not d.startswith("__") and not d.startswith(".")
-                       and d not in ("tests", ".venv", "venv", "__pycache__", "node_modules")]
+            dirs[:] = [
+                d
+                for d in dirs
+                if not d.startswith("__")
+                and not d.startswith(".")
+                and d not in ("tests", ".venv", "venv", "__pycache__", "node_modules")
+            ]
             for f in files:
                 if f.endswith(".py") and not f.startswith("test_") and f != "__init__.py":
                     # Check if corresponding test exists
@@ -91,29 +96,32 @@ def scan_test_gaps(repo_name: str, repo_path: str) -> list[dict]:
             dirs[d].append(os.path.basename(g))
 
         summary = "\n".join(
-            f"  - {d}/ ({len(files)} module(s))"
-            for d, files in sorted(dirs.items())[:5]
+            f"  - {d}/ ({len(files)} module(s))" for d, files in sorted(dirs.items())[:5]
         )
         if len(dirs) > 5:
             summary += f"\n  ... and {len(dirs) - 5} more directories"
 
-        findings.append({
-            "title": f"Add unit tests for {len(rust_gaps)} untested Rust module(s) in {repo_name}",
-            "description": f"The following Rust source files are missing `#[cfg(test)]` blocks:\n\n{summary}",
-            "priority": 3,
-            "scanner": "test_gaps",
-        })
+        findings.append(
+            {
+                "title": f"Add unit tests for {len(rust_gaps)} untested Rust module(s) in {repo_name}",
+                "description": f"The following Rust source files are missing `#[cfg(test)]` blocks:\n\n{summary}",
+                "priority": 3,
+                "scanner": "test_gaps",
+            }
+        )
 
     if py_gaps:
         summary = "\n".join(f"  - {g}" for g in py_gaps[:8])
         if len(py_gaps) > 8:
             summary += f"\n  ... and {len(py_gaps) - 8} more file(s)"
 
-        findings.append({
-            "title": f"Add tests for {len(py_gaps)} untested Python module(s) in {repo_name}",
-            "description": f"The following Python source files don't have corresponding test files:\n\n{summary}",
-            "priority": 3,
-            "scanner": "test_gaps",
-        })
+        findings.append(
+            {
+                "title": f"Add tests for {len(py_gaps)} untested Python module(s) in {repo_name}",
+                "description": f"The following Python source files don't have corresponding test files:\n\n{summary}",
+                "priority": 3,
+                "scanner": "test_gaps",
+            }
+        )
 
     return findings

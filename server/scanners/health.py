@@ -52,6 +52,7 @@ LAYER_NAMES = {
 
 def _api_get(path: str) -> Any:
     import json, urllib.request
+
     try:
         req = urllib.request.Request(f"{API_BASE}{path}")
         resp = urllib.request.urlopen(req, timeout=30)
@@ -86,7 +87,7 @@ def compute_project_health(repo_name: str) -> dict:
     # Count per scanner
     scanner_stats: dict[str, dict] = {}
     for t in all_tasks:
-        ri = (t.get("roadmap_item") or "")
+        ri = t.get("roadmap_item") or ""
         scanner_name = ri.replace("Scanner: ", "") if ri.startswith("Scanner:") else "manual"
         if scanner_name == "manual":
             continue  # Don't score manual tasks
@@ -115,10 +116,7 @@ def compute_project_health(repo_name: str) -> dict:
 
     # Compute overall (weighted by layer — lower layers matter more)
     weights = {0: 0.35, 1: 0.30, 2: 0.20, 3: 0.10, 4: 0.05}
-    overall = sum(
-        layer_scores.get(layer, 1.0) * weights[layer]
-        for layer in range(5)
-    )
+    overall = sum(layer_scores.get(layer, 1.0) * weights[layer] for layer in range(5))
 
     # Determine next layer to escalate (lowest layer with score < 0.8)
     next_layer = None
@@ -139,7 +137,9 @@ def compute_project_health(repo_name: str) -> dict:
         "overall": round(overall, 2),
         "by_scanner": by_scanner,
         "next_layer": next_layer,
-        "next_layer_name": LAYER_NAMES.get(next_layer, "Complete") if next_layer is not None else "Complete",
+        "next_layer_name": LAYER_NAMES.get(next_layer, "Complete")
+        if next_layer is not None
+        else "Complete",
     }
 
 
@@ -158,6 +158,7 @@ def compute_all_projects(repos: list[tuple[str, str]] | None = None) -> dict:
         }
     """
     from scanners import discover_repos
+
     if repos is None:
         repos = discover_repos()
 

@@ -50,7 +50,11 @@ def _check_bare_excepts(repo_path: str) -> list[str]:
     results = []
     for root, dirs, files in os.walk(repo_path):
         # Skip hidden dirs and venvs
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__")]
+        dirs[:] = [
+            d
+            for d in dirs
+            if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__")
+        ]
         for f in files:
             if not f.endswith(".py"):
                 continue
@@ -72,7 +76,12 @@ def _check_large_files(repo_path: str) -> list[tuple[str, int]]:
     extensions = (".py", ".rs", ".ts", ".tsx", ".js", ".jsx")
     large = []
     for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__", "dist", "build", "target")]
+        dirs[:] = [
+            d
+            for d in dirs
+            if not d.startswith(".")
+            and d not in ("venv", ".venv", "node_modules", "__pycache__", "dist", "build", "target")
+        ]
         for f in files:
             if not f.endswith(extensions):
                 continue
@@ -92,7 +101,11 @@ def _check_missing_init_py(repo_path: str) -> list[str]:
     """Find Python packages without __init__.py."""
     missing = []
     for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__")]
+        dirs[:] = [
+            d
+            for d in dirs
+            if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__")
+        ]
         # Check if this directory has .py files but no __init__.py
         has_py = any(f.endswith(".py") for f in files)
         has_init = "__init__.py" in files
@@ -107,9 +120,25 @@ def _check_stale_todos(repo_path: str) -> list[dict]:
     """Find TODO markers that haven't been touched in >1 year."""
     try:
         result = subprocess.run(
-            ["git", "log", "--diff-filter=A", "-S", "TODO", "--name-only",
-             "--pretty=format:%H %ai", "--since=2.years.ago", "--", "*.py", "*.rs", "*.ts", "*.tsx"],
-            cwd=repo_path, capture_output=True, text=True, timeout=30,
+            [
+                "git",
+                "log",
+                "--diff-filter=A",
+                "-S",
+                "TODO",
+                "--name-only",
+                "--pretty=format:%H %ai",
+                "--since=2.years.ago",
+                "--",
+                "*.py",
+                "*.rs",
+                "*.ts",
+                "*.tsx",
+            ],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         if not result.stdout.strip():
             return []
@@ -145,16 +174,18 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
         if total_large > 5:
             file_list += f"\n  ... and {total_large - 5} more"
 
-        findings.append({
-            "title": f"Split {total_large} large source file(s) in {repo_name}",
-            "description": (
-                f"Found {total_large} source files over 500 lines. Large files "
-                f"are harder to maintain and should be split into modules.\n\n"
-                f"Largest files:\n{file_list}"
-            ),
-            "priority": 2,
-            "scanner": "architecture",
-        })
+        findings.append(
+            {
+                "title": f"Split {total_large} large source file(s) in {repo_name}",
+                "description": (
+                    f"Found {total_large} source files over 500 lines. Large files "
+                    f"are harder to maintain and should be split into modules.\n\n"
+                    f"Largest files:\n{file_list}"
+                ),
+                "priority": 2,
+                "scanner": "architecture",
+            }
+        )
 
     # ── Check Rust unwrap() calls ──
     unwraps = _check_rust_unwraps(repo_path)
@@ -164,16 +195,18 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
         if total > 5:
             file_list += f"\n  ... and {total - 5} more"
 
-        findings.append({
-            "title": f"Replace {sum(int(u.split(': ')[-1].split()[0]) for u in unwraps)} unwrap() calls with proper error handling in {repo_name}",
-            "description": (
-                f"Found Rust files with excessive `.unwrap()` calls. These crash "
-                f"at runtime if the value is None/Err.\n\n"
-                f"Files:\n{file_list}"
-            ),
-            "priority": 2,
-            "scanner": "architecture",
-        })
+        findings.append(
+            {
+                "title": f"Replace {sum(int(u.split(': ')[-1].split()[0]) for u in unwraps)} unwrap() calls with proper error handling in {repo_name}",
+                "description": (
+                    f"Found Rust files with excessive `.unwrap()` calls. These crash "
+                    f"at runtime if the value is None/Err.\n\n"
+                    f"Files:\n{file_list}"
+                ),
+                "priority": 2,
+                "scanner": "architecture",
+            }
+        )
 
     # ── Check bare excepts ──
     bare = _check_bare_excepts(repo_path)
@@ -183,43 +216,49 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
         if total > 5:
             file_list += f"\n  ... and {total - 5} more"
 
-        findings.append({
-            "title": f"Replace {len(bare)} bare `except:` clause(s) in {repo_name}",
-            "description": (
-                f"Found Python files with bare `except:` clauses that catch ALL exceptions "
-                f"(including KeyboardInterrupt, SystemExit). Use `except Exception:` instead.\n\n"
-                f"Files:\n{file_list}"
-            ),
-            "priority": 2,
-            "scanner": "architecture",
-        })
+        findings.append(
+            {
+                "title": f"Replace {len(bare)} bare `except:` clause(s) in {repo_name}",
+                "description": (
+                    f"Found Python files with bare `except:` clauses that catch ALL exceptions "
+                    f"(including KeyboardInterrupt, SystemExit). Use `except Exception:` instead.\n\n"
+                    f"Files:\n{file_list}"
+                ),
+                "priority": 2,
+                "scanner": "architecture",
+            }
+        )
 
     # ── Check missing __init__.py ──
     missing_init = _check_missing_init_py(repo_path)
     if missing_init:
         dir_list = "\n".join(f"  - {d}" for d in missing_init)
-        findings.append({
-            "title": f"Add __init__.py to {len(missing_init)} Python package(s) in {repo_name}",
-            "description": (
-                f"Found directories with .py files but no `__init__.py`. "
-                f"These won't be importable as packages.\n\n{dir_list}"
-            ),
-            "priority": 3,
-            "scanner": "architecture",
-        })
+        findings.append(
+            {
+                "title": f"Add __init__.py to {len(missing_init)} Python package(s) in {repo_name}",
+                "description": (
+                    f"Found directories with .py files but no `__init__.py`. "
+                    f"These won't be importable as packages.\n\n{dir_list}"
+                ),
+                "priority": 3,
+                "scanner": "architecture",
+            }
+        )
 
     # ── Check stale TODOs (>1 year old) ──
     stale = _check_stale_todos(repo_path)
     if stale:
         file_list = "\n".join(f"  - {s['file']}" for s in stale)
-        findings.append({
-            "title": f"Review {len(stale)} stale TODO(s) in {repo_name}",
-            "description": (
-                f"Found TODO markers in files that haven't been modified in over a year. "
-                f"These may represent abandoned work or outdated notes.\n\n{file_list}"
-            ),
-            "priority": 3,
-            "scanner": "architecture",
-        })
+        findings.append(
+            {
+                "title": f"Review {len(stale)} stale TODO(s) in {repo_name}",
+                "description": (
+                    f"Found TODO markers in files that haven't been modified in over a year. "
+                    f"These may represent abandoned work or outdated notes.\n\n{file_list}"
+                ),
+                "priority": 3,
+                "scanner": "architecture",
+            }
+        )
 
     return findings

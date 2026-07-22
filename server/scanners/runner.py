@@ -98,6 +98,7 @@ def _is_duplicate(title: str, existing: set[str]) -> bool:
 def _compute_project_layer_scores(repo_name: str) -> dict[int, float]:
     """Compute what % of each layer's tasks are done for a project."""
     from collections import Counter
+
     all_tasks = _api_get(f"/api/tasks?repo={repo_name}&limit=500")
     if not all_tasks:
         return {}
@@ -106,7 +107,7 @@ def _compute_project_layer_scores(repo_name: str) -> dict[int, float]:
     layer_done = Counter()
 
     for t in all_tasks:
-        ri = (t.get("roadmap_item") or "")
+        ri = t.get("roadmap_item") or ""
         scanner = ri.replace("Scanner: ", "") if ri.startswith("Scanner:") else ""
         layer = SCANNER_LAYER.get(scanner, -1)
         if layer < 0:
@@ -147,7 +148,7 @@ def _verify_completed_tasks(repos: list[tuple[str, str]], existing: set[str]) ->
         # Group done tasks by scanner so we run each scanner once per repo
         by_scanner: dict[str, list[dict]] = {}
         for t in done_tasks:
-            ri = (t.get("roadmap_item") or "")
+            ri = t.get("roadmap_item") or ""
             scanner_name = ri.replace("Scanner: ", "") if ri.startswith("Scanner:") else ""
             if not scanner_name:
                 continue
@@ -180,8 +181,10 @@ def _verify_completed_tasks(repos: list[tuple[str, str]], existing: set[str]) ->
                 tid = t.get("id", "")
                 if title in fresh_titles:
                     _api_post(f"/api/tasks/{tid}/unarchive", {})
-                    _api_post(f"/api/tasks/{tid}/block",
-                              {"reason": "Regression: issue still present after prior fix"})
+                    _api_post(
+                        f"/api/tasks/{tid}/block",
+                        {"reason": "Regression: issue still present after prior fix"},
+                    )
                     existing.add(title)
                     regressed += 1
                     print(f"[scanner] ⚠ Re-opened regressed: {title[:60]}...", file=sys.stderr)
@@ -203,7 +206,9 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
     if repos is None:
         repos = discover_repos()
 
-    print(f"[scanner] Scanning {len(repos)} repos with {len(SCANNERS)} scanner(s)...", file=sys.stderr)
+    print(
+        f"[scanner] Scanning {len(repos)} repos with {len(SCANNERS)} scanner(s)...", file=sys.stderr
+    )
 
     existing = _fetch_existing_titles()
     print(f"[scanner] Found {len(existing)} existing tasks for dedup", file=sys.stderr)
@@ -258,13 +263,16 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
                 if _is_duplicate(title, existing):
                     continue
 
-                result = _api_post("/api/tasks", {
-                    "title": title,
-                    "description": finding.get("description", ""),
-                    "priority": finding.get("priority", 2),
-                    "repo": repo_name,
-                    "roadmap_item": f"Scanner: {scanner_name}",
-                })
+                result = _api_post(
+                    "/api/tasks",
+                    {
+                        "title": title,
+                        "description": finding.get("description", ""),
+                        "priority": finding.get("priority", 2),
+                        "repo": repo_name,
+                        "roadmap_item": f"Scanner: {scanner_name}",
+                    },
+                )
 
                 if result:
                     existing.add(title.strip().lower())
@@ -278,22 +286,31 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
                         try:
                             webhook_url = os.environ.get("WEBHOOK_DEFAULT_URL", "")
                             if webhook_url:
-                                payload = json.dumps({
-                                    "content": f"🔍 **Scanner: {scanner_name}**\\nPriority P{priority} task created:\\n**{title}**\\nrepo: `{repo_name}`"
-                                }).encode()
+                                payload = json.dumps(
+                                    {
+                                        "content": f"🔍 **Scanner: {scanner_name}**\\nPriority P{priority} task created:\\n**{title}**\\nrepo: `{repo_name}`"
+                                    }
+                                ).encode()
                                 req = urllib.request.Request(
-                                    webhook_url, data=payload,
-                                    headers={"Content-Type": "application/json"}
+                                    webhook_url,
+                                    data=payload,
+                                    headers={"Content-Type": "application/json"},
                                 )
                                 urllib.request.urlopen(req, timeout=5)
                         except Exception:
                             pass
 
-            print(f"[scanner]  {scanner_name}: {len(findings)} finding(s), "
-                  f"{results[scanner_name]['created']} created in {elapsed:.1f}s (layer {layer})", file=sys.stderr)
+            print(
+                f"[scanner]  {scanner_name}: {len(findings)} finding(s), "
+                f"{results[scanner_name]['created']} created in {elapsed:.1f}s (layer {layer})",
+                file=sys.stderr,
+            )
 
-    print(f"[scanner] Done: {total_findings} findings, {total_created} new tasks created, "
-          f"{regressed} regressed", file=sys.stderr)
+    print(
+        f"[scanner] Done: {total_findings} findings, {total_created} new tasks created, "
+        f"{regressed} regressed",
+        file=sys.stderr,
+    )
     return results
 
 

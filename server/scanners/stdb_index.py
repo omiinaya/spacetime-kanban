@@ -76,8 +76,10 @@ def _scan_rust_file(filepath: str) -> list[dict]:
                 field_type = parts[1].strip().rstrip(",")
 
                 # Check if this is a foreign key
-                is_fk = any(field_name.endswith(suffix) for suffix in
-                           ("_id", "_name", "_key", "_ref", "_by"))
+                is_fk = any(
+                    field_name.endswith(suffix)
+                    for suffix in ("_id", "_name", "_key", "_ref", "_by")
+                )
                 if is_fk and field_name != "id":
                     # Check if it already has an index annotation
                     has_index = any(
@@ -86,13 +88,15 @@ def _scan_rust_file(filepath: str) -> list[dict]:
                     )
                     if not has_index:
                         short_path = "/".join(filepath.split("/")[-3:])
-                        fields.append({
-                            "line": k + 1,
-                            "field": field_name,
-                            "type": field_type,
-                            "struct": struct_name,
-                            "file": short_path,
-                        })
+                        fields.append(
+                            {
+                                "line": k + 1,
+                                "field": field_name,
+                                "type": field_type,
+                                "struct": struct_name,
+                                "file": short_path,
+                            }
+                        )
 
                 attributes_before_field = []
             elif stripped.startswith("//") or stripped == "":
@@ -108,16 +112,18 @@ def _scan_rust_file(filepath: str) -> list[dict]:
 
         if fields:
             for f in fields:
-                findings.append({
-                    "title": f"Add #[index(btree)] to {f['struct']}.{f['field']}",
-                    "description": (
-                        f"STDB table `{f['struct']}` has field `{f['field']}: {f['type']}` "
-                        f"without `#[index(btree)]` in {f['file']}:{f['line']}. "
-                        f"This field looks like a foreign key and will be slow to query without an index."
-                    ),
-                    "priority": 1,
-                    "scanner": "stdb_index",
-                })
+                findings.append(
+                    {
+                        "title": f"Add #[index(btree)] to {f['struct']}.{f['field']}",
+                        "description": (
+                            f"STDB table `{f['struct']}` has field `{f['field']}: {f['type']}` "
+                            f"without `#[index(btree)]` in {f['file']}:{f['line']}. "
+                            f"This field looks like a foreign key and will be slow to query without an index."
+                        ),
+                        "priority": 1,
+                        "scanner": "stdb_index",
+                    }
+                )
 
         i = k  # Skip past this struct
 
@@ -160,14 +166,16 @@ def scan_stdb_index(repo_name: str, repo_path: str) -> list[dict]:
     if len(findings) > 20:
         field_list += f"\n  ... and {len(findings) - 20} more field(s)"
 
-    return [{
-        "title": f"Add #[index(btree)] to {total} field(s) across {file_count} file(s) in {repo_name}",
-        "description": (
-            f"Found {total} foreign-key-like fields missing `#[index(btree)]` "
-            f"across {file_count} file(s).\n\n"
-            f"Missing indexes:\n{field_list}\n\n"
-            f"Adding `#[index(btree)]` to these fields will improve STDB query performance."
-        ),
-        "priority": 1,
-        "scanner": "stdb_index",
-    }]
+    return [
+        {
+            "title": f"Add #[index(btree)] to {total} field(s) across {file_count} file(s) in {repo_name}",
+            "description": (
+                f"Found {total} foreign-key-like fields missing `#[index(btree)]` "
+                f"across {file_count} file(s).\n\n"
+                f"Missing indexes:\n{field_list}\n\n"
+                f"Adding `#[index(btree)]` to these fields will improve STDB query performance."
+            ),
+            "priority": 1,
+            "scanner": "stdb_index",
+        }
+    ]

@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     min_workers: int = 1
     max_workers: int = 3
     max_memory_pct: int = 80
-    stale_minutes: int = 10
+    stale_minutes: int = 35  # Must exceed LLM worker timeout to avoid race
 
     # ── Agent identity ──
     agent_id: str = "hermes"

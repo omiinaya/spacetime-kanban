@@ -50,13 +50,37 @@ def discover_repos(max_repos: int = 50) -> list[tuple[str, str]]:
     Prioritizes repos with code (not forks/templates).
     """
     home = os.path.expanduser("~")
-    exclude = {".hermes", ".config", ".cache", ".local", ".rustup",
-               ".cargo", ".n", ".npm", ".oci", ".ssh", ".git",
-               "test", "depot_tools", "emsdk"}
+    exclude = {
+        ".hermes",
+        ".config",
+        ".cache",
+        ".local",
+        ".rustup",
+        ".cargo",
+        ".n",
+        ".npm",
+        ".oci",
+        ".ssh",
+        ".git",
+        "test",
+        "depot_tools",
+        "emsdk",
+    }
     priority_patterns = [
-        "spacetime-", "factoring", "hermes-", "sample-repo-w", "stealth",
-        "akamai", "ca-", "nightms", "kimi-", "mmit", "qnai",
-        "airline", "flight", "browser",
+        "spacetime-",
+        "factoring",
+        "hermes-",
+        "sample-repo-w",
+        "stealth",
+        "akamai",
+        "ca-",
+        "nightms",
+        "kimi-",
+        "mmit",
+        "qnai",
+        "airline",
+        "flight",
+        "browser",
     ]
 
     def score_repo(name: str) -> int:
@@ -81,9 +105,17 @@ def discover_repos(max_repos: int = 50) -> list[tuple[str, str]]:
 
         score = score_repo(entry)
         # Fast check for project structure
-        has_code = any(os.path.isfile(os.path.join(repo_path, f)) for f in
-                       ["Cargo.toml", "pyproject.toml", "package.json",
-                        "setup.py", "go.mod", "CMakeLists.txt"])
+        has_code = any(
+            os.path.isfile(os.path.join(repo_path, f))
+            for f in [
+                "Cargo.toml",
+                "pyproject.toml",
+                "package.json",
+                "setup.py",
+                "go.mod",
+                "CMakeLists.txt",
+            ]
+        )
         if not has_code and score < 8:
             continue
 

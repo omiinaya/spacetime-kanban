@@ -1,4 +1,5 @@
 """Scanner API endpoint — trigger repo scans on demand."""
+
 import asyncio
 import functools
 

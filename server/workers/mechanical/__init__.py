@@ -4,6 +4,7 @@ Each handler is a function that takes a WorkerContext and returns
 (success: bool, message: str). Handlers are registered with a regex
 pattern that's matched against the task title.
 """
+
 import json
 import os
 import re
@@ -21,9 +22,11 @@ HANDLERS: list[tuple[re.Pattern, Callable]] = []
 
 def register(pattern: str):
     """Decorator: register a handler for a title regex pattern."""
+
     def decorator(fn):
         HANDLERS.append((re.compile(pattern, re.IGNORECASE), fn))
         return fn
+
     return decorator
 
 
@@ -36,6 +39,7 @@ def match_handler(title: str) -> Callable | None:
 
 
 # ── Handlers ────────────────────────────────────────────────────────
+
 
 @register(r"add\s+#\[index\(btree\)\]")
 def handle_add_index_btree(ctx: WorkerContext) -> tuple[bool, str]:
@@ -53,27 +57,34 @@ def handle_add_index_btree(ctx: WorkerContext) -> tuple[bool, str]:
     table_files = []
     for pattern in ["**/tables.rs", "**/lib.rs"]:
         import glob
-        table_files.extend(glob.glob(os.path.join(repo_path, "server", "spacetimedb", "src", os.path.basename(pattern)), recursive=True))
-    
+
+        table_files.extend(
+            glob.glob(
+                os.path.join(repo_path, "server", "spacetimedb", "src", os.path.basename(pattern)),
+                recursive=True,
+            )
+        )
+
     if not table_files:
         table_files = []
         import glob
+
         for root, dirs, files in os.walk(repo_path):
             for f in files:
                 if f in ("tables.rs", "lib.rs") and "spacetimedb" in root:
                     table_files.append(os.path.join(root, f))
-    
+
     if not table_files:
         return False, f"No STDB table files found in {ctx.repo}"
 
     changes = 0
     errors = []
-    
+
     for filepath in table_files:
         try:
             with open(filepath) as f:
                 content = f.read()
-            
+
             # Find fields that are commonly queried but lack indexes
             # Look for: pub (field_name): (type) patterns after #[table(...)]
             # Skip: fields that already have #[primary_key], #[unique], or #[index(btree)]
@@ -81,16 +92,16 @@ def handle_add_index_btree(ctx: WorkerContext) -> tuple[bool, str]:
             lines = content.split("\n")
             in_struct = False
             struct_depth = 0
-            
+
             for i, line in enumerate(lines):
                 stripped = line.strip()
-                
+
                 # Detect struct start
                 if re.match(r"^pub struct\s+\w+", stripped) and "{" in stripped:
                     in_struct = True
                     struct_depth = stripped.count("{")
                     continue
-                
+
                 if in_struct:
                     if "{" in stripped:
                         struct_depth += stripped.count("{")
@@ -99,13 +110,13 @@ def handle_add_index_btree(ctx: WorkerContext) -> tuple[bool, str]:
                         if struct_depth <= 0:
                             in_struct = False
                         continue
-                    
+
                     # Check if this line has a pub field with a foreign-key-like type
                     # or a commonly queried field name
                     if stripped.startswith("pub ") and ":" in stripped:
                         field_name = stripped.split(":")[0].replace("pub ", "").strip()
                         field_type = stripped.split(":")[1].strip().rstrip(",")
-                        
+
                         # Skip if already has an attribute above it
                         has_attr = False
                         for j in range(max(0, i - 5), i):
@@ -113,34 +124,37 @@ def handle_add_index_btree(ctx: WorkerContext) -> tuple[bool, str]:
                             if prev.startswith("#["):
                                 has_attr = True
                                 break
-                        
+
                         if has_attr:
                             continue
-                        
+
                         # Candidate: foreign key fields, id-like fields (but not primary_key)
-                        if re.match(r"^(user_id|session_id|tenant_id|workspace_id|owner_id|repo_id|project_id|group_id|collection_id|page_id|task_id|parent_id|account_id|client_id|provider_id|model_id|config_id|rule_id|template_id|category_id|agent_id)", field_name):
+                        if re.match(
+                            r"^(user_id|session_id|tenant_id|workspace_id|owner_id|repo_id|project_id|group_id|collection_id|page_id|task_id|parent_id|account_id|client_id|provider_id|model_id|config_id|rule_id|template_id|category_id|agent_id)",
+                            field_name,
+                        ):
                             candidate_fields.append((filepath, i, field_name))
-            
+
             if candidate_fields:
                 # Add #[index(btree)] before each candidate field
                 for filepath, line_idx, field_name in reversed(candidate_fields):
                     indent = "    "
                     lines.insert(line_idx, f"{indent}#[index(btree)]")
                     changes += 1
-                
+
                 content = "\n".join(lines)
                 with open(filepath, "w") as f:
                     f.write(content)
-                    
+
         except Exception as e:
             errors.append(f"{os.path.basename(filepath)}: {e}")
-    
+
     if changes > 0:
         msg = f"Added #[index(btree)] to {changes} field(s) across {len(table_files)} file(s)"
         if errors:
             msg += f" (with {len(errors)} warning(s))"
         return True, msg
-    
+
     return False, f"No indexable fields found in {ctx.repo} — all foreign keys already indexed"
 
 
@@ -159,12 +173,14 @@ def handle_fix_clippy(ctx: WorkerContext) -> tuple[bool, str]:
         result = subprocess.run(
             ["cargo", "clippy", "--fix", "--allow-dirty", "--allow-staged", "--", "-D", "warnings"],
             cwd=stdb_dir,
-            capture_output=True, text=True, timeout=120
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         output = result.stdout + result.stderr
         warnings = len(re.findall(r"warning:", output))
         errors = len(re.findall(r"error:", output))
-        
+
         if result.returncode == 0 and errors == 0:
             return True, f"Clippy passed with {warnings} warning(s) remaining"
         elif errors > 0:
@@ -194,7 +210,9 @@ def handle_remove_unused_imports(ctx: WorkerContext) -> tuple[bool, str]:
             result = subprocess.run(
                 ["ruff", "check", "--fix", "--select", "F401,F841", "."],
                 cwd=repo_path,
-                capture_output=True, text=True, timeout=60
+                capture_output=True,
+                text=True,
+                timeout=60,
             )
             if "Fixed" in result.stdout:
                 fixed = re.search(r"Fixed (\d+) error", result.stdout)
@@ -210,9 +228,19 @@ def handle_remove_unused_imports(ctx: WorkerContext) -> tuple[bool, str]:
     if os.path.isdir(stdb_dir):
         try:
             result = subprocess.run(
-                ["cargo", "fix", "--allow-dirty", "--allow-staged", "--lib", "-p", "spacetimedb-module"],
+                [
+                    "cargo",
+                    "fix",
+                    "--allow-dirty",
+                    "--allow-staged",
+                    "--lib",
+                    "-p",
+                    "spacetimedb-module",
+                ],
                 cwd=stdb_dir,
-                capture_output=True, text=True, timeout=120
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
             if result.returncode == 0:
                 changes += 1  # cargo fix made at least one attempt
@@ -224,8 +252,10 @@ def handle_remove_unused_imports(ctx: WorkerContext) -> tuple[bool, str]:
         if errors:
             msg += f" ({'; '.join(errors)})"
         return True, msg
-    
-    return False, "No unused imports found to remove" + (f" ({'; '.join(errors)})" if errors else "")
+
+    return False, "No unused imports found to remove" + (
+        f" ({'; '.join(errors)})" if errors else ""
+    )
 
 
 @register(r"add\s+test\s+for")
@@ -244,25 +274,25 @@ def handle_add_test_boilerplate(ctx: WorkerContext) -> tuple[bool, str]:
     match = re.search(r"add\s+test\s+for\s+(.+)", title, re.IGNORECASE)
     if not match:
         return False, "Could not determine what to add a test for from the task title"
-    
+
     target = match.group(1).strip().rstrip(".")
-    
+
     # Determine file type based on target
     if any(kw in target.lower() for kw in ["api", "endpoint", "route", "handler"]):
         # Python API test
         test_dir = os.path.join(repo_path, "server", "tests")
         if not os.path.isdir(test_dir):
             os.makedirs(test_dir, exist_ok=True)
-        
+
         test_file = os.path.join(test_dir, "test_api.py")
         test_fn = f"test_{target.lower().replace(' ', '_').replace('-', '_')[:40]}"
-        
+
         if os.path.isfile(test_file):
             with open(test_file) as f:
                 content = f.read()
             if f"def {test_fn}" in content:
                 return False, f"Test {test_fn} already exists in {test_file}"
-        
+
         boilerplate = f"""
 async def {test_fn}():
     \"\"\"Test {target}.\"\"\"
@@ -271,24 +301,24 @@ async def {test_fn}():
 """
         with open(test_file, "a") as f:
             f.write(boilerplate)
-        
+
         return True, f"Added test boilerplate {test_fn} to {test_file}"
-    
+
     elif any(kw in target.lower() for kw in ["rust", "fn ", "function", "module", "reducer"]):
         # Rust test
         stdb_dir = os.path.join(repo_path, "server", "spacetimedb", "src")
         if not os.path.isdir(stdb_dir):
             return False, f"No STDB src directory in {ctx.repo}"
-        
+
         # Find the most relevant test file
         test_files = [f for f in os.listdir(stdb_dir) if f.endswith("tests.rs") or f == "mod.rs"]
         if not test_files:
             test_files = [f for f in os.listdir(stdb_dir) if f.endswith(".rs")]
             test_files = test_files[:1]
-        
+
         if not test_files:
             return False, "No Rust source files found for tests"
-        
+
         test_file = os.path.join(stdb_dir, test_files[0])
         safe_name = target.lower().replace(" ", "_").replace("-", "_")[:30]
         boilerplate = f"""
@@ -305,9 +335,9 @@ mod {safe_name}_tests {{
 """
         with open(test_file, "a") as f:
             f.write(boilerplate)
-        
+
         return True, f"Added test module {safe_name}_tests to {test_file}"
-    
+
     return False, f"Could not determine test type from: {target}"
 
 
@@ -355,7 +385,9 @@ def handle_run_tests(ctx: WorkerContext) -> tuple[bool, str]:
             result = subprocess.run(
                 ["cargo", "test", "--quiet", "--", "--timeout=60"],
                 cwd=stdb_dir,
-                capture_output=True, text=True, timeout=180,
+                capture_output=True,
+                text=True,
+                timeout=180,
             )
             passed = "test result:" in result.stdout
             if passed:
@@ -376,7 +408,9 @@ def handle_run_tests(ctx: WorkerContext) -> tuple[bool, str]:
             result = subprocess.run(
                 ["python3", "-m", "pytest", "-x", "--timeout=60", "-q"],
                 cwd=repo_path,
-                capture_output=True, text=True, timeout=180,
+                capture_output=True,
+                text=True,
+                timeout=180,
             )
             # Parse pytest summary
             summary = result.stdout.split("\n")[-3:]
@@ -396,7 +430,9 @@ def handle_run_tests(ctx: WorkerContext) -> tuple[bool, str]:
             result = subprocess.run(
                 ["npm", "test", "--", "--run", "--reporter=compact"],
                 cwd=repo_path,
-                capture_output=True, text=True, timeout=180,
+                capture_output=True,
+                text=True,
+                timeout=180,
             )
             if result.returncode == 0:
                 results.append("Node: OK")
@@ -438,7 +474,9 @@ def handle_update_deps(ctx: WorkerContext) -> tuple[bool, str]:
             result = subprocess.run(
                 ["cargo", "update"],
                 cwd=stdb_dir,
-                capture_output=True, text=True, timeout=120,
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
             updated = len(re.findall(r"Updating", result.stdout + result.stderr))
             results.append(f"Rust: {updated} dep(s) updated")
@@ -455,7 +493,9 @@ def handle_update_deps(ctx: WorkerContext) -> tuple[bool, str]:
             result = subprocess.run(
                 ["npm", "update", "--save"],
                 cwd=repo_path,
-                capture_output=True, text=True, timeout=120,
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
             updated = len(re.findall(r"\+ |added", result.stdout))
             results.append(f"Node: {updated} dep(s) updated")
@@ -473,8 +513,7 @@ def handle_update_deps(ctx: WorkerContext) -> tuple[bool, str]:
 
 @register(r"git\s+(gc|optimize|clean|maintenance)")
 def handle_git_maintenance(ctx: WorkerContext) -> tuple[bool, str]:
-    """Run git maintenance operations: gc, prune, repack.
-    """
+    """Run git maintenance operations: gc, prune, repack."""
     repo_path = ctx.repo_path
     if not repo_path:
         return False, f"Repo directory not found: {ctx.repo}"
@@ -483,7 +522,9 @@ def handle_git_maintenance(ctx: WorkerContext) -> tuple[bool, str]:
         result = subprocess.run(
             ["git", "gc", "--auto", "--prune=now"],
             cwd=repo_path,
-            capture_output=True, text=True, timeout=120,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         output = result.stdout + result.stderr
         if "nothing" not in output.lower():
@@ -499,8 +540,7 @@ def handle_git_maintenance(ctx: WorkerContext) -> tuple[bool, str]:
 
 @register(r"(check|scan)\s+(for\s+)?(TODO|FIXME|HACK|XXX)")
 def handle_scan_todos(ctx: WorkerContext) -> tuple[bool, str]:
-    """Scan the repo for TODO/FIXME/HACK/XXX comments and report counts.
-    """
+    """Scan the repo for TODO/FIXME/HACK/XXX comments and report counts."""
     repo_path = ctx.repo_path
     if not repo_path:
         return False, f"Repo directory not found: {ctx.repo}"
@@ -509,7 +549,9 @@ def handle_scan_todos(ctx: WorkerContext) -> tuple[bool, str]:
         result = subprocess.run(
             ["git", "grep", "-n", "-c", r"(TODO|FIXME|HACK|XXX)"],
             cwd=repo_path,
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         lines = [l for l in result.stdout.strip().split("\n") if l.strip()]
         total = 0
@@ -532,8 +574,7 @@ def handle_scan_todos(ctx: WorkerContext) -> tuple[bool, str]:
 
 @register(r"(sync|update)\s+\.env(\.example)?")
 def handle_sync_env(ctx: WorkerContext) -> tuple[bool, str]:
-    """Sync .env.example with .env: report missing or extra keys.
-    """
+    """Sync .env.example with .env: report missing or extra keys."""
     repo_path = ctx.repo_path
     if not repo_path:
         return False, f"Repo directory not found: {ctx.repo}"
@@ -544,21 +585,20 @@ def handle_sync_env(ctx: WorkerContext) -> tuple[bool, str]:
 
     changes = []
 
-    for env_file, example_file in [(env_path, env_example_path), (server_env, os.path.join(repo_path, "server", ".env.example"))]:
+    for env_file, example_file in [
+        (env_path, env_example_path),
+        (server_env, os.path.join(repo_path, "server", ".env.example")),
+    ]:
         if not os.path.isfile(env_file) or not os.path.isfile(example_file):
             continue
 
         with open(env_file) as f:
             env_keys = set(
-                line.split("=")[0].strip()
-                for line in f
-                if "=" in line and not line.startswith("#")
+                line.split("=")[0].strip() for line in f if "=" in line and not line.startswith("#")
             )
         with open(example_file) as f:
             example_keys = set(
-                line.split("=")[0].strip()
-                for line in f
-                if "=" in line and not line.startswith("#")
+                line.split("=")[0].strip() for line in f if "=" in line and not line.startswith("#")
             )
 
         missing = example_keys - env_keys
@@ -593,7 +633,9 @@ def handle_lint_code(ctx: WorkerContext) -> tuple[bool, str]:
             fmt_result = subprocess.run(
                 ["cargo", "fmt", "--check"],
                 cwd=stdb_dir,
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             if fmt_result.returncode == 0:
                 results.append("Rust: fmt OK")
@@ -602,19 +644,24 @@ def handle_lint_code(ctx: WorkerContext) -> tuple[bool, str]:
                 subprocess.run(
                     ["cargo", "fmt"],
                     cwd=stdb_dir,
-                    capture_output=True, timeout=30,
+                    capture_output=True,
+                    timeout=30,
                 )
                 results.append("Rust: fmt fixed")
         except FileNotFoundError:
             results.append("Rust: cargo not found")
 
     # Ruff
-    if os.path.isfile(os.path.join(repo_path, "pyproject.toml")) or os.path.isfile(os.path.join(repo_path, "ruff.toml")):
+    if os.path.isfile(os.path.join(repo_path, "pyproject.toml")) or os.path.isfile(
+        os.path.join(repo_path, "ruff.toml")
+    ):
         try:
             result = subprocess.run(
                 ["ruff", "check", "--fix", "."],
                 cwd=repo_path,
-                capture_output=True, text=True, timeout=60,
+                capture_output=True,
+                text=True,
+                timeout=60,
             )
             fixed = result.stdout.strip()
             if fixed:
@@ -631,7 +678,9 @@ def handle_lint_code(ctx: WorkerContext) -> tuple[bool, str]:
             result = subprocess.run(
                 ["npx", "prettier", "--write", "."],
                 cwd=repo_path,
-                capture_output=True, text=True, timeout=60,
+                capture_output=True,
+                text=True,
+                timeout=60,
             )
             changed = len(re.findall(r"^\S+ \d+ms$", result.stdout, re.MULTILINE))
             if changed > 0:
