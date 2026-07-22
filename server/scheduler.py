@@ -445,6 +445,32 @@ async def metrics_collector(interval: int):
             print(f"[scheduler:metrics] Error: {e}")
 
 
+async def repo_scanner(interval: int):
+    """Run improvement scanners across all repos, create tasks for findings.
+
+    Runs every `interval` seconds. Runs in thread to avoid blocking event loop.
+    """
+    while True:
+        try:
+            await asyncio.sleep(interval)
+
+            # Import here to avoid circular imports at module level
+            from scanners.runner import run_all_scanners
+
+            print("[scheduler:scanner] Starting repo scan...")
+            loop = asyncio.get_event_loop()
+            import functools
+            results = await loop.run_in_executor(None, functools.partial(run_all_scanners))
+            total_created = sum(c.get("created", 0) for c in results.values())
+            print(f"[scheduler:scanner] Done: {total_created} new task(s) created")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[scheduler:scanner] Error: {e}")
+            import traceback
+            traceback.print_exc()
+
+
 async def template_trigger(interval: int):
     """Trigger recurring task templates.
 
@@ -558,6 +584,8 @@ async def start_scheduler():
         loops.append(("templates", settings.template_interval_seconds, template_trigger))
     if settings.metrics_interval_seconds > 0:
         loops.append(("metrics", settings.metrics_interval_seconds, metrics_collector))
+    if settings.scanner_interval_seconds > 0:
+        loops.append(("scanner", settings.scanner_interval_seconds, repo_scanner))
     # Death watcher always runs — critical for crash containment
     loops.append(("deathwatch", 15, worker_death_watcher))
 

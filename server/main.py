@@ -23,6 +23,7 @@ from routes.logs import router as logs_router
 from routes.ops import router as ops_router
 from routes.projects import router as projects_router
 from routes.rules import router as rules_router
+from routes.scanner import router as scanner_router
 from routes.tasks import router as tasks_router
 from routes.templates import router as templates_router
 from routes.webhook_subs import router as webhook_subs_router
@@ -303,6 +304,7 @@ app.include_router(apikeys_router)
 app.include_router(dispatcher_router)
 app.include_router(ops_router)
 app.include_router(rules_router)
+app.include_router(scanner_router)
 app.include_router(webhook_subs_router)
 
 
