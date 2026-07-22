@@ -6,6 +6,7 @@ services:
     container_name: spacetimedb-kanban-db
     ports:
       - "3001:3001"  # HTTP API
+      - "3002:3002"  # WebSocket (STDB subscriptions)
     volumes:
       - stdb-data:/var/spacetime
     healthcheck:
