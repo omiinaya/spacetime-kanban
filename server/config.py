@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     dead_board_interval_seconds: int = 900
     template_interval_seconds: int = 900
     metrics_interval_seconds: int = 900
+    scanner_interval_seconds: int = 21600  # Run repo scanners every 6 hours
 
     # ── Webhook alerts ──
     webhook_default_url: str = ""  # Default alert destination (Discord, Slack, etc.)
