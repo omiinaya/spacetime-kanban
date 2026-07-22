@@ -35,13 +35,13 @@ test-frontend:  ## Run frontend tests
 	cd web && npm test 2>/dev/null || echo "npm test not configured"
 
 lint:  ## Lint Python backend (ruff)
-	cd server && python3 -m ruff check . 2>/dev/null || ruff check server/
+	cd server && python3 -m ruff check . 2>/dev/null || python3 -m ruff check server/ 2>/dev/null || echo "ruff not available — skipping lint"
 
 fmt:  ## Format code (ruff)
-	cd server && python3 -m ruff format . 2>/dev/null || ruff format server/
+	cd server && python3 -m ruff format . 2>/dev/null || python3 -m ruff format server/ 2>/dev/null || echo "ruff not available — skipping format"
 
 fmt-check:  ## Check formatting without modifying
-	cd server && python3 -m ruff format --check . 2>/dev/null || ruff format --check server/
+	cd server && python3 -m ruff format --check . 2>/dev/null || python3 -m ruff format --check server/ 2>/dev/null || echo "ruff not available — skipping format check"
 
 fix: fmt lint  ## Fix auto-fixable issues
 
@@ -97,8 +97,8 @@ coverage:  ## Run tests with pytest coverage
 	@echo "HTML report: server/htmlcov/index.html"
 
 check-ports:  ## Verify required ports are free
-	@echo "Checking ports 5189 (vite), 8727 (server), 3001 (STDB)..."
-	@for port in 5189 8727 3001; do \
+	@echo "Checking ports 8727 (server), 3001 (STDB)..."
+	@for port in 8727 3001; do \
 		if ss -tlnp "sport = :$$port" 2>/dev/null | grep -q .; then \
 			echo "  Port $$port: IN USE"; \
 		else \

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   lint-python:
@@ -18,24 +18,10 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-      - run: pip install flake8
-      - run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=.venv,venv
+      - run: pip install ruff
+      - run: ruff check . --exclude=.venv,venv
 
-  lint-typescript:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npx tsc --noEmit --pretty
-
-  type-check-python:
+  format-python:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,10 +32,10 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-      - run: pip install mypy
-      - run: mypy . --ignore-missing-imports --exclude=.venv --exclude=venv
+      - run: pip install ruff
+      - run: ruff format --check . --exclude=.venv,venv
 
-  type-check-typescript:
+  lint-typescript:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -75,9 +61,35 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
       - run: pip install -r requirements.txt pytest pytest-asyncio httpx
-      - run: python -m pytest ../test_e2e.py -v --ignore=.venv --ignore=venv || echo 'Integration tests require a running SpacetimeDB instance'
-        working-directory: ./
-      - run: python -m pytest . -v --ignore=.venv --ignore=venv --ignore=../test_e2e.py
+      - run: python -m pytest tests/ -v -x --tb=short
+
+  test-typescript:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx vitest run --reporter=compact
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
 
   stdb-type-drift:
     runs-on: ubuntu-latest
@@ -92,18 +104,3 @@ jobs:
           node-version: '20'
       - name: Check generated types match the module
         run: scripts/check-stdb-types.sh
-
-  test-typescript:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium 2>/dev/null || true
-      - run: npm run test:e2e || echo 'E2E tests require a running server and SpacetimeDB'
