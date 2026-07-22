@@ -5,15 +5,15 @@ Each handler is a function that takes a WorkerContext and returns
 pattern that's matched against the task title.
 """
 
+import contextlib
 import json
 import os
 import re
 import subprocess
 import sys
-from typing import Callable
+from collections.abc import Callable
 
 from workers.base import WorkerContext
-
 
 # ── Handler registry ────────────────────────────────────────────────
 
@@ -69,7 +69,7 @@ def handle_add_index_btree(ctx: WorkerContext) -> tuple[bool, str]:
         table_files = []
         import glob
 
-        for root, dirs, files in os.walk(repo_path):
+        for root, _dirs, files in os.walk(repo_path):
             for f in files:
                 if f in ("tables.rs", "lib.rs") and "spacetimedb" in root:
                     table_files.append(os.path.join(root, f))
@@ -115,7 +115,7 @@ def handle_add_index_btree(ctx: WorkerContext) -> tuple[bool, str]:
                     # or a commonly queried field name
                     if stripped.startswith("pub ") and ":" in stripped:
                         field_name = stripped.split(":")[0].replace("pub ", "").strip()
-                        field_type = stripped.split(":")[1].strip().rstrip(",")
+                        stripped.split(":")[1].strip().rstrip(",")
 
                         # Skip if already has an attribute above it
                         has_attr = False
@@ -357,25 +357,52 @@ def handle_extract_module(ctx: WorkerContext) -> tuple[bool, str]:
     # ── Step 1: Find the largest non-test .rs or .py file ──────────
     try:
         cmd = [
-            "find", repo_path, "-type", "f", "(",
-            "-name", "*.rs", "-o",
-            "-name", "*.py",
+            "find",
+            repo_path,
+            "-type",
+            "f",
+            "(",
+            "-name",
+            "*.rs",
+            "-o",
+            "-name",
+            "*.py",
             ")",
             # Exclude test / generated / dependency paths
-            "!", "-path", "*/test*",
-            "!", "-path", "*/tests/*",
-            "!", "-path", "*/node_modules/*",
-            "!", "-path", "*/target/*",
-            "!", "-path", "*/__pycache__/*",
-            "!", "-path", "*/.git/*",
-            "!", "-path", "*/venv/*",
-            "!", "-path", "*/migrations/*",
-            "!", "-path", "*build/*",
-            "-exec", "wc", "-l", "{}", "+",
+            "!",
+            "-path",
+            "*/test*",
+            "!",
+            "-path",
+            "*/tests/*",
+            "!",
+            "-path",
+            "*/node_modules/*",
+            "!",
+            "-path",
+            "*/target/*",
+            "!",
+            "-path",
+            "*/__pycache__/*",
+            "!",
+            "-path",
+            "*/.git/*",
+            "!",
+            "-path",
+            "*/venv/*",
+            "!",
+            "-path",
+            "*/migrations/*",
+            "!",
+            "-path",
+            "*build/*",
+            "-exec",
+            "wc",
+            "-l",
+            "{}",
+            "+",
         ]
-        wc_result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=30
-        )
+        wc_result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     except subprocess.TimeoutExpired:
         return False, "Timed out searching for source files"
     except FileNotFoundError:
@@ -412,7 +439,7 @@ def handle_extract_module(ctx: WorkerContext) -> tuple[bool, str]:
     try:
         with open(target_path) as f:
             content = f.read()
-    except (OSError, IOError) as e:
+    except OSError as e:
         return False, f"Cannot read {target_path}: {e}"
 
     is_rust = target_path.endswith(".rs")
@@ -430,8 +457,7 @@ def handle_extract_module(ctx: WorkerContext) -> tuple[bool, str]:
 
     if len(items) < 2:
         return False, (
-            f"{target_path} only has one top-level item — "
-            "extracting it would leave an empty module"
+            f"{target_path} only has one top-level item — extracting it would leave an empty module"
         )
 
     # Pick the largest item (by source lines)
@@ -450,7 +476,15 @@ def handle_extract_module(ctx: WorkerContext) -> tuple[bool, str]:
         scan = start - 1
         while scan >= 0:
             prev = lines[scan].strip()
-            if prev == "" or prev.startswith("//") or prev.startswith("#[") or prev.startswith("///") or prev.startswith("/*") or prev.startswith("*/") or prev.startswith("*"):
+            if (
+                prev == ""
+                or prev.startswith("//")
+                or prev.startswith("#[")
+                or prev.startswith("///")
+                or prev.startswith("/*")
+                or prev.startswith("*/")
+                or prev.startswith("*")
+            ):
                 start = scan
                 scan -= 1
             else:
@@ -481,10 +515,7 @@ def handle_extract_module(ctx: WorkerContext) -> tuple[bool, str]:
         module_decl = f"from .{safe_name} import {func_name}"
 
     if os.path.exists(new_file):
-        return False, (
-            f"Module file {new_file} already exists — "
-            "refusing to overwrite"
-        )
+        return False, (f"Module file {new_file} already exists — refusing to overwrite")
 
     # Write the new module file via subprocess
     try:
@@ -518,7 +549,13 @@ def handle_extract_module(ctx: WorkerContext) -> tuple[bool, str]:
         # Insert after the last `use` line at top, or after module-level doc comments
         insert_pos = 0
         for i, ln in enumerate(new_lines):
-            if ln.startswith("use ") or ln.startswith("extern crate ") or ln.startswith("#![") or ln.startswith("//!") or ln.startswith("/*"):
+            if (
+                ln.startswith("use ")
+                or ln.startswith("extern crate ")
+                or ln.startswith("#![")
+                or ln.startswith("//!")
+                or ln.startswith("/*")
+            ):
                 insert_pos = i + 1
             else:
                 # Stop scanning at first non-use/non-attribute line
@@ -530,9 +567,13 @@ def handle_extract_module(ctx: WorkerContext) -> tuple[bool, str]:
         insert_pos = 0
         for i, ln in enumerate(new_lines):
             stripped = ln.strip()
-            if stripped.startswith("#!") or stripped.startswith("# -*-") or stripped.startswith('"""') or stripped.startswith("'''"):
-                insert_pos = i + 1
-            elif stripped == "":
+            if (
+                stripped.startswith("#!")
+                or stripped.startswith("# -*-")
+                or stripped.startswith('"""')
+                or stripped.startswith("'''")
+                or stripped == ""
+            ):
                 insert_pos = i + 1
             else:
                 break
@@ -568,7 +609,7 @@ def handle_extract_module(ctx: WorkerContext) -> tuple[bool, str]:
             with open(target_path, "w") as f:
                 f.write(content)
             return False, "Updated file appears truncated — reverted all changes"
-    except (OSError, IOError) as e:
+    except OSError as e:
         os.remove(new_file)
         return False, f"Cannot verify updated file: {e} — new module cleaned up"
 
@@ -595,9 +636,7 @@ def _find_rust_top_level_items(content: str) -> list[dict]:
     current: dict | None = None
 
     # Regex patterns for top-level item starts
-    item_re = re.compile(
-        r"^(pub\s+)?(?P<kind>fn|struct|enum|trait|impl)\s+(?P<name>\w+)"
-    )
+    item_re = re.compile(r"^(pub\s+)?(?P<kind>fn|struct|enum|trait|impl)\s+(?P<name>\w+)")
 
     for i, line in enumerate(lines):
         stripped = line.strip()
@@ -613,7 +652,14 @@ def _find_rust_top_level_items(content: str) -> list[dict]:
                         # impl blocks usually have a meaningful type name in the
                         # "impl <Name>" pattern; sometimes "impl<T> Name"
                         # We'll use the type after impl as the "name"
-                        type_part = stripped[m.end("kind") :].strip().split("{")[0].split("for")[-1].strip().strip(",")
+                        type_part = (
+                            stripped[m.end("kind") :]
+                            .strip()
+                            .split("{")[0]
+                            .split("for")[-1]
+                            .strip()
+                            .strip(",")
+                        )
                         if type_part:
                             # Handle generics
                             name = type_part.split("<")[0].strip()
@@ -697,12 +743,14 @@ def _find_python_top_level_items(content: str) -> list[dict]:
                         # Some other top-level code — keep going (e.g. a standalone assignment)
                         pass
 
-            items.append({
-                "name": name,
-                "kind": kind,
-                "start_line": start_idx,
-                "end_line": end_idx,
-            })
+            items.append(
+                {
+                    "name": name,
+                    "kind": kind,
+                    "start_line": start_idx,
+                    "end_line": end_idx,
+                }
+            )
             i = end_idx + 1
         else:
             i += 1
@@ -743,7 +791,11 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
     # ── 1. Scan Python files ──────────────────────────────────────
     for root, dirs, files in os.walk(repo_path):
         # Skip noise directories
-        dirs[:] = [d for d in dirs if d not in (".venv", "node_modules", ".git", "target", "__pycache__", "build", "dist")]
+        dirs[:] = [
+            d
+            for d in dirs
+            if d not in (".venv", "node_modules", ".git", "target", "__pycache__", "build", "dist")
+        ]
         for f in files:
             if not f.endswith(".py"):
                 continue
@@ -765,7 +817,9 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
                         findings["python"].append((rel, i, "raise X(literal)", m.group(1)[:80]))
                         continue
                     # raise SomeException(non_string, "message") or raise SomeException("message", ...)
-                    for m in re.finditer(r'raise\s+\w+\(.*?["\']([A-Za-z][A-Za-z0-9 \'\"().,:!?-]+?)["\']\s*\)', line):
+                    for m in re.finditer(
+                        r'raise\s+\w+\(.*?["\']([A-Za-z][A-Za-z0-9 \'\"().,:!?-]+?)["\']\s*\)', line
+                    ):
                         msg = m.group(1)[:80]
                         if len(msg) > 3:  # skip trivial matches
                             findings["python"].append((rel, i, "raise X(...)", msg))
@@ -792,12 +846,16 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
                         # Err("literal".to_string()) or Err("literal".into())
                         m = re.search(r'Err\(["\'](.+?)["\']\.(?:to_string|into)\(\)', line)
                         if m:
-                            findings["rust_literal"].append((rel, i, "Err(literal)", m.group(1)[:80]))
+                            findings["rust_literal"].append(
+                                (rel, i, "Err(literal)", m.group(1)[:80])
+                            )
                             continue
                         # ok_or_else(|| "literal".to_string())
                         m = re.search(r'ok_or_else\(.*?["\'](.+?)["\']\.to_string\(\)', line)
                         if m:
-                            findings["rust_okorelse"].append((rel, i, "ok_or_else(literal)", m.group(1)[:80]))
+                            findings["rust_okorelse"].append(
+                                (rel, i, "ok_or_else(literal)", m.group(1)[:80])
+                            )
                             continue
 
                     # Scan whole-file for multi-line format!() patterns
@@ -820,18 +878,27 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
                     ):
                         line_no = content[: m.start()].count("\n") + 1
                         msg = m.group(1)[:80]
-                        findings["rust_okorelse"].append((rel, line_no, "ok_or_else(format!())", msg))
+                        findings["rust_okorelse"].append(
+                            (rel, line_no, "ok_or_else(format!())", msg)
+                        )
 
                 except Exception:
                     pass
 
     # ── 3. Aggregate results ──────────────────────────────────────
     python_total = len(findings["python"])
-    rust_total = len(findings["rust_literal"]) + len(findings["rust_format"]) + len(findings["rust_okorelse"])
+    rust_total = (
+        len(findings["rust_literal"])
+        + len(findings["rust_format"])
+        + len(findings["rust_okorelse"])
+    )
     total = python_total + rust_total
 
     if total == 0:
-        return True, "No string-based errors found — typed errors already in use or not applicable in this repo"
+        return (
+            True,
+            "No string-based errors found — typed errors already in use or not applicable in this repo",
+        )
 
     # Group by file for reporting
     rust_combined: dict[str, int] = {}
@@ -917,10 +984,12 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
             lines_out.append("}")
             lines_out.append("")
             lines_out.append(f"impl std::fmt::Display for {enum_name} {{")
-            lines_out.append('    fn fmt(&self, f: &mut std::fmt::Formatter<"_">) -> std::fmt::Result {')
+            lines_out.append(
+                '    fn fmt(&self, f: &mut std::fmt::Formatter<"_">) -> std::fmt::Result {'
+            )
             lines_out.append("        match self {")
             for variant, msg in sorted(variants):
-                escaped = msg.replace('\\', '\\\\').replace('"', '\\"')[:80]
+                escaped = msg.replace("\\", "\\\\").replace('"', '\\"')[:80]
                 lines_out.append(f'            Self::{variant} => write!(f, "{escaped}"),')
             lines_out.append("        }")
             lines_out.append("    }")
@@ -932,7 +1001,7 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
             try:
                 with open(error_rs_path, "w") as fh:
                     fh.write("\n".join(lines_out))
-                created_msg = f"created skeleton at server/spacetimedb/src/error.rs"
+                created_msg = "created skeleton at server/spacetimedb/src/error.rs"
             except Exception as e:
                 created_msg = f"failed to create error.rs: {e}"
         else:
@@ -976,7 +1045,7 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
             try:
                 with open(errors_py_path, "w") as fh:
                     fh.write("\n".join(lines_out) + "\n")
-                created_msg = f"created skeleton at server/errors.py"
+                created_msg = "created skeleton at server/errors.py"
             except Exception as e:
                 created_msg = f"failed to create errors.py: {e}"
         else:
@@ -989,11 +1058,19 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
     # ── 6. Build summary ──────────────────────────────────────────
     parts = []
     if rust_total > 0:
-        file_list = ", ".join(f"{f} ({c})" for f, c in sorted(rust_combined.items(), key=lambda x: -x[1]))
-        parts.append(f"Rust: {rust_total} string-based error(s) in {len(rust_combined)} file(s): {file_list}")
+        file_list = ", ".join(
+            f"{f} ({c})" for f, c in sorted(rust_combined.items(), key=lambda x: -x[1])
+        )
+        parts.append(
+            f"Rust: {rust_total} string-based error(s) in {len(rust_combined)} file(s): {file_list}"
+        )
     if python_total > 0:
-        file_list = ", ".join(f"{f} ({c})" for f, c in sorted(py_by_file.items(), key=lambda x: -x[1]))
-        parts.append(f"Python: {python_total} string-based error(s) in {len(py_by_file)} file(s): {file_list}")
+        file_list = ", ".join(
+            f"{f} ({c})" for f, c in sorted(py_by_file.items(), key=lambda x: -x[1])
+        )
+        parts.append(
+            f"Python: {python_total} string-based error(s) in {len(py_by_file)} file(s): {file_list}"
+        )
 
     if suggested_enums:
         parts.append("Suggested enum(s): " + "; ".join(suggested_enums))
@@ -1016,7 +1093,7 @@ def handle_run_tests(ctx: WorkerContext) -> tuple[bool, str]:
     has_pyproject = os.path.isfile(os.path.join(repo_path, "pyproject.toml"))
     has_cargo = os.path.isdir(os.path.join(repo_path, "server", "spacetimedb"))
     has_package = os.path.isfile(os.path.join(repo_path, "package.json"))
-    has_justfile = os.path.isfile(os.path.join(repo_path, "justfile"))
+    os.path.isfile(os.path.join(repo_path, "justfile"))
 
     results = []
 
@@ -1055,7 +1132,7 @@ def handle_run_tests(ctx: WorkerContext) -> tuple[bool, str]:
                 timeout=180,
             )
             # Parse pytest summary
-            summary = result.stdout.split("\n")[-3:]
+            result.stdout.split("\n")[-3:]
             passed_count = len(re.findall(r"PASSED", result.stdout))
             failed_count = len(re.findall(r"FAILED", result.stdout))
             results.append(f"Python: {passed_count} passed, {failed_count} failed")
@@ -1203,10 +1280,8 @@ def handle_scan_todos(ctx: WorkerContext) -> tuple[bool, str]:
         total = 0
         for line in lines[:30]:
             if ":" in line:
-                try:
+                with contextlib.suppress(ValueError):
                     total += int(line.split(":")[-1])
-                except ValueError:
-                    pass
         if total > 0:
             return True, f"Found {total} TODO/FIXME/HACK/XXX markers across {len(lines):,} file(s)"
         return True, "No TODO/FIXME/HACK/XXX markers found"

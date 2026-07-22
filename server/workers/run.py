@@ -17,8 +17,8 @@ Environment variables:
     KANBAN_LLM_WORKER — LLM command (default: hermes chat -q)
 """
 
-import sys
 import os
+import sys
 
 # Ensure the server package is on the path
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,8 +27,8 @@ if server_dir not in sys.path:
     sys.path.insert(0, server_dir)
 
 from workers.base import WorkerContext, run_worker
-from workers.mechanical import match_handler
 from workers.llm import run_llm_worker
+from workers.mechanical import match_handler
 
 
 def route_task(ctx: WorkerContext) -> tuple[bool, str]:
@@ -37,7 +37,6 @@ def route_task(ctx: WorkerContext) -> tuple[bool, str]:
     Returns (success, message) like all handlers.
     """
     title = ctx.title
-    repo = ctx.repo
 
     # Step 1: Check mechanical handlers
     handler = match_handler(title)
@@ -48,7 +47,7 @@ def route_task(ctx: WorkerContext) -> tuple[bool, str]:
 
     # Step 2: Fall back to LLM worker
     ctx.add_log("worker_routed", "LLM worker (no mechanical pattern matched)")
-    print(f"[worker] Routing to LLM worker (no mechanical pattern matched)", file=sys.stderr)
+    print("[worker] Routing to LLM worker (no mechanical pattern matched)", file=sys.stderr)
     return run_llm_worker(ctx)
 
 

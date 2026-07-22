@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import sys
 import time
 from contextlib import asynccontextmanager
 
@@ -11,8 +12,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-
-import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import issue_sync
@@ -102,6 +101,7 @@ app.add_middleware(
 
 # ── Compression ──
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 
 # ── Security headers ──
 @app.middleware("http")

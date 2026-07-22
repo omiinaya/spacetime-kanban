@@ -18,7 +18,6 @@ Scheduler loops:
 """
 
 import asyncio
-import json
 import os
 import subprocess
 import time
@@ -158,7 +157,7 @@ def _spawn_worker(task_id: str, title: str, repo: str) -> bool:
 def _get_worker_count() -> int:
     """Count live worker processes. Does NOT prune — death watcher owns that."""
     alive = 0
-    for tid, proc in _worker_processes.items():
+    for _tid, proc in _worker_processes.items():
         if proc and proc.poll() is None:
             alive += 1
     return alive
@@ -510,7 +509,7 @@ async def task_archiver(interval: int):
             archived = 0
 
             # Done tasks >7 days
-            done_tasks = await _api_get(f"/api/tasks?status=done&archived=false&limit=500")
+            done_tasks = await _api_get("/api/tasks?status=done&archived=false&limit=500")
             if done_tasks:
                 old_done = [
                     t["id"]
@@ -523,7 +522,7 @@ async def task_archiver(interval: int):
                         archived += len(old_done)
 
             # Blocked tasks >24h
-            blocked_tasks = await _api_get(f"/api/tasks?status=blocked&archived=false&limit=500")
+            blocked_tasks = await _api_get("/api/tasks?status=blocked&archived=false&limit=500")
             if blocked_tasks:
                 old_blocked = [
                     t["id"]
@@ -554,7 +553,7 @@ async def task_archiver(interval: int):
             if archived > 0:
                 print(f"[scheduler:archiver] Archived {archived} old task(s)")
             elif interval % 3600 == 0:  # Log availability every hour
-                print(f"[scheduler:archiver] No tasks to archive")
+                print("[scheduler:archiver] No tasks to archive")
 
         except asyncio.CancelledError:
             break

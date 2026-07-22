@@ -10,7 +10,6 @@ Priority: P3 (low) — nice to have, not urgent.
 """
 
 import os
-import re
 
 from scanners import register_scanner
 
@@ -60,7 +59,7 @@ def _find_test_gaps_rust(repo_path: str) -> list[str]:
         return []
 
     gaps = []
-    for root, dirs, files in os.walk(stdb_src):
+    for root, _dirs, files in os.walk(stdb_src):
         for f in files:
             if not f.endswith(".rs"):
                 continue

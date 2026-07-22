@@ -30,7 +30,6 @@ def _scan_rust_file(filepath: str) -> list[dict]:
             continue
 
         # Found a table — locate the struct
-        struct_start = None
         struct_name = None
         brace_depth = 0
         in_struct = False
@@ -53,7 +52,6 @@ def _scan_rust_file(filepath: str) -> list[dict]:
             i += 1
             continue
 
-        struct_start = j
         brace_depth = struct_line.count("{") - struct_line.count("}")
         in_struct = brace_depth > 0
 
@@ -139,7 +137,7 @@ def scan_stdb_index(repo_name: str, repo_path: str) -> list[dict]:
         return []
 
     findings = []
-    for root, dirs, files in os.walk(stdb_src):
+    for root, _dirs, files in os.walk(stdb_src):
         for f in files:
             if f.endswith(".rs"):
                 filepath = os.path.join(root, f)

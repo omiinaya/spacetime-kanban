@@ -45,8 +45,12 @@ jobs:
       - name: Publish STDB module
         if: github.ref == 'refs/heads/main'
         env:
-          SPACETIME_SERVER: ${{ secrets.STDB_SERVER || 'http://localhost:3001' }}
+          SPACETIME_SERVER: ${{ secrets.STDB_SERVER || '' }}
         run: |
+          if [ -z "$SPACETIME_SERVER" ]; then
+            echo "No STDB_SERVER configured — skipping publish"
+            exit 0
+          fi
           cd server/spacetimedb && \
           spacetime publish \
             -b target/wasm32-unknown-unknown/release/spacetimedb_kanban.wasm \
@@ -59,6 +63,10 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
         run: |
-          echo "Deploy to $DEPLOY_HOST"
-          # Example: rsync server/ to target, restart service
-          # ssh -i "$DEPLOY_KEY" "root@$DEPLOY_HOST" "cd /opt/kanban && git pull && systemctl restart kanban"
+          if [ -z "$DEPLOY_HOST" ]; then
+            echo "No DEPLOY_HOST configured — skipping deploy"
+            exit 0
+          fi
+          echo "Deploying to $DEPLOY_HOST..."
+          ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" "root@$DEPLOY_HOST" \
+            "cd /opt/kanban && git pull && systemctl restart kanban"

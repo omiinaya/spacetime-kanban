@@ -18,7 +18,6 @@ import httpx
 
 from config import settings
 
-
 # ── Event constants ──────────────────────────────────────────────────
 EVENT_TASK_BLOCKED = "task.blocked"
 EVENT_TASK_COMPLETED = "task.completed"

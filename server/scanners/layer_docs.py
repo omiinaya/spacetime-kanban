@@ -16,7 +16,6 @@ import os
 
 from scanners import register_scanner
 
-
 # Files/dirs that indicate documented projects
 README_FILES = ["README.md", "README.rst", "README.txt"]
 CI_FILES = [".github/workflows/ci.yml", ".github/workflows/test.yml", ".github/workflows/main.yml"]
@@ -42,9 +41,8 @@ def _find_project_files(repo_path: str, filenames: list[str]) -> list[str]:
         if os.path.isfile(os.path.join(repo_path, name)):
             found.append(name)
         # Also check for star patterns
-        if name.endswith("/"):
-            if os.path.isdir(os.path.join(repo_path, name)):
-                found.append(name)
+        if name.endswith("/") and os.path.isdir(os.path.join(repo_path, name)):
+            found.append(name)
     return found
 
 
