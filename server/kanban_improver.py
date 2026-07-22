@@ -24,7 +24,20 @@ import urllib.request
 # ── Config ──────────────────────────────────────────────────────────
 KANBAN_API = os.environ.get("KANBAN_API", "http://localhost:8727")
 KANBAN_AGENT = os.environ.get("HERMES_AGENT_ID", "kanban-improver")
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+KANBAN_ROOT = os.environ.get(
+    "KANBAN_ROOT",
+    ""
+)
+if not KANBAN_ROOT:
+    # Use workdir (CWD) if it points to the kanban project
+    cwd = os.getcwd()
+    marker = os.path.join(cwd, "server", "kanban_improver.py")
+    if os.path.exists(marker):
+        KANBAN_ROOT = cwd
+    else:
+        # Fallback: assume we're running from ~/.hermes/scripts/
+        KANBAN_ROOT = os.path.expanduser("~/spacetimedb-kanban")
+PROJECT_ROOT = os.environ.get("PROJECT_ROOT", KANBAN_ROOT)
 SERVER_DIR = os.path.join(PROJECT_ROOT, "server")
 LLM_CMD = os.environ.get("KANBAN_IMPROVER_LLM", "hermes chat -Q -q")
 STATUS_FILE = os.path.join(PROJECT_ROOT, "_improvement_status.json")
@@ -447,7 +460,7 @@ def main():
             print(f"  • {i}")
 
     if not critical and not warnings:
-        print("[improver] ✅ Board healthy, no issues found")
+        pass  # Silent when healthy — cron only reports on findings
 
     # Create a task for critical issues
     for issue in critical:
