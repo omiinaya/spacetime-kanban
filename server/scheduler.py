@@ -511,6 +511,21 @@ async def task_archiver(interval: int):
                     if result:
                         archived += len(old_blocked)
 
+                # Auto-heal: tasks blocked without fail_reason → retry
+                # These were likely blocked by the old buggy /block endpoint
+                # that didn't store fail_reason. Reset them for proper processing.
+                stuck_blocked = [
+                    t["id"] for t in blocked_tasks
+                    if not t.get("fail_reason") and t.get("assigned_to")
+                ]
+                if stuck_blocked:
+                    result = await _api_post("/api/tasks/bulk-retry", {"task_ids": stuck_blocked})
+                    if result:
+                        retried = result.get("retried", 0)
+                        if retried:
+                            archived += retried  # Count toward reported activity
+                            print(f"[scheduler:archiver] Retried {retried} stuck blocked task(s)")
+
             if archived > 0:
                 print(f"[scheduler:archiver] Archived {archived} old task(s)")
             elif interval % 3600 == 0:  # Log availability every hour
