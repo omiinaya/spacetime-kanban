@@ -11,7 +11,6 @@ Priority: P2 (medium) — dependency drift accumulates slowly.
 import json
 import os
 import re
-import subprocess
 import tomllib
 
 from scanners import register_scanner
@@ -134,7 +133,7 @@ def _check_npm_deps(repo_path: str) -> list[dict]:
                     names = ", ".join(sorted(duplicates)[:5])
                     findings.append(
                         {
-                            "title": f"Deduplicate npm deps shared between root and web/",
+                            "title": "Deduplicate npm deps shared between root and web/",
                             "description": f"{len(duplicates)} packages appear in both root and web/package.json: {names}. "
                             f"Consider hoisting shared deps to the root or using a workspace.",
                             "priority": 3,

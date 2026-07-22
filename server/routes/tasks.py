@@ -49,10 +49,10 @@ from shared import (
     verify_auth,
 )
 from webhook_dispatcher import (
-    fire_event,
     EVENT_TASK_BLOCKED,
     EVENT_TASK_COMPLETED,
     EVENT_TASK_DELETED,
+    fire_event,
 )
 
 router = APIRouter()

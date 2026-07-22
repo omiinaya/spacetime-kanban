@@ -20,7 +20,6 @@ import time
 
 from workers.base import WorkerContext
 
-
 # ── Config ──────────────────────────────────────────────────────────
 
 LLM_COMMAND_STR = os.environ.get(
@@ -147,7 +146,7 @@ def run_llm_worker(ctx: WorkerContext) -> tuple[bool, str]:
         )
 
         stdout_data, stderr_data = proc.communicate(timeout=WORK_TIMEOUT)
-        elapsed = time.time() - start_time
+        time.time() - start_time
 
     except subprocess.TimeoutExpired:
         if proc and proc.poll() is None:
@@ -237,7 +236,7 @@ def run_llm_worker(ctx: WorkerContext) -> tuple[bool, str]:
     if has_new_changes and meaningful:
         return True, f"Task completed ({len(changes_after)} file(s) changed)"
     elif not meaningful and not has_new_changes:
-        return False, f"LLM returned empty/trivial response — no work done"
+        return False, "LLM returned empty/trivial response — no work done"
     elif not meaningful:
         # No actual content, but we see changes (rare)
         return True, "Changes detected despite minimal LLM output"

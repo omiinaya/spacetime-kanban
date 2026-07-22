@@ -12,8 +12,7 @@ function that returns findings:
 
 import os
 import subprocess
-from typing import Callable
-
+from collections.abc import Callable
 
 # ── Scanner registry (defined BEFORE importing modules to avoid circular deps) ──
 
@@ -32,14 +31,16 @@ def get_scanner_name(fn: Callable) -> str:
 
 
 # ── Import all scanner modules so their @register_scanner decorators run ──
-from . import stdb_index
-from . import todo_scanner
-from . import dep_scanner
-from . import unused_code
-from . import test_gaps
-from . import layer_architecture
-from . import layer_docs
-from . import layer_security
+from . import (
+    dep_scanner,
+    layer_architecture,
+    layer_docs,
+    layer_security,
+    stdb_index,
+    test_gaps,
+    todo_scanner,
+    unused_code,
+)
 
 
 def discover_repos(max_repos: int = 50) -> list[tuple[str, str]]:
@@ -66,22 +67,6 @@ def discover_repos(max_repos: int = 50) -> list[tuple[str, str]]:
         "depot_tools",
         "emsdk",
     }
-    priority_patterns = [
-        "spacetime-",
-        "factoring",
-        "hermes-",
-        "sample-repo-w",
-        "stealth",
-        "akamai",
-        "ca-",
-        "nightms",
-        "kimi-",
-        "mmit",
-        "qnai",
-        "airline",
-        "flight",
-        "browser",
-    ]
 
     def score_repo(name: str) -> int:
         """Higher score = higher priority for scanning."""

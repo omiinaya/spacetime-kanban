@@ -25,7 +25,6 @@ server_dir = os.path.dirname(script_dir)
 if server_dir not in sys.path:
     sys.path.insert(0, server_dir)
 
-from scanners import get_scanner_name, SCANNERS
 
 API_BASE = os.environ.get("KANBAN_API", "http://localhost:8727")
 
@@ -51,7 +50,8 @@ LAYER_NAMES = {
 
 
 def _api_get(path: str) -> Any:
-    import json, urllib.request
+    import json
+    import urllib.request
 
     try:
         req = urllib.request.Request(f"{API_BASE}{path}")
@@ -168,7 +168,7 @@ def compute_all_projects(repos: list[tuple[str, str]] | None = None) -> dict:
     overall_sum = 0.0
     needs_attention = []
 
-    for repo_name, repo_path in repos:
+    for repo_name, _repo_path in repos:
         health = compute_project_health(repo_name)
         if not health["by_scanner"]:
             continue  # No scanner tasks for this project yet

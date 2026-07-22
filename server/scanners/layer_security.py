@@ -11,7 +11,6 @@ Priority: P3 — long-term project health.
 """
 
 import os
-import re
 import subprocess
 
 from scanners import register_scanner
@@ -139,7 +138,7 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
             except (OSError, UnicodeDecodeError):
                 pass
 
-    has_fastapi_app = (
+    (
         any(
             os.path.isfile(os.path.join(d, "main.py"))
             and "FastAPI" in open(os.path.join(d, "main.py")).read()
@@ -164,7 +163,7 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
                 pass
 
     # Actually let me use a simpler approach
-    for root, dirs, files in os.walk(repo_path):
+    for root, _dirs, files in os.walk(repo_path):
         for f in files:
             if f == "main.py":
                 filepath = os.path.join(root, f)

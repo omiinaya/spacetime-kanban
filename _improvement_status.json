@@ -1,27 +1,7 @@
 {
-  "last_run": 1784705727,
-  "known_issues": [
-    {
-      "error": "ERROR:    [Errno 98] error while attempting to bind on address ('0.0.0.0', 8727): address already in",
-      "found_at": 1784705727,
-      "fixed": false
-    }
-  ],
+  "last_run": 1784749281,
+  "known_issues": [],
   "fixed_issues": [],
   "server_restarts": 0,
-  "run_count": 3,
-  "ai_suggestions": [
-    {
-      "idea": "- **Port bind failure kills restarts** \u2014 The restart log sho",
-      "created_at": 1784705758
-    },
-    {
-      "idea": "- **`_gh_request` uses blocking `urllib` with zero retry log",
-      "created_at": 1784705759
-    },
-    {
-      "idea": "- **Scheduler creates a fresh `httpx.AsyncClient` per API ca",
-      "created_at": 1784705759
-    }
-  ]
+  "run_count": 2
 }

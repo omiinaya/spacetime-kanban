@@ -89,8 +89,8 @@ async def project_health():
 
     Also provides overall score and identifies projects needing attention.
     """
-    from scanners.health import compute_all_projects, compute_project_health
     from scanners import discover_repos
+    from scanners.health import compute_all_projects
 
     loop = asyncio.get_event_loop()
     repos = discover_repos(max_repos=50)

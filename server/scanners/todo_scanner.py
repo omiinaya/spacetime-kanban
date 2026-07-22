@@ -6,6 +6,7 @@ Avoids creating tasks for trivial or single-marker repos.
 Priority: P2 (medium) — good hygiene but not urgent.
 """
 
+import contextlib
 import os
 import subprocess
 
@@ -61,10 +62,8 @@ def scan_todos(repo_name: str, repo_path: str) -> list[dict]:
                 )
                 for l in r.stdout.strip().split("\n"):
                     if ":" in l:
-                        try:
+                        with contextlib.suppress(ValueError, IndexError):
                             tag_counts[tag] += int(l.rsplit(":", 1)[1])
-                        except (ValueError, IndexError):
-                            pass
         except Exception:
             pass
 

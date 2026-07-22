@@ -28,7 +28,7 @@ def _check_rust_unwraps(repo_path: str) -> list[str]:
     for src_dir in stdb_dirs:
         if not os.path.isdir(src_dir):
             continue
-        for root, dirs, files in os.walk(src_dir):
+        for root, _dirs, files in os.walk(src_dir):
             for f in files:
                 if not f.endswith(".rs"):
                     continue
