@@ -18,6 +18,7 @@ from routes.analytics import router as analytics_router
 from routes.apikeys import router as apikeys_router
 from routes.dispatcher import router as dispatcher_router
 from routes.github import router as github_router
+from routes.health import router as health_router
 from routes.labels import router as labels_router
 from routes.logs import router as logs_router
 from routes.ops import router as ops_router
@@ -302,6 +303,7 @@ app.include_router(tasks_router)
 app.include_router(templates_router)
 app.include_router(apikeys_router)
 app.include_router(dispatcher_router)
+app.include_router(health_router)
 app.include_router(ops_router)
 app.include_router(rules_router)
 app.include_router(scanner_router)

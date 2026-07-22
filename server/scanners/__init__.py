@@ -37,6 +37,9 @@ from . import todo_scanner
 from . import dep_scanner
 from . import unused_code
 from . import test_gaps
+from . import layer_architecture
+from . import layer_docs
+from . import layer_security
 
 
 def discover_repos(max_repos: int = 50) -> list[tuple[str, str]]:
