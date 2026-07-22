@@ -255,7 +255,7 @@ describe('KanbanColumn', () => {
 
   // ---------- Collapsed column ----------
   it('renders collapsed column differently', () => {
-    const { container } = render(<KanbanColumn {...defaultProps} tasks={[]} collapsed={true} />)
+    render(<KanbanColumn {...defaultProps} tasks={[]} collapsed={true} />)
     // Collapsed mode shows vertical text and a count badge, not "Empty"
     expect(screen.queryByText('Empty')).not.toBeInTheDocument()
     // Collapsed shows the status label (vertical)

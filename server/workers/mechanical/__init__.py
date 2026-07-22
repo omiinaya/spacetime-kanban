@@ -137,7 +137,7 @@ def handle_add_index_btree(ctx: WorkerContext) -> tuple[bool, str]:
 
             if candidate_fields:
                 # Add #[index(btree)] before each candidate field
-                for filepath, line_idx, field_name in reversed(candidate_fields):
+                for _filepath, line_idx, _field_name in reversed(candidate_fields):
                     indent = "    "
                     lines.insert(line_idx, f"{indent}#[index(btree)]")
                     changes += 1
@@ -641,9 +641,7 @@ def _find_rust_top_level_items(content: str) -> list[dict]:
     for i, line in enumerate(lines):
         stripped = line.strip()
 
-        if not in_item:
-            # Only look for item starts when brace_depth is 0 (top level)
-            if brace_depth == 0:
+        if not in_item and brace_depth == 0:
                 m = item_re.search(stripped)
                 if m:
                     kind = m.group("kind")

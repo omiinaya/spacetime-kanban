@@ -141,7 +141,7 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
     (
         any(
             os.path.isfile(os.path.join(d, "main.py"))
-            and "FastAPI" in open(os.path.join(d, "main.py")).read()
+            and "FastAPI" in open(os.path.join(d, "main.py")).read()  # noqa: SIM115 — intentional one-liner
             for d in server_dirs
             if os.path.isfile(os.path.join(d, "main.py"))
         )
@@ -159,7 +159,7 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
                 if '"health"' in content or "'health'" in content or "/health" in content:
                     has_healthcheck = True
                 break
-            except:
+            except OSError:
                 pass
 
     # Actually let me use a simpler approach
@@ -172,7 +172,7 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
                         content = fh.read()
                     if '@app.get("/health")' in content or "def health" in content:
                         has_healthcheck = True
-                except:
+                except (IOError, OSError):  # noqa: UP024 — explicit for clarity
                     pass
 
     if not has_healthcheck:

@@ -12,7 +12,7 @@ COPY web/ .
 RUN npm run build
 
 # Stage 2: Build SpacetimeDB WASM module
-FROM rust:1.80 AS module-builder
+FROM rust:1.93 AS module-builder
 RUN rustup target add wasm32-unknown-unknown
 WORKDIR /app/module
 COPY server/spacetimedb/Cargo.toml server/spacetimedb/Cargo.lock* ./
@@ -21,7 +21,7 @@ RUN cargo build --release --target wasm32-unknown-unknown && \
     cp target/wasm32-unknown-unknown/release/spacetimedb_kanban.wasm /tmp/module.wasm
 
 # Stage 3: Runtime — Python server
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-ARG STDB_VERSION=2.6.1
+ARG STDB_VERSION=2.7.0
 RUN curl -fsSL "https://github.com/spacetimedb/spacetimedb/releases/download/v${STDB_VERSION}/spacetime-linux-x86_64.tar.gz" \
     | tar xz -C /usr/local/bin/ && \
     chmod +x /usr/local/bin/spacetime

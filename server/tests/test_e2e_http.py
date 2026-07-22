@@ -13,6 +13,7 @@ Run ALL tests (including e2e-marked):
     python -m pytest tests/test_e2e_http.py -v --tb=short -m e2e
 """
 
+import contextlib
 import os
 import uuid
 
@@ -122,10 +123,8 @@ async def created_task(client):
         pytest.skip(f"no task id in response: {data}")
     yield task_id
     # Cleanup
-    try:
+    with contextlib.suppress(Exception):
         await client.delete(f"/api/tasks/{task_id}")
-    except Exception:
-        pass
 
 
 # ═══════════════════════════════════════════════════════════════════════
