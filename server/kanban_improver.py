@@ -24,10 +24,7 @@ import urllib.request
 # ── Config ──────────────────────────────────────────────────────────
 KANBAN_API = os.environ.get("KANBAN_API", "http://localhost:8727")
 KANBAN_AGENT = os.environ.get("HERMES_AGENT_ID", "kanban-improver")
-KANBAN_ROOT = os.environ.get(
-    "KANBAN_ROOT",
-    ""
-)
+KANBAN_ROOT = os.environ.get("KANBAN_ROOT", "")
 if not KANBAN_ROOT:
     # Use workdir (CWD) if it points to the kanban project
     cwd = os.getcwd()
@@ -45,9 +42,9 @@ STATUS_FILE = os.path.join(PROJECT_ROOT, "_improvement_status.json")
 # Track what we already know to avoid repeat work
 DEFAULT_STATUS = {
     "last_run": 0,
-    "known_issues": [],        # issues we've already created tasks for
-    "fixed_issues": [],        # issues we've already fixed
-    "server_restarts": 0,      # count of server restarts we've done
+    "known_issues": [],  # issues we've already created tasks for
+    "fixed_issues": [],  # issues we've already fixed
+    "server_restarts": 0,  # count of server restarts we've done
     "run_count": 0,
 }
 
@@ -153,15 +150,18 @@ def _create_task(title: str, description: str, priority: int = 3, repo: str = "s
     if _task_exists_on_board(title[:40]):
         print(f"[improver] Task already on board, skipping: {title[:60]}")
         return None
-    result = _api_post("/api/tasks", {
-        "title": title,
-        "description": description,
-        "priority": priority,
-        "repo": repo,
-        "roadmap_item": "Self-Improvement",
-        "created_by": KANBAN_AGENT,
-        "status": "available",
-    })
+    result = _api_post(
+        "/api/tasks",
+        {
+            "title": title,
+            "description": description,
+            "priority": priority,
+            "repo": repo,
+            "roadmap_item": "Self-Improvement",
+            "created_by": KANBAN_AGENT,
+            "status": "available",
+        },
+    )
     if result:
         tid = result.get("id", "?")
         print(f"[improver] Created task {tid[:25]}: {title[:60]}")
@@ -230,23 +230,47 @@ def _ensure_server_dir_env():
 # ── Checks ──────────────────────────────────────────────────────────
 
 
+def _ensure_port_free(port: int = 8727, timeout: int = 10) -> bool:
+    """Kill any process on the given port and wait for it to be released."""
+    import socket
+
+    # Kill whatever holds the port — works for both python3 main.py and uvicorn
+    _run_cmd(["fuser", "-k", f"{port}/tcp"], timeout=5)
+    time.sleep(1)
+
+    # Also try pkill as a fallback for stray uvicorn worker processes
+    _run_cmd(["pkill", "-f", "uvicorn main:app"], timeout=5)
+    _run_cmd(["pkill", "-f", f"uvicorn.*port {port}"], timeout=5)
+
+    # Wait for the port to actually be free
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(1)
+            result = s.connect_ex(("0.0.0.0", port))
+            s.close()
+            if result != 0:
+                return True  # Port is free
+            time.sleep(1)
+        except Exception:
+            return True
+    return False
+
+
 def check_server_health(status: dict) -> list[str]:
     """Check if the kanban server is alive and responding."""
     issues = []
     health = _api_get("/api/health")
     if health is None:
         issues.append("Server is DOWN — API not responding")
-        # Try to restart
+        # Kill anything on port 8727 and wait for release
+        if not _ensure_port_free(8727, timeout=10):
+            issues.append("Could not free port 8727 — giving up")
+            return issues
+        # Start the server properly (matches how main.py starts it)
         code, out = _run_cmd(
-            ["pkill", "-f", "uvicorn main:app"],
-            timeout=5,
-        )
-        time.sleep(2)
-        code, out = _run_cmd(
-            [
-                "python3", "-m", "uvicorn", "main:app",
-                "--host", "0.0.0.0", "--port", "8727",
-            ],
+            ["python3", "main.py"],
             timeout=10,
             cwd=SERVER_DIR,
         )
@@ -283,8 +307,7 @@ def check_board_health(status: dict) -> list[str]:
     if ip:
         now_ms = int(time.time() * 1000)
         stale_ip = [
-            t for t in ip
-            if (now_ms - t.get("updated_at", t.get("created_at", 0))) > 1800000
+            t for t in ip if (now_ms - t.get("updated_at", t.get("created_at", 0))) > 1800000
         ]
         if stale_ip:
             issues.append(f"{len(stale_ip)} tasks in_progress >30min")
@@ -298,11 +321,12 @@ def check_board_health(status: dict) -> list[str]:
 
         # Check for definitive failures that should be permanent-blocked
         doomed = [
-            t for t in cycling
+            t
+            for t in cycling
             if t.get("fail_count", 0) > 0
-            and (t.get("fail_reason", "") or "").lower().startswith(
-                ("no indexable fields", "no unused imports", "nothing found")
-            )
+            and (t.get("fail_reason", "") or "")
+            .lower()
+            .startswith(("no indexable fields", "no unused imports", "nothing found"))
             and t.get("max_attempts", 3) > 1
         ]
         for t in doomed[:5]:
@@ -384,11 +408,13 @@ def _run_llm_improvement_scan(status: dict) -> list[str]:
                 error_key = line.strip()[:100]
                 if error_key not in [i.get("error", "") for i in status.get("known_issues", [])]:
                     issues.append(f"Server error detected: {error_key[:80]}")
-                    status.setdefault("known_issues", []).append({
-                        "error": error_key,
-                        "found_at": int(time.time()),
-                        "fixed": False,
-                    })
+                    status.setdefault("known_issues", []).append(
+                        {
+                            "error": error_key,
+                            "found_at": int(time.time()),
+                            "fixed": False,
+                        }
+                    )
                 break
 
     # LLM-based analysis for improvement ideas
@@ -412,10 +438,12 @@ def _run_llm_improvement_scan(status: dict) -> list[str]:
                             description=f"Auto-detected by kanban improvement agent:\n{line}\n\nSource: log analysis at {time.strftime('%Y-%m-%d %H:%M:%S')}",
                             priority=2,
                         )
-                        status.setdefault("ai_suggestions", []).append({
-                            "idea": idea_key,
-                            "created_at": int(time.time()),
-                        })
+                        status.setdefault("ai_suggestions", []).append(
+                            {
+                                "idea": idea_key,
+                                "created_at": int(time.time()),
+                            }
+                        )
 
     return issues
 
