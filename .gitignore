@@ -1,6 +1,11 @@
 node_modules/
 dist/
 target/
+# Auto-generated status files
+_improvement_status.json
+_execution_status.md
+
+# Python
 __pycache__/
 *.pyc
 .env
