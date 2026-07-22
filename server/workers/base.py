@@ -123,10 +123,14 @@ class WorkerContext:
         return result is not None
 
     def block(self, reason: str = "") -> bool:
-        """Mark the task as blocked."""
+        """Mark the task as blocked, storing the reason for diagnostics.
+
+        Uses block-with-reason endpoint which properly sets fail_reason
+        and increments fail_count (vs plain /block which discards reason).
+        """
         self._running = False
         result = api_post(
-            f"/api/tasks/{self.task_id}/block",
+            f"/api/tasks/{self.task_id}/block-with-reason",
             {"reason": reason or "Blocked by worker"},
         )
         return result is not None
