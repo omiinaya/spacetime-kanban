@@ -54,12 +54,13 @@ install-hooks:  ## Install pre-commit + git hooks
 # ── Dev Environment ─────────────────────────────────────────────────────
 dev-up:  ## Start backend dev server
 	@echo "Starting server on :8727..."
+	-fuser -k 8727/tcp 2>/dev/null; true
 	cd server && python3 main.py &
-	@sleep 1
+	@sleep 2
 	@echo "Backend: http://localhost:8727"
 
 dev-down:  ## Stop dev server
-	-pkill -f "python3 main.py" 2>/dev/null; echo "Stopped"
+	-fuser -k 8727/tcp 2>/dev/null; true
 
 # ── Cleanup ─────────────────────────────────────────────────────────────
 clean:  ## Clean build artifacts
