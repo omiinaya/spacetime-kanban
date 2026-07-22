@@ -2,10 +2,78 @@
 
 import asyncio
 import functools
+import time
 
 from fastapi import APIRouter
 
 router = APIRouter(tags=["health"])
+
+
+@router.get("/api/health")
+async def system_health():
+    """System health — scheduler state and board overview.
+
+    Returns scheduler process metrics, crash reporting, uptime,
+    and a lightweight board summary. Never blocks on external APIs.
+    """
+    result = {
+        "status": "ok",
+        "workers": {"active": 0, "total_spawned": 0},
+        "crashes": {"total": 0, "recent_tasks": []},
+        "uptime_seconds": None,
+        "board": {},
+    }
+
+    try:
+        from scheduler import (
+            _get_worker_count,
+            _worker_crash_counts,
+            _worker_spawn_times,
+            scheduler_start_time,
+        )
+
+        result["workers"] = {
+            "active": _get_worker_count(),
+            "total_spawned": len(_worker_spawn_times),
+        }
+
+        crash_total = sum(_worker_crash_counts.values()) if _worker_crash_counts else 0
+        recent_tasks = [
+            {"task_id": tid, "crash_count": count}
+            for tid, count in (_worker_crash_counts or {}).items()
+            if count >= 2
+        ]
+        result["crashes"] = {
+            "total": crash_total,
+            "recent_tasks": recent_tasks,
+        }
+
+        if scheduler_start_time is not None:
+            result["uptime_seconds"] = round(time.time() - scheduler_start_time, 1)
+    except ImportError:
+        pass  # scheduler not loaded — return defaults
+
+    # Lightweight board overview — fetch via shared client, don't block
+    try:
+        from shared import _sql
+
+        tasks = await _sql("SELECT * FROM tasks")
+        total = 0
+        by_status = {}
+        for t in tasks or []:
+            s = t.get("status", "unknown")
+            by_status[s] = by_status.get(s, 0) + 1
+            total += 1
+        result["board"] = {
+            "total": total,
+            "by_status": by_status,
+        }
+    except ImportError:
+        pass  # shared module not available
+    except Exception:
+        pass  # query failure — keep board as {}
+
+    return result
 
 
 @router.get("/api/health/projects")

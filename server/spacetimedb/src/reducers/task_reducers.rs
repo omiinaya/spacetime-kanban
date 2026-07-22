@@ -28,9 +28,15 @@ pub fn add_task(
     };
 
     let status = if initial_status.is_empty() {
-        "available".to_string()
+        TaskStatus::Available
     } else {
-        initial_status
+        // Parse from string — fallback to Available
+        match initial_status.as_str() {
+            "in_progress" => TaskStatus::InProgress,
+            "blocked" => TaskStatus::Blocked,
+            "done" => TaskStatus::Done,
+            _ => TaskStatus::Available,
+        }
     };
     let due = if due_by > 0 { Some(due_by) } else { None };
 
@@ -76,7 +82,7 @@ pub fn block_task_with_reason(
     let now = now_ms(ctx);
     let mut task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
 
-    if task.status != "in_progress" {
+    if task.status != TaskStatus::InProgress {
         return Err(format!("Cannot block task with status: {}", task.status));
     }
 
@@ -92,11 +98,11 @@ pub fn block_task_with_reason(
 
     // If max_attempts reached, special handling — dispatcher will decide
     if task.fail_count >= task.max_attempts {
-        task.status = "blocked".to_string();
+        task.status = TaskStatus::Blocked;
         task.assigned_to = None;
     } else {
         // Under limit: return to available for retry
-        task.status = "available".to_string();
+        task.status = TaskStatus::Available;
         task.assigned_to = None;
     }
 
@@ -126,7 +132,7 @@ pub fn split_task(
     let mut parent = find_task(ctx, &parent_task_id)
         .ok_or_else(|| "Parent task not found".to_string())?;
 
-    if parent.status != "available" && parent.status != "blocked" {
+    if parent.status != TaskStatus::Available && parent.status != TaskStatus::Blocked {
         return Err(format!("Cannot split task with status: {}", parent.status));
     }
 
@@ -149,7 +155,7 @@ pub fn split_task(
             title: title.clone(),
             description: format!("Subtask of: {} ({})", parent.title, parent_task_id),
             priority: parent.priority,
-            status: "available".to_string(),
+            status: TaskStatus::Available,
             assigned_to: None,
             repo: parent.repo.clone(),
             branch: None,
@@ -182,7 +188,7 @@ pub fn split_task(
     }
 
     // Update parent with subtask list and mark as blocked (tracked by children)
-    parent.status = "blocked".to_string();
+    parent.status = TaskStatus::Blocked;
     parent.assigned_to = None;
     parent.updated_at = now;
     parent.fail_reason = Some(format!(
@@ -236,7 +242,7 @@ pub fn claim_task(ctx: &ReducerContext, task_id: String, agent_id: String) -> Re
     let now = now_ms(ctx);
     let mut task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
 
-    if task.status != "available" {
+    if task.status != TaskStatus::Available {
         return Err(format!(
             "Task is not available (current status: {})",
             task.status
@@ -247,7 +253,7 @@ pub fn claim_task(ctx: &ReducerContext, task_id: String, agent_id: String) -> Re
     if let Some(ref dep_id) = task.depends_on {
         let dep = find_task(ctx, dep_id)
             .ok_or_else(|| format!("Dependency task '{}' not found", dep_id))?;
-        if dep.status != "done" {
+        if dep.status != TaskStatus::Done {
             return Err(format!(
                 "Cannot claim — dependency '{}' ({}) is not done (status: {})",
                 dep_id, dep.title, dep.status
@@ -255,7 +261,7 @@ pub fn claim_task(ctx: &ReducerContext, task_id: String, agent_id: String) -> Re
         }
     }
 
-    task.status = "in_progress".to_string();
+    task.status = TaskStatus::InProgress;
     task.assigned_to = Some(agent_id.clone());
     task.updated_at = now;
     update_task_in_db(ctx, &task);
@@ -269,12 +275,12 @@ pub fn unclaim_task(ctx: &ReducerContext, task_id: String) -> Result<(), String>
     let now = now_ms(ctx);
     let mut task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
 
-    if task.status != "in_progress" && task.status != "blocked" {
+    if task.status != TaskStatus::InProgress && task.status != TaskStatus::Blocked {
         return Err(format!("Cannot unclaim task with status: {}", task.status));
     }
 
     let agent = task.assigned_to.clone();
-    task.status = "available".to_string();
+    task.status = TaskStatus::Available;
     task.assigned_to = None;
     task.updated_at = now;
     update_task_in_db(ctx, &task);
@@ -292,12 +298,12 @@ pub fn complete_task(
     let now = now_ms(ctx);
     let mut task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
 
-    if task.status != "in_progress" {
+    if task.status != TaskStatus::InProgress {
         return Err(format!("Cannot complete task with status: {}", task.status));
     }
 
     let agent = task.assigned_to.clone();
-    task.status = "done".to_string();
+    task.status = TaskStatus::Done;
     task.updated_at = now;
     update_task_in_db(ctx, &task);
 
@@ -316,12 +322,12 @@ pub fn block_task(ctx: &ReducerContext, task_id: String, reason: String) -> Resu
     let now = now_ms(ctx);
     let mut task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
 
-    if task.status != "in_progress" {
+    if task.status != TaskStatus::InProgress {
         return Err(format!("Cannot block task with status: {}", task.status));
     }
 
     let agent = task.assigned_to.clone();
-    task.status = "blocked".to_string();
+    task.status = TaskStatus::Blocked;
     task.updated_at = now;
     update_task_in_db(ctx, &task);
 

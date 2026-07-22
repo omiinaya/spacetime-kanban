@@ -4,16 +4,19 @@ Stores the kanban-task ⟷ GitHub-issue mapping in STDB (issue_links table).
 Provides GitHub API helpers for creating, closing, and reopening issues.
 """
 
+import asyncio
 import json
 from datetime import datetime
 from typing import Any
-from urllib.error import HTTPError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
 
 import httpx
 
 from config import settings
+
+# ── Retry config ─────────────────────────────────────────────────────
+GH_API_MAX_RETRIES = 3
+GH_API_BASE_DELAY = 1.0  # seconds
 
 STDB_SQL_URL = (
     f"http://{settings.stdb_host}:{settings.stdb_port}/v1/database/{settings.stdb_db}/sql"
@@ -195,26 +198,49 @@ def _gh_headers(token: str) -> dict:
     }
 
 
-def _gh_request(method: str, url: str, token: str, body: dict | None = None) -> dict:
-    """Make a GitHub API request and return parsed JSON."""
-    data = json.dumps(body).encode() if body else None
-    req = Request(url, data=data, method=method, headers=_gh_headers(token))
-    try:
-        with urlopen(req, timeout=15) as resp:
-            raw = resp.read()
-            return json.loads(raw) if raw else {}
-    except HTTPError as e:
-        err_body = e.read().decode()[:300]
-        raise RuntimeError(f"GitHub API HTTP {e.code}: {err_body}") from e
+async def _gh_request(method: str, url: str, token: str, body: dict | None = None) -> dict:
+    """Make a GitHub API request with httpx and exponential-backoff retry."""
+    headers = _gh_headers(token)
+    if body:
+        headers["Content-Type"] = "application/json"
+
+    last_error = ""
+    for attempt in range(GH_API_MAX_RETRIES):
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.request(
+                    method=method,
+                    url=url,
+                    json=body,
+                    headers=headers,
+                )
+                if resp.status_code < 500:
+                    raw = resp.text
+                    return json.loads(raw) if raw.strip() else {}
+                # Server error — will retry with backoff
+                last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+        except httpx.TimeoutException as e:
+            last_error = f"timeout: {e}"
+        except httpx.HTTPStatusError as e:
+            last_error = f"HTTP {e.response.status_code}: {e.response.text[:200]}"
+        except Exception as e:
+            last_error = str(e)[:200]
+
+        if attempt < GH_API_MAX_RETRIES - 1:
+            await asyncio.sleep(GH_API_BASE_DELAY * (2**attempt))
+
+    raise RuntimeError(
+        f"GitHub API request failed after {GH_API_MAX_RETRIES} attempts: {last_error}"
+    )
 
 
-def search_issues(token: str, repo: str, query: str) -> list[dict]:
+async def search_issues(token: str, repo: str, query: str) -> list[dict]:
     """Search GitHub issues in a repo using the GitHub API search.
 
     Returns a list of matching issues (title, number, html_url, state).
     """
     url = f"{GITHUB_API}/search/issues?q=repo:{repo}+{quote(query)}&per_page=10"
-    result = _gh_request("GET", url, token)
+    result = await _gh_request("GET", url, token)
     items = result.get("items", [])
     return [
         {
@@ -227,7 +253,7 @@ def search_issues(token: str, repo: str, query: str) -> list[dict]:
     ]
 
 
-def find_existing_issue(token: str, repo: str, task_id: str) -> dict | None:
+async def find_existing_issue(token: str, repo: str, task_id: str) -> dict | None:
     """Search GitHub for an existing issue that already links to a kanban task.
 
     The kanban stores the task ID in the issue body as:
@@ -235,13 +261,13 @@ def find_existing_issue(token: str, repo: str, task_id: str) -> dict | None:
 
     Search for this string and return the first open match, or None.
     """
-    results = search_issues(token, repo, f'"kanban task `{task_id}`"+state:open')
+    results = await search_issues(token, repo, f'"kanban task `{task_id}`"+state:open')
     if results:
         return results[0]
     return None
 
 
-def create_issue(
+async def create_issue(
     token: str,
     repo: str,
     title: str,
@@ -259,7 +285,7 @@ def create_issue(
     """
     # Dedup: check GitHub for existing issue with this task ID
     if task_id:
-        existing = find_existing_issue(token, repo, task_id)
+        existing = await find_existing_issue(token, repo, task_id)
         if existing:
             return {
                 "issue_number": existing["number"],
@@ -277,7 +303,7 @@ def create_issue(
         payload["assignees"] = [assignee]
 
     url = f"{GITHUB_API}/repos/{repo}/issues"
-    result = _gh_request("POST", url, token, payload)
+    result = await _gh_request("POST", url, token, payload)
     return {
         "issue_number": result["number"],
         "html_url": result["html_url"],
@@ -286,32 +312,32 @@ def create_issue(
     }
 
 
-def close_issue(token: str, repo: str, issue_number: int) -> dict:
+async def close_issue(token: str, repo: str, issue_number: int) -> dict:
     """Close a GitHub issue."""
     url = f"{GITHUB_API}/repos/{repo}/issues/{issue_number}"
-    return _gh_request("PATCH", url, token, {"state": "closed"})
+    return await _gh_request("PATCH", url, token, {"state": "closed"})
 
 
-def reopen_issue(token: str, repo: str, issue_number: int) -> dict:
+async def reopen_issue(token: str, repo: str, issue_number: int) -> dict:
     """Re-open a GitHub issue."""
     url = f"{GITHUB_API}/repos/{repo}/issues/{issue_number}"
-    return _gh_request("PATCH", url, token, {"state": "open"})
+    return await _gh_request("PATCH", url, token, {"state": "open"})
 
 
-def get_issue(token: str, repo: str, issue_number: int) -> dict:
+async def get_issue(token: str, repo: str, issue_number: int) -> dict:
     """Fetch GitHub issue details."""
     url = f"{GITHUB_API}/repos/{repo}/issues/{issue_number}"
-    return _gh_request("GET", url, token)
+    return await _gh_request("GET", url, token)
 
 
-def get_issue_comments(token: str, repo: str, issue_number: int) -> list[dict]:
+async def get_issue_comments(token: str, repo: str, issue_number: int) -> list[dict]:
     """Get comments on a GitHub issue."""
     url = f"{GITHUB_API}/repos/{repo}/issues/{issue_number}/comments"
-    result = _gh_request("GET", url, token)
+    result = await _gh_request("GET", url, token)
     return result if isinstance(result, list) else []
 
 
-def add_issue_comment(token: str, repo: str, issue_number: int, body: str) -> dict:
+async def add_issue_comment(token: str, repo: str, issue_number: int, body: str) -> dict:
     """Add a comment to a GitHub issue."""
     url = f"{GITHUB_API}/repos/{repo}/issues/{issue_number}/comments"
-    return _gh_request("POST", url, token, {"body": body})
+    return await _gh_request("POST", url, token, {"body": body})

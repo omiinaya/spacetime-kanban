@@ -456,19 +456,19 @@ async def _sync_to_github(task_id: str, event: str, notes: str = ""):
         return
     try:
         if event == "completed":
-            issue_sync.close_issue(token, repo, issue_number)
+            await issue_sync.close_issue(token, repo, issue_number)
             issue_sync.update_issue_status(task_id, "closed")
             if notes:
                 with contextlib.suppress(Exception):
-                    issue_sync.add_issue_comment(
+                    await issue_sync.add_issue_comment(
                         token, repo, issue_number, f"✅ Kanban task completed: {notes}"
                     )
         elif event == "unclaimed":
-            issue_sync.reopen_issue(token, repo, issue_number)
+            await issue_sync.reopen_issue(token, repo, issue_number)
             issue_sync.update_issue_status(task_id, "open")
             if notes:
                 with contextlib.suppress(Exception):
-                    issue_sync.add_issue_comment(
+                    await issue_sync.add_issue_comment(
                         token, repo, issue_number, f"🔄 Kanban task reopened: {notes}"
                     )
     except Exception as e:

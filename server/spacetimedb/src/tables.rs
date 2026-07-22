@@ -1,3 +1,77 @@
+use std::fmt::Display;
+use spacetimedb::SpacetimeType;
+
+// ── Status Enums ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, SpacetimeType)]
+pub enum TaskStatus {
+    Available,
+    InProgress,
+    Blocked,
+    Done,
+}
+
+impl TaskStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TaskStatus::Available => "available",
+            TaskStatus::InProgress => "in_progress",
+            TaskStatus::Blocked => "blocked",
+            TaskStatus::Done => "done",
+        }
+    }
+}
+
+impl Display for TaskStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, SpacetimeType)]
+pub enum SwarmAgentStatus {
+    Online,
+    Busy,
+    Offline,
+}
+
+impl SwarmAgentStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SwarmAgentStatus::Online => "online",
+            SwarmAgentStatus::Busy => "busy",
+            SwarmAgentStatus::Offline => "offline",
+        }
+    }
+}
+
+impl Display for SwarmAgentStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, SpacetimeType)]
+pub enum IssueLinkStatus {
+    Open,
+    Closed,
+}
+
+impl IssueLinkStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            IssueLinkStatus::Open => "open",
+            IssueLinkStatus::Closed => "closed",
+        }
+    }
+}
+
+impl Display for IssueLinkStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 // ── Task ────────────────────────────────────────────────────────────
 
 #[spacetimedb::table(accessor = tasks, public)]
@@ -8,7 +82,7 @@ pub struct Task {
     pub title: String,
     pub description: String,
     pub priority: u8,
-    pub status: String,
+    pub status: TaskStatus,
     pub assigned_to: Option<String>,
     pub repo: String,
     pub branch: Option<String>,
@@ -68,7 +142,7 @@ pub struct SwarmAgent {
     pub capabilities: Option<String>, // comma-separated skill tags
     pub repo_focus: Option<String>,  // repo they're focused on
     pub current_task_id: Option<String>,
-    pub status: String,              // "online", "busy", "offline"
+    pub status: SwarmAgentStatus,    // "online", "busy", "offline"
     pub last_heartbeat: u64,
     pub first_seen: u64,
 }
@@ -114,7 +188,7 @@ pub struct IssueLink {
     pub repo: String,
     pub issue_url: String,
     pub html_url: String,
-    pub status: String,      // "open" or "closed"
+    pub status: IssueLinkStatus, // "open" or "closed"
     pub linked_at: u64,
 }
 

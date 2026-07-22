@@ -130,7 +130,7 @@ pub fn trigger_task_templates(ctx: &ReducerContext) -> Result<(), String> {
             title: template.title.clone(),
             description: template.description.clone(),
             priority: template.priority,
-            status: "available".to_string(),
+            status: TaskStatus::Available,
             assigned_to: None,
             repo: template.repo.clone(),
             branch: None,

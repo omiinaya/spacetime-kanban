@@ -82,9 +82,13 @@ export function ListViewSkeleton() {
           <div className="h-4 w-2/12 rounded bg-white/10" />
           <div className="h-4 w-16 rounded bg-white/10" />
         </div>
-        {Array.from({ length: 8 }).map((_, i) => (
-          <TableRowSkeleton key={i} />
-        ))}
+        <table className="w-full table-auto">
+          <tbody>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <TableRowSkeleton key={i} />
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
