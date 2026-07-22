@@ -96,6 +96,7 @@ async def list_tasks(
     repo: str | None = None,
     label: str | None = None,
     search: str | None = None,
+    archived: bool | None = None,
     limit: int = 2000,
 ):
     # If label filter provided, first get task IDs with that label
@@ -115,6 +116,9 @@ async def list_tasks(
     if repo:
         filters.append("repo = '{repo}'")
         params["repo"] = repo
+    if archived is not None:
+        arch = str(archived).lower()
+        filters.append(f"archived = {arch}")
     if filters:
         sql += " WHERE " + " AND ".join(filters)
     # Server-side LIMIT — 2000 default, 5000 hard cap

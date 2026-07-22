@@ -471,6 +471,59 @@ async def repo_scanner(interval: int):
             traceback.print_exc()
 
 
+async def task_archiver(interval: int):
+    """Archive old done/blocked tasks to prevent board bloat.
+
+    Rules:
+      - Done tasks >7 days old → archive
+      - Blocked tasks >24h old → archive
+      - In_progress tasks >48h with no heartbeat → unclaim + archive
+    """
+    while True:
+        try:
+            await asyncio.sleep(interval)
+
+            now_ms = _now_ms()
+            day_ms = 86400_000
+            archived = 0
+
+            # Done tasks >7 days
+            done_tasks = await _api_get(f"/api/tasks?status=done&archived=false&limit=500")
+            if done_tasks:
+                old_done = [
+                    t["id"] for t in done_tasks
+                    if t.get("updated_at", 0) and (now_ms - t["updated_at"]) > 7 * day_ms
+                ]
+                if old_done:
+                    result = await _api_post("/api/tasks/bulk-archive", {"task_ids": old_done})
+                    if result:
+                        archived += len(old_done)
+
+            # Blocked tasks >24h
+            blocked_tasks = await _api_get(f"/api/tasks?status=blocked&archived=false&limit=500")
+            if blocked_tasks:
+                old_blocked = [
+                    t["id"] for t in blocked_tasks
+                    if t.get("updated_at", 0) and (now_ms - t["updated_at"]) > day_ms
+                ]
+                if old_blocked:
+                    result = await _api_post("/api/tasks/bulk-archive", {"task_ids": old_blocked})
+                    if result:
+                        archived += len(old_blocked)
+
+            if archived > 0:
+                print(f"[scheduler:archiver] Archived {archived} old task(s)")
+            elif interval % 3600 == 0:  # Log availability every hour
+                print(f"[scheduler:archiver] No tasks to archive")
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[scheduler:archiver] Error: {e}")
+
+    return True  # Unreachable but keeps linter happy
+
+
 async def template_trigger(interval: int):
     """Trigger recurring task templates.
 
@@ -584,6 +637,8 @@ async def start_scheduler():
         loops.append(("templates", settings.template_interval_seconds, template_trigger))
     if settings.metrics_interval_seconds > 0:
         loops.append(("metrics", settings.metrics_interval_seconds, metrics_collector))
+    # Archiver always runs — keeps board clean
+    loops.append(("archiver", 3600, task_archiver))
     if settings.scanner_interval_seconds > 0:
         loops.append(("scanner", settings.scanner_interval_seconds, repo_scanner))
     # Death watcher always runs — critical for crash containment

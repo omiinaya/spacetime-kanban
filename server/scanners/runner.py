@@ -65,9 +65,9 @@ def _api_post(path: str, data: dict) -> dict | None:
 
 
 def _fetch_existing_titles() -> set[str]:
-    """Fetch all non-done task titles from the board."""
+    """Fetch all task titles from the board (including done tasks) for dedup."""
     existing = set()
-    for status in ("available", "in_progress", "blocked"):
+    for status in ("available", "in_progress", "blocked", "done"):
         tasks = _api_get(f"/api/tasks?status={status}&limit=500")
         if tasks:
             for t in tasks:
@@ -152,6 +152,22 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
                     results[scanner_name]["created"] += 1
                     total_created += 1
                     print(f"[scanner]  ✨ Created: {title[:70]}...", file=sys.stderr)
+
+                    # Fire webhook for notable scanner task creations
+                    priority = finding.get("priority", 2)
+                    if priority <= 2:  # Only alert for P0-P2 tasks
+                        try:
+                            import urllib.request
+                            webhook_url = os.environ.get("WEBHOOK_DEFAULT_URL", "")
+                            if webhook_url:
+                                payload = ('{"content": "' + '🔍 **Scanner: ' + scanner_name + '**\\nPriority P' + str(priority) + ' task created:\\n**' + title.replace('"', "'") + '**\\nrepo: `' + repo_name + '`"}').encode()
+                                req = urllib.request.Request(
+                                    webhook_url, data=payload,
+                                    headers={"Content-Type": "application/json"}
+                                )
+                                urllib.request.urlopen(req, timeout=5)
+                        except Exception:
+                            pass
 
             print(f"[scanner]  {scanner_name}: {len(findings)} finding(s), "
                   f"{results[scanner_name]['created']} created in {elapsed:.1f}s", file=sys.stderr)
