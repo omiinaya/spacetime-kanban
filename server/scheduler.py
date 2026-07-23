@@ -385,7 +385,7 @@ async def dead_board_monitor(interval: int):
 
             completions = overview.get("completions_last_hour", 0)
             claims = overview.get("claims_last_hour", 0)
-            ip = overview.get("by_status", {}).get("in_progress", 0)
+            ip = overview.get("by_status", {}).get("inProgress", 0)
             avail = overview.get("by_status", {}).get("available", 0)
 
             now_ms = _now_ms()
@@ -447,7 +447,7 @@ async def metrics_collector(interval: int):
                 {
                     "total": overview.get("total", 0),
                     "available": overview.get("by_status", {}).get("available", 0),
-                    "in_progress": overview.get("by_status", {}).get("in_progress", 0),
+                    "in_progress": overview.get("by_status", {}).get("inProgress", 0),
                     "blocked": overview.get("by_status", {}).get("blocked", 0),
                     "done": overview.get("total_done", 0),
                     "completions_last_hour": overview.get("completions_last_hour", 0),

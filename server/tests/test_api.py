@@ -986,7 +986,7 @@ async def test_delete_task_endpoint(client, mock_all):
 @pytest.mark.asyncio
 async def test_list_tasks_by_status(client, mock_all):
     """GET /api/tasks?status=available should filter by status."""
-    mock_all["param"].return_value = [
+    mock_all["sql"].return_value = [
         _make_task("t1", "Available task", status="available"),
         _make_task("t2", "Another available", status="available"),
     ]

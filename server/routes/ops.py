@@ -137,7 +137,7 @@ async def cross_project_aggregation():
                 "repo": repo,
                 "total": 0,
                 "available": 0,
-                "in_progress": 0,
+                "inProgress": 0,
                 "blocked": 0,
                 "done": 0,
                 "archived": 0,

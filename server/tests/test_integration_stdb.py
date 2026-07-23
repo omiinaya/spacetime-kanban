@@ -102,7 +102,7 @@ def test_claim_atomicity_sequential(client, task):
     # Task must belong to the FIRST claimant
     t = client.get(f"/api/tasks/{tid}").json()
     assert t["assigned_to"] == "agent-a"
-    assert t["status"] == "in_progress"
+    assert t["status"] == "inProgress"
 
 
 def test_claim_atomicity_concurrent(client, task):
@@ -125,7 +125,7 @@ def test_claim_atomicity_concurrent(client, task):
     assert len(winners) <= 1, f"expected at most 1 winner, got {len(winners)}: {winners}"
 
     t = client.get(f"/api/tasks/{tid}").json()
-    assert t["status"] == "in_progress"
+    assert t["status"] == "inProgress"
     if winners:
         assert t["assigned_to"] == f"racer-{winners[0]}"
     else:
@@ -160,7 +160,7 @@ def test_dependency_blocks_claim_until_done(client, task):
     force_claim(client, b, "dep-test")
 
     t = client.get(f"/api/tasks/{b}").json()
-    assert t["status"] == "in_progress"
+    assert t["status"] == "inProgress"
     assert t["assigned_to"] == "dep-test"
 
 

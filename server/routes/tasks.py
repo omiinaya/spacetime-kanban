@@ -129,9 +129,7 @@ async def list_tasks(
     tasks = [_row_to_task(r) for r in rows]
     # Apply status filter client-side (STDB enum types can't be compared with SQL strings)
     if status:
-        # Convert snake_case status to camelCase for STDB enum variants
-        st = {"in_progress": "inProgress"}.get(status, status)
-        tasks = [t for t in tasks if t.status == st]
+        tasks = [t for t in tasks if t.status == status]
     if label_task_ids is not None:
         tasks = [t for t in tasks if t.id in label_task_ids]
     # Apply client-side search filter (STDB SQL has no ILIKE — do it in Python)
@@ -185,9 +183,6 @@ async def export_tasks(format: str = "json", status: str = "", repo: str = ""):
     sql = "SELECT * FROM tasks"
     filters = []
     params: dict[str, str] = {}
-    if status:
-        filters.append("status = '{status}'")
-        params["status"] = status
     if repo:
         filters.append("repo = '{repo}'")
         params["repo"] = repo
@@ -197,6 +192,10 @@ async def export_tasks(format: str = "json", status: str = "", repo: str = ""):
         rows = await _sql_param(sql, **params)
     else:
         rows = await _sql(sql)
+
+    # Apply status filter client-side (STDB enum types can't be compared with SQL strings)
+    if status:
+        rows = [r for r in rows if r.get("status") == status]
 
     if format == "csv":
         output = io.StringIO()

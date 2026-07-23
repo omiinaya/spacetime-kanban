@@ -43,7 +43,7 @@ async def analytics_overview():
     for t in tasks:
         r = t.get("repo") or "none"
         if r not in repos:
-            repos[r] = {"total": 0, "done": 0, "in_progress": 0, "blocked": 0, "available": 0}
+            repos[r] = {"total": 0, "done": 0, "inProgress": 0, "blocked": 0, "available": 0}
         repos[r]["total"] += 1
         s = t.get("status", "unknown")
         if s in repos[r]:
