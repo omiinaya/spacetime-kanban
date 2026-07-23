@@ -168,10 +168,33 @@ def test_nested_option_in_enum():
             ]
         }
     }
-    # Assigned { assignee: Some("bob") } → [0, [0, "bob"]]
+    # Assigned { assignee: Some("bob") } → [0, [[0, "bob"]]]
     result = _extract_sats_val([0, [[0, "bob"]]], atype)
     # Product with 1 element returns the element directly, nested Option unwraps
     assert result == {"Assigned": "bob"}, f"Expected {{'Assigned': 'bob'}}, got {result!r}"
+
+
+def test_nested_option_some_none():
+    """Nested Option<Option<String>>::Some(None) returns None."""
+    inner_opt = {
+        "Sum": {
+            "variants": [
+                {"name": {"some": "some"}, "algebraic_type": {"String": []}},
+                {"name": {"some": "none"}, "algebraic_type": {"Product": {"elements": []}}},
+            ]
+        }
+    }
+    outer_opt = {
+        "Sum": {
+            "variants": [
+                {"name": {"some": "some"}, "algebraic_type": inner_opt},
+                {"name": {"some": "none"}, "algebraic_type": {"Product": {"elements": []}}},
+            ]
+        }
+    }
+    # Some(None) → [0, [1, []]]
+    result = _extract_sats_val([0, [1, []]], outer_opt)
+    assert result is None, f"Expected None, got {result!r}"
 
 
 def test_swarm_agent_status():
@@ -199,8 +222,212 @@ def test_passthrough_for_non_sats_list():
 def test_builtin_type_passthrough():
     """Builtin type with no Sum/Product passes through via fallback."""
     atype = {"String": []}
-    # Even though this is a 2-element list, it's not recognized as a Sum type
-    # So it falls through to the fallback
+    # val is a 2-element SATS pair, atype is not Sum/Product
+    # Falls through to legacy fallback
     result = _extract_sats_val([0, "hello"], atype)
-    # Fallback: val[0] == 0 → val[1] = "hello" → truthy → returns "hello"
     assert result == "hello"
+
+
+def test_product_empty_elements():
+    """Empty Product (no fields) returns None."""
+    atype = {"Product": {"elements": []}}
+    assert _extract_sats_val([], atype) is None
+
+
+def test_product_single_element():
+    """Single-element Product unwraps to the element value."""
+    atype = {
+        "Product": {
+            "elements": [
+                {"name": {"some": "name"}, "algebraic_type": {"String": []}}
+            ]
+        }
+    }
+    assert _extract_sats_val(["alice"], atype) == "alice"
+
+
+def test_product_multi_element():
+    """Multi-element Product returns list of field values."""
+    atype = {
+        "Product": {
+            "elements": [
+                {"name": {"some": "x"}, "algebraic_type": {"U64": []}},
+                {"name": {"some": "y"}, "algebraic_type": {"U64": []}},
+                {"name": {"some": "z"}, "algebraic_type": {"U64": []}},
+            ]
+        }
+    }
+    assert _extract_sats_val([1, 2, 3], atype) == [1, 2, 3]
+
+
+def test_tuple_type():
+    """Tuple type returns list of elements."""
+    atype = {
+        "Tuple": {
+            "elements": [
+                {"algebraic_type": {"String": []}},
+                {"algebraic_type": {"U64": []}},
+            ]
+        }
+    }
+    result = _extract_sats_val(["hello", 42], atype)
+    assert result == ["hello", 42]
+
+
+def test_product_with_optional_field_some():
+    """Product field that is Option<String>::Some returns the string."""
+    atype = {
+        "Product": {
+            "elements": [
+                {
+                    "name": {"some": "assignee"},
+                    "algebraic_type": {
+                        "Sum": {
+                            "variants": [
+                                {"name": {"some": "some"}, "algebraic_type": {"String": []}},
+                                {"name": {"some": "none"}, "algebraic_type": {"Product": {"elements": []}}},
+                            ]
+                        }
+                    },
+                },
+            ]
+        }
+    }
+    # Product([Option::Some("bob")]) → ["bob"] → [0, "bob"] as raw value
+    # But at the product level, the field value is already a SATS sum: [0, "bob"]
+    result = _extract_sats_val([[0, "bob"]], atype)
+    # Single-element product unwraps, Option::Some unwraps
+    assert result == "bob", f"Expected 'bob', got {result!r}"
+
+
+def test_product_with_optional_field_none():
+    """Product field that is Option<String>::None returns None."""
+    atype = {
+        "Product": {
+            "elements": [
+                {
+                    "name": {"some": "assignee"},
+                    "algebraic_type": {
+                        "Sum": {
+                            "variants": [
+                                {"name": {"some": "some"}, "algebraic_type": {"String": []}},
+                                {"name": {"some": "none"}, "algebraic_type": {"Product": {"elements": []}}},
+                            ]
+                        }
+                    },
+                },
+            ]
+        }
+    }
+    result = _extract_sats_val([[1, []]], atype)
+    assert result is None, f"Expected None, got {result!r}"
+
+
+def test_ref_type():
+    """Ref type extracts the first list element."""
+    atype = {"Ref": {}}
+    assert _extract_sats_val(["0xabc"], atype) == "0xabc"
+    assert _extract_sats_val(["0xabc", "extra"], atype) == "0xabc"
+
+
+def test_ref_type_empty():
+    """Ref type with empty list returns None."""
+    atype = {"Ref": {}}
+    assert _extract_sats_val([], atype) is None
+
+
+def test_ref_type_none():
+    """Ref type with scalar None returns None."""
+    atype = {"Ref": {}}
+    assert _extract_sats_val(None, atype) is None
+
+
+def test_issue_link_status():
+    """IssueLinkStatus enum (Open/Closed) returns variant name."""
+    atype = {
+        "Sum": {
+            "variants": [
+                {"name": {"some": "open"}, "algebraic_type": {"Product": {"elements": []}}},
+                {"name": {"some": "closed"}, "algebraic_type": {"Product": {"elements": []}}},
+            ]
+        }
+    }
+    assert _extract_sats_val([0, []], atype) == "open"
+    assert _extract_sats_val([1, []], atype) == "closed"
+
+
+def test_sum_variant_payload_is_product_with_nested_types():
+    """Enum variant with fields containing nested types."""
+    atype = {
+        "Sum": {
+            "variants": [
+                {
+                    "name": {"some": "TaskEvent"},
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {"name": {"some": "task_id"}, "algebraic_type": {"String": []}},
+                                {
+                                    "name": {"some": "old_status"},
+                                    "algebraic_type": {
+                                        "Sum": {
+                                            "variants": [
+                                                {"name": {"some": "available"}, "algebraic_type": {"Product": {"elements": []}}},
+                                                {"name": {"some": "inProgress"}, "algebraic_type": {"Product": {"elements": []}}},
+                                                {"name": {"some": "done"}, "algebraic_type": {"Product": {"elements": []}}},
+                                            ]
+                                        }
+                                    },
+                                },
+                            ]
+                        }
+                    },
+                },
+            ]
+        }
+    }
+    # TaskEvent { task_id: "t-1", old_status: inProgress }
+    # SATS: [0, ["t-1", [1, []]]]
+    result = _extract_sats_val([0, ["t-1", [1, []]]], atype)
+    assert result == {"TaskEvent": ["t-1", "inProgress"]}, f"Got {result!r}"
+
+
+def test_enum_variant_with_option_none_preserves_structure():
+    """Enum variant with Option<String>::None field returns {name: None}, not just name."""
+    atype = {
+        "Sum": {
+            "variants": [
+                {
+                    "name": {"some": "Assigned"},
+                    "algebraic_type": {
+                        "Product": {
+                            "elements": [
+                                {
+                                    "name": {"some": "assignee"},
+                                    "algebraic_type": {
+                                        "Sum": {
+                                            "variants": [
+                                                {"name": {"some": "some"}, "algebraic_type": {"String": []}},
+                                                {"name": {"some": "none"}, "algebraic_type": {"Product": {"elements": []}}},
+                                            ]
+                                        }
+                                    },
+                                },
+                            ]
+                        }
+                    },
+                },
+            ]
+        }
+    }
+    # Assigned { assignee: None } → [0, [[1, []]]]
+    result = _extract_sats_val([0, [[1, []]]], atype)
+    # The variant HAS a payload (a single Option field), it just resolved to None.
+    # Should NOT collapse to "Assigned" — must keep {name: None}
+    assert result == {"Assigned": None}, f"Expected {{'Assigned': None}}, got {result!r}"
+
+
+def test_non_zero_variant_index_fallback():
+    """Legacy fallback: non-zero first element returns None."""
+    atype = {}  # No type info available
+    assert _extract_sats_val([1, "data"], atype) is None

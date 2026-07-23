@@ -119,7 +119,18 @@ def _extract_sats_val(val: Any, atype: dict) -> Any:
             return extracted
 
         # Return variant name for payload-less enums, otherwise name:value
-        if extracted is None or extracted == []:
+        # Check the variant's schema type (not the extracted value) to distinguish
+        # "no payload fields" from "payload that resolved to None/empty".
+        # A variant whose type is an empty Product (0 elements) is truly payload-less;
+        # anything else (non-empty Product, Array, plain String, etc.) preserves
+        # the {name: extracted} structure even if extracted is None.
+        is_payloadless = (
+            isinstance(vtype, dict)
+            and "Product" in vtype
+            and isinstance(vtype["Product"].get("elements"), list)
+            and len(vtype["Product"]["elements"]) == 0
+        )
+        if is_payloadless:
             return str(vname)
         return {str(vname): extracted}
 
