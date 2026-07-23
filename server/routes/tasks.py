@@ -64,7 +64,7 @@ router = APIRouter()
 @router.get("/api/tasks/suggest", response_model=list[SuggestResult])
 async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
     """Return top-N recommended tasks based on priority scoring."""
-    rows = await _sql("SELECT * FROM tasks WHERE status = 'available'")
+    rows = await _sql("SELECT * FROM tasks")
 
     # Get agent capabilities if agent_id provided
     agent_caps = None
@@ -112,9 +112,6 @@ async def list_tasks(
     sql = "SELECT * FROM tasks"
     filters = []
     params: dict[str, str] = {}
-    if status:
-        filters.append("status = '{status}'")
-        params["status"] = status
     if repo:
         filters.append("repo = '{repo}'")
         params["repo"] = repo
@@ -123,14 +120,18 @@ async def list_tasks(
         filters.append(f"archived = {arch}")
     if filters:
         sql += " WHERE " + " AND ".join(filters)
-    # Server-side LIMIT — 2000 default, 5000 hard cap
-    sql += f" LIMIT {min(limit, 5000)}"
-    sql += f" OFFSET {max(offset, 0)}"
+    # Server-side LIMIT — fetch limit+offset rows, STDB SQL doesn't support OFFSET
+    sql += f" LIMIT {min(limit + max(offset, 0), 5000 + 5000)}"
     if params:
         rows = await _sql_param(sql, **params)
     else:
         rows = await _sql(sql)
     tasks = [_row_to_task(r) for r in rows]
+    # Apply status filter client-side (STDB enum types can't be compared with SQL strings)
+    if status:
+        # Convert snake_case status to camelCase for STDB enum variants
+        st = {"in_progress": "inProgress"}.get(status, status)
+        tasks = [t for t in tasks if t.status == st]
     if label_task_ids is not None:
         tasks = [t for t in tasks if t.id in label_task_ids]
     # Apply client-side search filter (STDB SQL has no ILIKE — do it in Python)
@@ -146,6 +147,9 @@ async def list_tasks(
             or q in t.id.lower()
         ]
     tasks.sort(key=lambda t: (t.priority, -t.created_at))
+    # Apply offset client-side (STDB SQL doesn't support OFFSET)
+    if offset:
+        tasks = tasks[offset:]
     return tasks
 
 
@@ -324,11 +328,11 @@ async def create_task(body: TaskCreate):
         sanitized_repo = body.repo.replace("'", "''")
         existing = await _sql_param(
             "SELECT id, status FROM tasks WHERE title = '{title}' "
-            "AND repo = '{repo}' AND status != 'done' LIMIT 1",
+            "AND repo = '{repo}' LIMIT 1",
             title=sanitized_title,
             repo=sanitized_repo,
         )
-        if existing:
+        if existing and existing[0].get('status') != 'done':
             return {
                 "status": "exists",
                 "id": existing[0]["id"],

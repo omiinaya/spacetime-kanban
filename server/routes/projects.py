@@ -118,7 +118,7 @@ async def suggest_by_project(limit: int = 10):
     except HTTPException:
         pass
     # Fallback: compute via API
-    rows = await _sql("SELECT * FROM tasks WHERE status = 'available'")
+    rows = await _sql("SELECT * FROM tasks")
     projects = await _sql("SELECT id, priority, active FROM kanban_projects")
     proj_map = {p["id"]: p["priority"] for p in projects if p.get("active")}
     now_ms = int(time.time() * 1000)
