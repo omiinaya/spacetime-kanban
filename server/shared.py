@@ -174,9 +174,11 @@ def _extract_sats_val(val: Any, atype: dict) -> Any:
             return val[0]
         return val if val else None
 
-    # ── Fallback for simple tagged types ─────────────────────────────
-    if isinstance(val, list) and len(val) == 2:
-        return (val[1] if val[1] and val[1] != [] else None) if val[0] == 0 else None
+    # ── Fallback: pass through unchanged when no type info available ─────
+    # The old fallback treated 2-element lists as [tag, payload] and collapsed
+    # non-zero-index or empty-payload values to None ("collapses Option and Sum
+    # types to None"). Type-aware handlers above cover all SATS-encoded types
+    # now, so the fallback just passes through.
     return val
 
 

@@ -220,12 +220,19 @@ def test_passthrough_for_non_sats_list():
 
 
 def test_builtin_type_passthrough():
-    """Builtin type with no Sum/Product passes through via fallback."""
+    """Builtin type with no Sum/Product passes through unchanged.
+
+    When no type-aware handler applies (Sum/Product/Tuple/Array/Set/Ref),
+    the value passes through without being interpreted as [tag, payload].
+    This is correct because the type handlers above cover all SATS-encoded
+    types — a value reaching the fallback is either a bare scalar or a
+    list that doesn't need decoding.
+    """
     atype = {"String": []}
-    # val is a 2-element SATS pair, atype is not Sum/Product
-    # Falls through to legacy fallback
+    # val is a 2-element SATS pair, atype is String (not Sum/Product)
+    # Falls through to pass-through fallback — returns val as-is
     result = _extract_sats_val([0, "hello"], atype)
-    assert result == "hello"
+    assert result == [0, "hello"], f"Expected [0, 'hello'], got {result!r}"
 
 
 def test_product_empty_elements():
@@ -428,6 +435,9 @@ def test_enum_variant_with_option_none_preserves_structure():
 
 
 def test_non_zero_variant_index_fallback():
-    """Legacy fallback: non-zero first element returns None."""
+    """Legacy fallback no longer collapses to None — passes through unchanged."""
     atype = {}  # No type info available
-    assert _extract_sats_val([1, "data"], atype) is None
+    # With the type-aware handlers in place, the fallback no longer
+    # interprets 2-element lists as [tag, payload]. The value passes
+    # through as-is rather than collapsing to None.
+    assert _extract_sats_val([1, "data"], atype) == [1, "data"]
