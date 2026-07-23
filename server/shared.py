@@ -62,22 +62,98 @@ def _parse_sats_rows(resp_json: list[dict[str, Any]]) -> list[dict[str, Any]]:
     schema = entry.get("schema", {})
     elements = schema.get("elements", [])
     col_names: list[str] = []
+    col_types: list[dict] = []
     for el in elements:
         name = el.get("name", {})
         if isinstance(name, dict):
             name = name.get("some", name)
         col_names.append(str(name) if name else "?")
+        col_types.append(el.get("algebraic_type", {}))
     rows = entry.get("rows", [])
     result: list[dict[str, Any]] = []
     for row in rows:
         row_dict = {}
         for i, val in enumerate(row):
             key = col_names[i] if i < len(col_names) else f"col_{i}"
-            if isinstance(val, list) and len(val) == 2:
-                val = (val[1] if val[1] and val[1] != [] else None) if val[0] == 0 else None
+            atype = col_types[i] if i < len(col_types) else {}
+            val = _extract_sats_val(val, atype)
             row_dict[key] = val
         result.append(row_dict)
     return result
+
+
+def _extract_sats_val(val: Any, atype: dict) -> Any:
+    """Recursively extract a Python value from a SATS-encoded value, using the
+    column's algebraic type schema to decode Sum/Product/Ref types."""
+    if not isinstance(val, list) or len(val) != 2:
+        return val
+
+    # Sum type: [variant_index, payload]
+    if "Sum" in atype:
+        variants = atype["Sum"].get("variants", [])
+        var_idx = val[0]
+        if var_idx < len(variants):
+            v = variants[var_idx]
+            vname = v.get("name", {})
+            if isinstance(vname, dict):
+                vname = vname.get("some", str(var_idx))
+            payload = val[1]
+            vtype = v.get("algebraic_type", {})
+            extracted = _extract_sats_val(payload, vtype)
+
+            # Option type pattern: variants=["none","some"] → return None or inner value
+            vnames = [str(x.get("name", {}).get("some", "")) for x in variants]
+            if len(variants) == 2 and "none" in vnames and "some" in vnames:
+                # It's an Option<T>
+                if str(vname).lower() == "none":
+                    return None
+                return extracted
+
+            # Return variant name for payload-less enums, otherwise name:value
+            if extracted is None or extracted == []:
+                return str(vname)
+            return {str(vname): extracted}
+        return None
+
+    # Product type: fields are in a list
+    if "Product" in atype:
+        elements = atype["Product"].get("elements", [])
+        payload = val[1] if isinstance(val[1], list) else [val[1]]
+        if not payload:
+            return None
+        fields = []
+        for j, field_val in enumerate(payload):
+            fel = elements[j] if j < len(elements) else {}
+            ftype = fel.get("algebraic_type", {})
+            fields.append(_extract_sats_val(field_val, ftype))
+        return fields[0] if len(fields) == 1 else fields
+
+    # Tuple type (unnamed product)
+    if "Tuple" in atype:
+        elements = atype["Tuple"].get("elements", [])
+        payload = val[1] if isinstance(val[1], list) else [val[1]]
+        fields = []
+        for j, field_val in enumerate(payload):
+            fel = elements[j] if j < len(elements) else {}
+            ftype = fel.get("algebraic_type", {})
+            fields.append(_extract_sats_val(field_val, ftype))
+        return fields
+
+    # Array/Set type
+    if "Array" in atype or "Set" in atype:
+        inner = atype.get("Array", atype.get("Set", {}))
+        itype = inner.get("algebraic_type", {})
+        items = val[1] if isinstance(val[1], list) else []
+        return [_extract_sats_val(item, itype) for item in items]
+
+    # Ref type: extract the hash hex
+    if "Ref" in atype:
+        if isinstance(val[1], list) and len(val[1]) > 0:
+            return val[1][0]
+        return val[1] if val[1] else None
+
+    # Fallback: old logic for simple tagged types
+    return (val[1] if val[1] and val[1] != [] else None) if val[0] == 0 else None
 
 
 async def _call(reducer: str, args: list) -> dict:
