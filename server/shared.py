@@ -84,76 +84,89 @@ def _parse_sats_rows(resp_json: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _extract_sats_val(val: Any, atype: dict) -> Any:
     """Recursively extract a Python value from a SATS-encoded value, using the
-    column's algebraic type schema to decode Sum/Product/Ref types."""
-    if not isinstance(val, list) or len(val) != 2:
-        return val
+    column's algebraic type schema to decode Sum/Product/Ref types.
 
-    # Sum type: [variant_index, payload]
+    Encoding conventions:
+      - Sum / Option: [variant_index, payload] — 2-element list
+      - Product:      [field1, field2, ...]     — bare array (any length, including 0)
+      - Tuple:        same as Product
+      - Array / Set:  [elem1, elem2, ...]       — bare array
+      - Ref:          [hash, ...]
+      - Built-in:     native JSON (str, num, bool, null)
+    """
+
+    # ── Sum type: [variant_index, payload] ───────────────────────────
     if "Sum" in atype:
+        if not isinstance(val, list) or len(val) != 2:
+            return val
         variants = atype["Sum"].get("variants", [])
         var_idx = val[0]
-        if var_idx < len(variants):
-            v = variants[var_idx]
-            vname = v.get("name", {})
-            if isinstance(vname, dict):
-                vname = vname.get("some", str(var_idx))
-            payload = val[1]
-            vtype = v.get("algebraic_type", {})
-            extracted = _extract_sats_val(payload, vtype)
+        if var_idx >= len(variants):
+            return None
+        v = variants[var_idx]
+        vname = v.get("name", {})
+        if isinstance(vname, dict):
+            vname = vname.get("some", str(var_idx))
+        payload = val[1]
+        vtype = v.get("algebraic_type", {})
+        extracted = _extract_sats_val(payload, vtype)
 
-            # Option type pattern: variants=["none","some"] → return None or inner value
-            vnames = [str(x.get("name", {}).get("some", "")) for x in variants]
-            if len(variants) == 2 and "none" in vnames and "some" in vnames:
-                # It's an Option<T>
-                if str(vname).lower() == "none":
-                    return None
-                return extracted
+        # Option type pattern: variants=["none","some"] → return None or inner value
+        vnames = [str(x.get("name", {}).get("some", "")) for x in variants]
+        if len(variants) == 2 and "none" in vnames and "some" in vnames:
+            if str(vname).lower() == "none":
+                return None
+            return extracted
 
-            # Return variant name for payload-less enums, otherwise name:value
-            if extracted is None or extracted == []:
-                return str(vname)
-            return {str(vname): extracted}
-        return None
+        # Return variant name for payload-less enums, otherwise name:value
+        if extracted is None or extracted == []:
+            return str(vname)
+        return {str(vname): extracted}
 
-    # Product type: fields are in a list
+    # ── Product type: val IS the field list directly ─────────────────
     if "Product" in atype:
+        if not isinstance(val, list):
+            return val
         elements = atype["Product"].get("elements", [])
-        payload = val[1] if isinstance(val[1], list) else [val[1]]
-        if not payload:
+        if not val:
             return None
         fields = []
-        for j, field_val in enumerate(payload):
+        for j, field_val in enumerate(val):
             fel = elements[j] if j < len(elements) else {}
             ftype = fel.get("algebraic_type", {})
             fields.append(_extract_sats_val(field_val, ftype))
         return fields[0] if len(fields) == 1 else fields
 
-    # Tuple type (unnamed product)
+    # ── Tuple type (unnamed product) — val IS the field list ─────────
     if "Tuple" in atype:
+        if not isinstance(val, list):
+            return val
         elements = atype["Tuple"].get("elements", [])
-        payload = val[1] if isinstance(val[1], list) else [val[1]]
         fields = []
-        for j, field_val in enumerate(payload):
+        for j, field_val in enumerate(val):
             fel = elements[j] if j < len(elements) else {}
             ftype = fel.get("algebraic_type", {})
             fields.append(_extract_sats_val(field_val, ftype))
         return fields
 
-    # Array/Set type
+    # ── Array / Set type — val IS the element list ───────────────────
     if "Array" in atype or "Set" in atype:
+        if not isinstance(val, list):
+            return val
         inner = atype.get("Array", atype.get("Set", {}))
         itype = inner.get("algebraic_type", {})
-        items = val[1] if isinstance(val[1], list) else []
-        return [_extract_sats_val(item, itype) for item in items]
+        return [_extract_sats_val(item, itype) for item in val]
 
-    # Ref type: extract the hash hex
+    # ── Ref type ────────────────────────────────────────────────────
     if "Ref" in atype:
-        if isinstance(val[1], list) and len(val[1]) > 0:
-            return val[1][0]
-        return val[1] if val[1] else None
+        if isinstance(val, list) and len(val) > 0:
+            return val[0]
+        return val if val else None
 
-    # Fallback: old logic for simple tagged types
-    return (val[1] if val[1] and val[1] != [] else None) if val[0] == 0 else None
+    # ── Fallback for simple tagged types ─────────────────────────────
+    if isinstance(val, list) and len(val) == 2:
+        return (val[1] if val[1] and val[1] != [] else None) if val[0] == 0 else None
+    return val
 
 
 async def _call(reducer: str, args: list) -> dict:

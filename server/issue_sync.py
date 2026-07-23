@@ -45,27 +45,30 @@ def _stdb_sql(query: str) -> list[dict]:
 
 
 def _parse_rows(resp_json: list[dict]) -> list[dict]:
-    """Parse STDB SATS row format into dicts."""
+    """Parse STDB SATS row format into dicts using recursive type-aware extraction."""
     if not resp_json:
         return []
     entry = resp_json[0]
     schema = entry.get("schema", {})
     elements = schema.get("elements", [])
     col_names: list[str] = []
+    col_types: list[dict] = []
     for el in elements:
         name = el.get("name", {})
         if isinstance(name, dict):
             name = name.get("some", name)
         col_names.append(str(name) if name else "?")
+        col_types.append(el.get("algebraic_type", {}))
+    from shared import _extract_sats_val
+
     rows = entry.get("rows", [])
     result: list[dict] = []
     for row in rows:
         row_dict = {}
         for i, val in enumerate(row):
             key = col_names[i] if i < len(col_names) else f"col_{i}"
-            if isinstance(val, list) and len(val) == 2:
-                val = (val[1] if val[1] and val[1] != [] else None) if val[0] == 0 else None
-            row_dict[key] = val
+            atype = col_types[i] if i < len(col_types) else {}
+            row_dict[key] = _extract_sats_val(val, atype)
         result.append(row_dict)
     return result
 

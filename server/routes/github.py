@@ -220,7 +220,7 @@ async def github_webhook(request: Request):
                 )
                 if rows and rows[0].get("status") != "done":
                     notes = f"GitHub issue #{issue_number} closed"
-                    if rows[0].get("status") == "in_progress":
+                    if rows[0].get("status") == "inProgress":
                         await _call("complete_task", [task_id, notes])
                     elif rows[0].get("status") == "available":
                         await _call("claim_task", [task_id, "github-webhook"])
@@ -312,7 +312,7 @@ async def github_webhook(request: Request):
             rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
             if rows:
                 t = rows[0]
-                if t.get("status") == "in_progress":
+                if t.get("status") == "inProgress":
                     await _call("complete_task", [task_id, notes])
                 elif t.get("status") == "available":
                     # Claim as github-actions, then complete

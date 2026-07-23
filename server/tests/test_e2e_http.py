@@ -216,7 +216,7 @@ async def test_created_task_appears_in_list(client, created_task):
     assert resp.status_code == 200, f"get task failed: {resp.status_code} {resp.text[:200]}"
     data = resp.json()
     assert data["id"] == task_id
-    assert data["status"] in ("available", "in_progress")
+    assert data["status"] in ("available", "inProgress")
     # Try listing with search
     list_resp = await client.get("/api/tasks", params={"search": task_id[:20], "limit": 50})
     if list_resp.status_code == 200:
@@ -255,7 +255,7 @@ async def test_claim_task(client, created_task):
     # Verify the task is now in_progress
     t = await client.get(f"/api/tasks/{task_id}")
     if t.status_code == 200:
-        assert t.json()["status"] == "in_progress"
+        assert t.json()["status"] == "inProgress"
         assert t.json()["assigned_to"] == agent_id
 
 
