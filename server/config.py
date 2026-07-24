@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     dispatcher_interval_seconds: int = 30
     stale_check_interval_seconds: int = 120
-    dead_board_interval_seconds: int = 900
+    dead_board_interval_seconds: int = 3600  # Don't restart too often — workers need time
     template_interval_seconds: int = 900
     metrics_interval_seconds: int = 900
     scanner_interval_seconds: int = 21600  # Run repo scanners every 6 hours
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     min_workers: int = 1
     max_workers: int = 3
     max_memory_pct: int = 80
-    stale_minutes: int = 35  # Must exceed LLM worker timeout to avoid race
+    stale_minutes: int = 45  # Must exceed LLM worker timeout to avoid race
 
     # ── Agent identity ──
     agent_id: str = "hermes"
