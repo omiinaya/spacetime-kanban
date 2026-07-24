@@ -316,7 +316,7 @@ async def stale_watcher(interval: int):
         try:
             await asyncio.sleep(interval)
 
-            in_progress = await _api_get("/api/tasks?status=in_progress&limit=500")
+            in_progress = await _api_get("/api/tasks?status=inProgress&limit=500")
             if not in_progress:
                 continue
 
@@ -845,7 +845,7 @@ async def self_improver(interval: int):
             if blocked and len(blocked) > 5:
                 print(f"[scheduler:improver] High blocked count: {len(blocked)}")
 
-            ip = await _api_get("/api/tasks?status=in_progress&limit=100")
+            ip = await _api_get("/api/tasks?status=inProgress&limit=100")
             if ip:
                 stale = [t for t in ip if (now - t.get("updated_at", t.get("created_at", 0))) > 1800000]
                 if stale:
