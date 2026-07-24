@@ -208,12 +208,12 @@ def run_worker(task_id: str, work_fn, timeout: int = 0):
     Args:
         task_id: The kanban task ID to work on.
         work_fn: Callable(WorkerContext) -> (success: bool, message: str)
-        timeout: Max seconds for the entire worker lifecycle (default: KANBAN_LLM_TIMEOUT env var, or 600).
+        timeout: Max seconds for the entire worker lifecycle (default: KANBAN_LLM_TIMEOUT env var, or 1800).
 
     Returns exit code (0=done, 1=blocked, 2=error).
     """
     if timeout <= 0:
-        timeout = int(os.environ.get("KANBAN_LLM_TIMEOUT", "600"))
+        timeout = int(os.environ.get("KANBAN_LLM_TIMEOUT", "1800"))
     ctx = WorkerContext(task_id)
     if not ctx.load_task():
         print(f"[worker] Cannot load task {task_id[:20]}", file=sys.stderr)
