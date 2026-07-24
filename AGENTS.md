@@ -205,6 +205,26 @@ The validator checks:
 
 The server-side scheduler's `stale_watcher` loop runs every **120 seconds** and checks for tasks stuck `in_progress` for **>35 minutes** with no heartbeat. It auto-releases them back to `available` and fires a webhook event.
 
+## Dead Board Auto-Remediation
+
+The `dead_board_monitor` loop runs every **15 minutes** and:
+1. Checks if the board has 0 completions in the last hour while work exists
+2. **Auto-remediates** by restarting the server (systemd auto-restart)
+3. If restart fails to restore throughput, fires a `BOARD_DEAD` webhook alert
+
+This replaces the old alert-only pattern — now alerts only fire when auto-remediation fails.
+
+## Self-Improvement Agent
+
+The `self_improver` loop runs every **6 hours** and:
+1. Checks server health → auto-restarts if down
+2. Scans board health (blocked tasks, stale in_progress, cycling tasks)
+3. Auto-fixes definitive-failure tasks (reduces max_attempts to 1)
+4. Creates improvement tasks on the board for deeper issues
+5. Reports findings to server logs
+
+This runs inside the server process — no external cron jobs needed.
+
 This means:
 - If an agent claims a task and disappears, it gets reclaimed within ~35 minutes max
 - If you're actively working on a long task, send heartbeats via `POST /api/agents/{agent_id}/heartbeat` to keep the task alive

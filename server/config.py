@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     template_interval_seconds: int = 900
     metrics_interval_seconds: int = 900
     scanner_interval_seconds: int = 21600  # Run repo scanners every 6 hours
+    improver_interval_seconds: int = 21600  # Self-improvement checker every 6 hours
 
     # ── Webhook alerts ──
     webhook_default_url: str = ""  # Default alert destination (Discord, Slack, etc.)
