@@ -151,37 +151,38 @@ def scan_stdb_index(repo_name: str, repo_path: str) -> list[dict]:
                 filepath = os.path.join(root, f)
                 findings.extend(_scan_rust_file(filepath))
 
+    total = len(findings)
     # No unindexed FK fields found at all — return empty, don't create a task
     if not findings:
         return []
 
-    total = len(findings)
-    # Group findings by file for the description
-    by_file = {}
-    for f in findings:
-        file_key = f.get("file", "unknown").split("/", 1)[-1]
-        if file_key not in by_file:
-            by_file[file_key] = []
-        by_file[file_key].append(f)
+    # Chunk into tasks of max 5 fields each
+    MAX_PER_TASK = 5
+    result = []
+    for i in range(0, len(findings), MAX_PER_TASK):
+        chunk = findings[i : i + MAX_PER_TASK]
+        task_num = i // MAX_PER_TASK + 1
+        total_chunks = (len(findings) + MAX_PER_TASK - 1) // MAX_PER_TASK
+        label = f" ({task_num}/{total_chunks})" if total_chunks > 1 else ""
 
-    file_count = len(by_file)
-    field_list = "\n".join(
-        f"  - `{f.get('struct', '?')}.{f.get('field', '?')}` in {f.get('file', '?')}:{f.get('line', '?')}"
-        for f in findings[:20]
-    )
-    if len(findings) > 20:
-        field_list += f"\n  ... and {len(findings) - 20} more field(s)"
+        field_list = "\n".join(
+            f"  - `{f.get('struct', '?')}.{f.get('field', '?')}` in {f.get('file', '?')}:{f.get('line', '?')}"
+            for f in chunk
+        )
+        file_count = len(set(f.get("file", "") for f in chunk))
 
-    return [
-        {
-            "title": f"Add #[index(btree)] to {total} field(s) across {file_count} file(s) in {repo_name}",
-            "description": (
-                f"Found {total} foreign-key-like fields missing `#[index(btree)]` "
-                f"across {file_count} file(s).\n\n"
-                f"Missing indexes:\n{field_list}\n\n"
-                f"Adding `#[index(btree)]` to these fields will improve STDB query performance."
-            ),
-            "priority": 1,
-            "scanner": "stdb_index",
-        }
-    ]
+        result.append(
+            {
+                "title": f"Add #[index(btree)] to {len(chunk)} field(s) in {repo_name}{label}",
+                "description": (
+                    f"Found {len(chunk)} foreign-key-like fields missing `#[index(btree)]` "
+                    f"across {file_count} file(s).\n\n"
+                    f"Missing indexes:\n{field_list}\n\n"
+                    f"Adding `#[index(btree)]` to these fields will improve STDB query performance."
+                ),
+                "priority": 1,
+                "scanner": "stdb_index",
+            }
+        )
+
+    return result

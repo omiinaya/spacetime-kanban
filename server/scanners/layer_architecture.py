@@ -169,65 +169,60 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
     # ── Check large files ──
     large_files = _check_large_files(repo_path)
     if large_files:
-        total_large = len(large_files)
-        file_list = "\n".join(f"  - {f} ({l} lines)" for f, l in large_files[:5])
-        if total_large > 5:
-            file_list += f"\n  ... and {total_large - 5} more"
-
-        findings.append(
-            {
-                "title": f"Split {total_large} large source file(s) in {repo_name}",
-                "description": (
-                    f"Found {total_large} source files over 500 lines. Large files "
-                    f"are harder to maintain and should be split into modules.\n\n"
-                    f"Largest files:\n{file_list}"
-                ),
-                "priority": 2,
-                "scanner": "architecture",
-            }
-        )
+        MAX_PER_TASK = 2
+        for i in range(0, len(large_files), MAX_PER_TASK):
+            chunk = large_files[i : i + MAX_PER_TASK]
+            file_list = "\n".join(f"  - {f} ({l} lines)" for f, l in chunk)
+            task_num = i // MAX_PER_TASK + 1
+            total_chunks = (len(large_files) + MAX_PER_TASK - 1) // MAX_PER_TASK
+            label = f" ({task_num}/{total_chunks})" if total_chunks > 1 else ""
+            findings.append(
+                {
+                    "title": f"Split {len(chunk)} large source file(s) in {repo_name}{label}",
+                    "description": (
+                        f"Found source files over 500 lines that should be split into modules.\n\n"
+                        f"Files:\n{file_list}"
+                    ),
+                    "priority": 2,
+                    "scanner": "architecture",
+                }
+            )
 
     # ── Check Rust unwrap() calls ──
     unwraps = _check_rust_unwraps(repo_path)
     if unwraps:
-        file_list = "\n".join(f"  - {f}" for f in unwraps[:5])
-        total = len(unwraps)
-        if total > 5:
-            file_list += f"\n  ... and {total - 5} more"
-
-        findings.append(
-            {
-                "title": f"Replace {sum(int(u.split(': ')[-1].split()[0]) for u in unwraps)} unwrap() calls with proper error handling in {repo_name}",
-                "description": (
-                    f"Found Rust files with excessive `.unwrap()` calls. These crash "
-                    f"at runtime if the value is None/Err.\n\n"
-                    f"Files:\n{file_list}"
-                ),
-                "priority": 2,
-                "scanner": "architecture",
-            }
-        )
+        for uw in unwraps:
+            findings.append(
+                {
+                    "title": f"Replace unwrap() calls with error handling in {uw.split(':')[0].split('/')[-1]} ({repo_name})",
+                    "description": (
+                        f"Found Rust files with excessive `.unwrap()` calls. These crash "
+                        f"at runtime if the value is None/Err.\n\n"
+                        f"  - {uw}"
+                    ),
+                    "priority": 2,
+                    "scanner": "architecture",
+                }
+            )
 
     # ── Check bare excepts ──
     bare = _check_bare_excepts(repo_path)
     if bare:
-        file_list = "\n".join(f"  - {b}" for b in bare[:5])
-        total = len(bare)
-        if total > 5:
-            file_list += f"\n  ... and {total - 5} more"
-
-        findings.append(
-            {
-                "title": f"Replace {len(bare)} bare `except:` clause(s) in {repo_name}",
-                "description": (
-                    f"Found Python files with bare `except:` clauses that catch ALL exceptions "
-                    f"(including KeyboardInterrupt, SystemExit). Use `except Exception:` instead.\n\n"
-                    f"Files:\n{file_list}"
-                ),
-                "priority": 2,
-                "scanner": "architecture",
-            }
-        )
+        for b in bare:
+            file_name = b.split(":")[0].split("/")[-1]
+            count = b.split(": ")[-1].split()[0]
+            findings.append(
+                {
+                    "title": f"Replace bare `except:` in {file_name} ({repo_name})",
+                    "description": (
+                        f"Found bare `except:` clause that catches ALL exceptions "
+                        f"(including KeyboardInterrupt, SystemExit) in {b}. "
+                        f"Use `except Exception:` instead."
+                    ),
+                    "priority": 2,
+                    "scanner": "architecture",
+                }
+            )
 
     # ── Check missing __init__.py ──
     missing_init = _check_missing_init_py(repo_path)
