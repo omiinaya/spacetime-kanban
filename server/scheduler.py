@@ -382,12 +382,13 @@ async def stale_watcher(interval: int):
 
 
 async def dead_board_monitor(interval: int):
-    """Detect zero-throughput board, auto-remediate, then alert.
+    """Detect zero-throughput board, alert, but NEVER kill active workers.
 
     Runs every `interval` seconds.
-    1. If board has 0 completions in last hour while work exists → try restart
-    2. If restart fails → fire dead-board webhook alert
-    3. Also detects stalled boards (high claim:complete ratio)
+    1. Check if workers are active → skip everything, they're working
+    2. If 0 completions + no active workers → fire alert (no restart)
+    3. Stalled detection via claim:complete ratio
+    4. The stale_watcher handles stuck in_progress tasks — never restart
     """
     last_alert_ms = 0
     alert_cooldown_ms = 3600_000  # Don't re-alert within 1 hour
@@ -396,13 +397,17 @@ async def dead_board_monitor(interval: int):
         try:
             await asyncio.sleep(interval)
 
+            # Phase 0: NEVER kill active workers
+            active_workers = _get_worker_count()
+            if active_workers > 0:
+                continue  # Workers are doing their job — don't touch anything
+
             overview = await _api_get("/api/analytics/overview")
             if not overview:
-                # Server might be down — try to restart
-                print("[scheduler:deadboard] Overview API returned nothing — attempting self-heal")
+                # Server might be down — but only restart if no workers are running
+                print("[scheduler:deadboard] Overview API returned nothing — no workers active either")
                 _restart_server()
                 await asyncio.sleep(5)
-                # Check if restart worked
                 health = await _api_get("/api/health")
                 if health:
                     print("[scheduler:deadboard] Self-heal: server restarted successfully")
@@ -418,22 +423,14 @@ async def dead_board_monitor(interval: int):
 
             now_ms = _now_ms()
 
-            # Auto-remediate: 0 completions + work exists
+            # Zero completions with no active workers — something is wrong
             if completions == 0 and (ip > 0 or avail > 0) and done > 0:
-                print(f"[scheduler:deadboard] Zero completions with work — attempting self-heal "
+                print(f"[scheduler:deadboard] Zero completions, no active workers — alerting "
                       f"(ip={ip}, avail={avail}, done={done})")
-                _restart_server()
-                await asyncio.sleep(5)
-                # Re-check after restart
-                overview = await _api_get("/api/analytics/overview")
-                if overview and overview.get("completions_last_hour", 0) > 0:
-                    print("[scheduler:deadboard] Self-heal: throughput restored after restart")
-                    continue
-                print("[scheduler:deadboard] Self-heal failed — alerting")
                 await fire_event(
                     EVENT_BOARD_DEAD,
                     {
-                        "total": overview.get("total", 0) if overview else 0,
+                        "total": overview.get("total", 0),
                         "available": avail,
                         "in_progress": ip,
                         "blocked": overview.get("by_status", {}).get("blocked", 0) if overview else 0,
@@ -441,6 +438,7 @@ async def dead_board_monitor(interval: int):
                         "completions_last_hour": 0,
                         "claims_last_hour": claims,
                         "claim_complete_ratio": overview.get("claim_complete_ratio", 0) if overview else 0,
+                        "active_workers": 0,
                     },
                 )
                 last_alert_ms = now_ms
@@ -459,6 +457,7 @@ async def dead_board_monitor(interval: int):
                             "completions_last_hour": 0,
                             "claims_last_hour": claims,
                             "claim_complete_ratio": overview.get("claim_complete_ratio", 0),
+                            "active_workers": 0,
                         },
                     )
                     last_alert_ms = now_ms
