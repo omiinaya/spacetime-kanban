@@ -966,7 +966,7 @@ async def _recover_stale_tasks() -> int:
     the next dispatcher tick can re-claim them.
     Returns the number of tasks recovered.
     """
-    stale = await _api_get("/api/tasks?status=in_progress")
+    stale = await _api_get("/api/tasks?status=inProgress")
     if not stale:
         return 0
 
