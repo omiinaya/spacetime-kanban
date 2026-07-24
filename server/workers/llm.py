@@ -24,7 +24,7 @@ from workers.base import WorkerContext
 
 LLM_COMMAND_STR = os.environ.get(
     "KANBAN_LLM_WORKER",
-    "hermes -z",  # Default: Hermes oneshot mode (no chat init, no MCP load)
+    "hermes chat -Q -q",  # Default: Hermes quiet single-query mode (has tool access)
 )
 LLM_COMMAND = shlex.split(LLM_COMMAND_STR)
 
