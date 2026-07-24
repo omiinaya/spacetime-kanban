@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 API_BASE = os.environ.get("KANBAN_API", "http://localhost:8727")
@@ -24,9 +25,24 @@ HEARTBEAT_INTERVAL = 15  # seconds between heartbeats
 # ── API helpers ─────────────────────────────────────────────────────
 
 
+def _url(path: str) -> str:
+    """Build a full API URL, encoding the path if needed.
+    
+    Uses urllib.parse.quote to encode special characters in the path
+    (spaces, unicode, etc.) while preserving URL-safe characters like /.
+    This is the belt alongside the suspenders of pre-encoding task_ids
+    at the WorkerContext level.
+    """
+    # Only encode if not already encoded (check for %)
+    if '%' not in path:
+        path = urllib.parse.quote(path, safe='/:@!$&\'()*+,;=')
+    return f"{API_BASE.rstrip('/')}/{path.lstrip('/')}"
+
+
 def api_get(path: str, timeout: int = 15) -> dict | list | None:
     try:
-        req = urllib.request.Request(f"{API_BASE}{path}")
+        url = _url(path)
+        req = urllib.request.Request(url)
         resp = urllib.request.urlopen(req, timeout=timeout)
         return json.loads(resp.read().decode())
     except Exception as e:
@@ -37,7 +53,8 @@ def api_get(path: str, timeout: int = 15) -> dict | list | None:
 def api_post(path: str, data: dict, timeout: int = 15) -> dict | None:
     try:
         body = json.dumps(data).encode()
-        req = urllib.request.Request(f"{API_BASE}{path}", data=body, method="POST")
+        url = _url(path)
+        req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("Content-Type", "application/json")
         resp = urllib.request.urlopen(req, timeout=timeout)
         content = resp.read().decode()
@@ -59,13 +76,14 @@ class WorkerContext:
 
     def __init__(self, task_id: str):
         self.task_id = task_id
+        self._safe_task_id = urllib.parse.quote(task_id, safe='')
         self.task = None
         self._heartbeat_count = 0
         self._running = True
 
     def load_task(self) -> bool:
         """Fetch task details from the kanban API."""
-        result = api_get(f"/api/tasks/{self.task_id}")
+        result = api_get(f"/api/tasks/{self._safe_task_id}")
         if not result:
             print(f"[worker] Task {self.task_id[:20]} not found", file=sys.stderr)
             return False
@@ -92,7 +110,7 @@ class WorkerContext:
     def heartbeat(self) -> bool:
         """Send a heartbeat via activity log. Returns False on failure."""
         result = api_post(
-            f"/api/tasks/{self.task_id}/log",
+            f"/api/tasks/{self._safe_task_id}/log",
             {
                 "task_id": self.task_id,
                 "action": "heartbeat",
@@ -107,7 +125,7 @@ class WorkerContext:
     def add_log(self, action: str, details: str = ""):
         """Add an activity log entry."""
         api_post(
-            f"/api/tasks/{self.task_id}/log",
+            f"/api/tasks/{self._safe_task_id}/log",
             {
                 "task_id": self.task_id,
                 "action": action,
@@ -120,7 +138,7 @@ class WorkerContext:
         """Mark the task as done."""
         self._running = False
         result = api_post(
-            f"/api/tasks/{self.task_id}/complete",
+            f"/api/tasks/{self._safe_task_id}/complete",
             {"result_notes": notes or "Completed by worker"},
         )
         return result is not None
@@ -147,7 +165,7 @@ class WorkerContext:
         is_permanent = any(p in reason.lower() for p in permanent_patterns)
         endpoint = "/permanent-block" if is_permanent else "/block-with-reason"
         result = api_post(
-            f"/api/tasks/{self.task_id}{endpoint}",
+            f"/api/tasks/{self._safe_task_id}{endpoint}",
             {"reason": reason or "Blocked by worker"},
         )
         if is_permanent and result:
@@ -159,7 +177,7 @@ class WorkerContext:
     def unclaim(self) -> bool:
         """Release the task back to available."""
         self._running = False
-        result = api_post(f"/api/tasks/{self.task_id}/unclaim", {})
+        result = api_post(f"/api/tasks/{self._safe_task_id}/unclaim", {})
         return result is not None
 
 
@@ -184,12 +202,13 @@ def heartbeat_loop(ctx: WorkerContext):
 # ── Entry helpers ──────────────────────────────────────────────────
 
 
-def run_worker(task_id: str, work_fn):
+def run_worker(task_id: str, work_fn, timeout: int = 300):
     """Standard worker entry point.
 
     Args:
         task_id: The kanban task ID to work on.
         work_fn: Callable(WorkerContext) -> (success: bool, message: str)
+        timeout: Max seconds for the entire worker lifecycle (default 5 min).
 
     Returns exit code (0=done, 1=blocked, 2=error).
     """
@@ -205,7 +224,32 @@ def run_worker(task_id: str, work_fn):
     hb_thread = heartbeat_loop(ctx)
 
     try:
-        success, message = work_fn(ctx)
+        # Run work_fn with a hard timeout to prevent indefinite hangs
+        import threading
+
+        result_container = []
+        exception_container = []
+
+        def _run():
+            try:
+                result_container.append(work_fn(ctx))
+            except Exception as e:
+                exception_container.append(e)
+
+        worker_thread = threading.Thread(target=_run, daemon=True)
+        worker_thread.start()
+        worker_thread.join(timeout=timeout)
+
+        if exception_container:
+            raise exception_container[0]
+
+        if not result_container:
+            error_msg = f"Worker timed out after {timeout}s"
+            ctx.block(error_msg)
+            print(f"[worker] ⏰ {error_msg}", file=sys.stderr)
+            return 2
+
+        success, message = result_container[0]
         if success:
             ctx.complete(message)
             print(f"[worker] ✅ Completed: {message}", file=sys.stderr)

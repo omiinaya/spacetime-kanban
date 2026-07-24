@@ -24,12 +24,12 @@ from workers.base import WorkerContext
 
 LLM_COMMAND_STR = os.environ.get(
     "KANBAN_LLM_WORKER",
-    "hermes chat -Q -q",  # Default: Hermes CLI quiet mode, single query
+    "hermes -z",  # Default: Hermes oneshot mode (no chat init, no MCP load)
 )
 LLM_COMMAND = shlex.split(LLM_COMMAND_STR)
 
 # Safety limits
-WORK_TIMEOUT = int(os.environ.get("KANBAN_LLM_TIMEOUT", "1800"))  # 30 min (env-configurable)
+WORK_TIMEOUT = int(os.environ.get("KANBAN_LLM_TIMEOUT", "300"))  # 5 min (env-configurable)
 GIT_TIMEOUT = 15  # git operations timeout
 STDERR_LOG_LIMIT = 5000  # max stderr chars to include in block reason
 
@@ -81,7 +81,9 @@ def _build_prompt(ctx: WorkerContext) -> str:
         ]
     )
 
-    return "\n".join(parts)
+    prompt = "\n".join(parts)
+    # Use escaped newlines for hermes -z (oneshot mode handles \\n correctly)
+    return prompt.replace("\n", "\\n")
 
 
 def _has_git_changes(repo_path: str) -> list[str]:

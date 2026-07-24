@@ -183,11 +183,10 @@ def _extract_sats_val(val: Any, atype: dict) -> Any:
 
 
 async def _call(reducer: str, args: list) -> dict:
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{settings.stdb_base_url}/v1/database/{settings.stdb_db}/call/{reducer}",
-            json=args,
-        )
+    resp = await _sql_client.post(
+        f"{settings.stdb_base_url}/v1/database/{settings.stdb_db}/call/{reducer}",
+        json=args,
+    )
     if resp.status_code >= 400:
         raise HTTPException(409, f"Reducer failed: {resp.text[:300]}")
     text = resp.text.strip()

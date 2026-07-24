@@ -5,6 +5,9 @@ pub struct fields ending in _id, _name, _key, _ref, _by that lack
 #[index(btree)], #[primary_key], or #[unique] annotations.
 
 Priority: P1 (high) — missing indexes cause slow STDB queries.
+
+IMPORTANT: This scanner MUST only create tasks for fields that truly lack
+indexes. False positives waste worker time and clutter the board.
 """
 
 import os
@@ -130,7 +133,12 @@ def _scan_rust_file(filepath: str) -> list[dict]:
 
 @register_scanner
 def scan_stdb_index(repo_name: str, repo_path: str) -> list[dict]:
-    """Scan for STDB tables missing indexes on foreign key fields."""
+    """Scan for STDB tables missing indexes on foreign key fields.
+    
+    Only creates ONE batched task per repo when at least one field
+    genuinely lacks an index. Returns empty list if all fields are
+    already indexed, preventing false-positive tasks.
+    """
     # Find all .rs files in server/spacetimedb/src/
     stdb_src = os.path.join(repo_path, "server", "spacetimedb", "src")
     if not os.path.isdir(stdb_src):
@@ -143,7 +151,7 @@ def scan_stdb_index(repo_name: str, repo_path: str) -> list[dict]:
                 filepath = os.path.join(root, f)
                 findings.extend(_scan_rust_file(filepath))
 
-    # Batched: one task per repo instead of per-field (avoids noise)
+    # No unindexed FK fields found at all — return empty, don't create a task
     if not findings:
         return []
 
