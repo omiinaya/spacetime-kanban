@@ -156,8 +156,9 @@ def _spawn_worker(task_id: str, title: str, repo: str) -> bool:
                 "HERMES_SESSION_KEY": "",
                 "HERMES_QUIET": "",
                 "HERMES_REDACT_SECRETS": "",
-                # Pass LLM timeout to worker — .env vars aren't auto-propagated to os.environ
+                # Pass LLM worker config to subprocess — .env vars aren't auto-propagated
                 "KANBAN_LLM_TIMEOUT": "600",
+                "KANBAN_LLM_WORKER": "hermes chat -Q -q",
             },
         )
         _worker_processes[task_id] = proc
