@@ -672,6 +672,19 @@ async def worker_death_watcher(interval: int):
             for tid, exit_code, spawn_time in crashed:
                 age = now - spawn_time if spawn_time else 0
 
+                # exit 0 = completed (worker called complete_task), exit 1 = blocked
+                # (worker called block/permanent-block). These are INTENTIONAL — do not
+                # unclaim. Only exit 2+ or negative (killed) are crashes.
+                if exit_code in (0, 1):
+                    print(
+                        f"[scheduler:deathwatch] Task {tid[:20]} worker finished "
+                        f"(exit={exit_code}, age={age:.0f}s)"
+                    )
+                    _worker_processes.pop(tid, None)
+                    _worker_spawn_times.pop(tid, None)
+                    _worker_stderr_data.pop(tid, None)
+                    continue
+
                 # Read stderr from crashed worker
                 proc = _worker_processes.get(tid)
                 stderr_text = ""
