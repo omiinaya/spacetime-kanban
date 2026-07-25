@@ -157,7 +157,7 @@ def _spawn_worker(task_id: str, title: str, repo: str) -> bool:
                 "HERMES_QUIET": "",
                 "HERMES_REDACT_SECRETS": "",
                 # Pass LLM worker config to subprocess — .env vars aren't auto-propagated
-                "KANBAN_LLM_TIMEOUT": "1800",
+                "KANBAN_LLM_TIMEOUT": "3600",
                 "KANBAN_LLM_WORKER": "hermes chat -Q -q",
             },
         )
@@ -653,11 +653,14 @@ async def worker_death_watcher(interval: int):
 
             crashed = _check_crashed_workers()
             if not crashed:
-                # Check for hung workers that have been alive too long (>10 min)
+                # Check for hung workers that have been alive too long
                 now = time.monotonic()
                 for tid in list(_worker_spawn_times.keys()):
                     spawn_time = _worker_spawn_times.get(tid)
-                    if spawn_time and now - spawn_time > 600:
+                    # Use KANBAN_LLM_TIMEOUT + 300s grace to avoid killing workers
+                    # before their own timeout fires
+                    max_hung = int(os.environ.get("KANBAN_LLM_TIMEOUT", "3600")) + 300
+                    if spawn_time and now - spawn_time > max_hung:
                         proc = _worker_processes.get(tid)
                         if proc and proc.poll() is None:
                             print(
