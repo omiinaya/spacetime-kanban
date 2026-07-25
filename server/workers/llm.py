@@ -29,7 +29,7 @@ LLM_COMMAND_STR = os.environ.get(
 LLM_COMMAND = shlex.split(LLM_COMMAND_STR)
 
 # Safety limits
-WORK_TIMEOUT = int(os.environ.get("KANBAN_LLM_TIMEOUT", "1800"))  # 30 min (env-configurable)
+WORK_TIMEOUT = int(os.environ.get("KANBAN_LLM_TIMEOUT", "3600"))  # 60 min (env-configurable)
 GIT_TIMEOUT = 15  # git operations timeout
 STDERR_LOG_LIMIT = 5000  # max stderr chars to include in block reason
 
