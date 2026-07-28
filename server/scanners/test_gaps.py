@@ -85,7 +85,9 @@ def scan_test_gaps(repo_name: str, repo_path: str) -> list[dict]:
     py_gaps = _find_test_gaps_python(repo_path)
     rust_gaps = _find_test_gaps_rust(repo_path)
 
-    MAX_PER_TASK = 5  # Split findings into tasks of this max size so workers can actually finish them
+    MAX_PER_TASK = (
+        5  # Split findings into tasks of this max size so workers can actually finish them
+    )
 
     if rust_gaps:
         for i in range(0, len(rust_gaps), MAX_PER_TASK):

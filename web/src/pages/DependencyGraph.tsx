@@ -30,14 +30,14 @@ function layoutGraph(tasks: Task[]) {
   }
   for (const t of tasks) {
     if (t.dependsOn && byId.has(t.dependsOn)) {
-      outgoing.get(t.dependsOn)!.push(t.id)
-      incoming.get(t.id)!.push(t.dependsOn)
+      outgoing.get(t.dependsOn)?.push(t.id) ?? []
+      incoming.get(t.id)?.push(t.dependsOn) ?? []
     }
   }
 
   // Topological sort (Kahn's algorithm)
   const inDeg = new Map<string, number>()
-  for (const t of tasks) inDeg.set(t.id, incoming.get(t.id)!.length)
+  for (const t of tasks) inDeg.set(t.id, incoming.get(t.id)?.length ?? 0)
 
   const queue: string[] = []
   for (const [id, deg] of inDeg) if (deg === 0) queue.push(id)
@@ -236,7 +236,13 @@ export default function DependencyGraph({
           })}
 
           {/* Legend */}
-          <g transform={`translate(${Number(vb.viewBox.split(' ')[0]) + 8}, ${Number(vb.viewBox.split(' ')[1]) + 8})`}>
+          <g transform={`translate(${(() => {
+            const parts = vb.viewBox.split(' ')
+            return Number(parts[0] ?? 0) + 8
+          })()}, ${(() => {
+            const parts = vb.viewBox.split(' ')
+            return Number(parts[1] ?? 0) + 8
+          })()})`}>
             <rect x="0" y="0" width="170" height="90" rx="6" fill="var(--color-card)" opacity="0.9" stroke="var(--color-border)" strokeWidth="1" />
             <text x="8" y="16" fill="var(--color-foreground)" fontSize="10" fontWeight="600">Legend</text>
             {Object.entries(STATUS_COLORS).map(([status, color], i) => (

@@ -159,7 +159,9 @@ async def test_list_available_tasks(client):
     """GET /api/tasks?status=available returns a list."""
     _require_server()
     resp = await client.get("/api/tasks", params={"status": "available", "limit": 10})
-    assert resp.status_code in (200, 502), f"unexpected status: {resp.status_code} {resp.text[:200]}"
+    assert resp.status_code in (200, 502), (
+        f"unexpected status: {resp.status_code} {resp.text[:200]}"
+    )
     if resp.status_code == 502:
         pytest.skip(f"STDB query failed: {resp.text[:200]}")
     data = resp.json()
@@ -352,7 +354,9 @@ async def test_analytics_overview(client):
     expected_fields = {"total", "by_status", "repos"}
     optional_fields = {"claims_last_hour", "completions_last_hour", "claim_complete_ratio"}
     for field in expected_fields:
-        assert field in data, f"field {field!r} missing from analytics overview: {list(data.keys())}"
+        assert field in data, (
+            f"field {field!r} missing from analytics overview: {list(data.keys())}"
+        )
     for field in optional_fields:
         if field in data:
             assert isinstance(data[field], (int, float, dict)), (

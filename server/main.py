@@ -31,11 +31,6 @@ from routes.scanner import router as scanner_router
 from routes.tasks import router as tasks_router
 from routes.templates import router as templates_router
 from routes.webhook_subs import router as webhook_subs_router
-from shared import (
-    # Models
-    AgentCapabilitiesRequest,
-    _call,
-)
 
 # ── Lifespan: wait for STDB before accepting requests ──────────────
 
@@ -201,28 +196,6 @@ async def _sync_to_github(task_id: str, event: str, notes: str = ""):
         logging.getLogger(__name__).warning(f"Failed to sync task {task_id} to GitHub: {e}")
 
 
-# ── Task Skills (Capability Tags) ──────────────────────────────────
-
-
-# ── Task Comments ──────────────────────────────────────────────────
-
-
-# ── Task Checklists / Subtasks ──────────────────────────────────────
-
-
-# ── Task Reorder / Position ──────────────────────────────────────────────
-
-
-# ── Priority Scoring / Suggestions ──────────────────────────────────
-
-
-@app.put("/api/agents/{agent_id}/capabilities")
-async def set_agent_capabilities(agent_id: str, body: AgentCapabilitiesRequest):
-    """Update an agent's capabilities and repo focus."""
-    await _call("set_agent_capabilities", [agent_id, body.capabilities, body.repo_focus])
-    return {"status": "updated", "agent_id": agent_id}
-
-
 @app.exception_handler(404)
 async def spa_fallback(request, exc):
     """Catch-all for SPA client-side routing."""
@@ -263,45 +236,6 @@ BRANCH_PATTERN = re.compile(
     r"kanban-([a-zA-Z0-9_]+)--"
     r".+$"
 )
-
-
-# ── Labels ────────────────────────────────────────────────────────────
-
-
-# ── Project CRUD ────────────────────────────────────────────────────
-
-
-# ── Analytics ────────────────────────────────────────────────────────
-
-
-# ── Task Template Endpoints ───────────────────────────────────────────
-
-
-# ── Task Archive / Unarchive ──────────────────────────────────────────
-
-
-# ── Sprint Management ─────────────────────────────────────────────────
-
-
-# ── Time Estimates ────────────────────────────────────────────────────
-
-
-# ── Task Relations ────────────────────────────────────────────────────
-
-
-# ── Automation Rules ──────────────────────────────────────────────────
-
-
-# ── API Keys ─────────────────────────────────────────────────────────
-
-
-# ── Calendar ──────────────────────────────────────────────────────────
-
-
-# ── Cross-Project Aggregation ─────────────────────────────────────────
-
-
-# ── Schema Migrations ─────────────────────────────────────────────────
 
 
 # ── Route Modules ────────────────────────────────────────────────────

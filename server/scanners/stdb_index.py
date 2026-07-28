@@ -134,7 +134,7 @@ def _scan_rust_file(filepath: str) -> list[dict]:
 @register_scanner
 def scan_stdb_index(repo_name: str, repo_path: str) -> list[dict]:
     """Scan for STDB tables missing indexes on foreign key fields.
-    
+
     Only creates ONE batched task per repo when at least one field
     genuinely lacks an index. Returns empty list if all fields are
     already indexed, preventing false-positive tasks.

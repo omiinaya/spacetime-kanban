@@ -1,58 +1,52 @@
 use crate::tables::*;
-use spacetimedb::{ReducerContext, Table};
+use spacetimedb::ReducerContext;
 
 // ── Task Lookups ────────────────────────────────────────────────────
 
 pub fn find_task(ctx: &ReducerContext, task_id: &str) -> Option<Task> {
-    ctx.db.tasks().iter().find(|t| t.id == task_id)
+    ctx.db.tasks().id().find(task_id.to_string())
 }
 
 // ── Agent Lookups ───────────────────────────────────────────────────
 
 pub fn find_agent(ctx: &ReducerContext, agent_id: &str) -> Option<SwarmAgent> {
-    ctx.db.swarm_agents().iter().find(|a| a.id == agent_id)
+    ctx.db.swarm_agents().id().find(agent_id.to_string())
 }
 
 // ── Project Lookups ─────────────────────────────────────────────────
 
 pub fn find_project(ctx: &ReducerContext, project_id: &str) -> Option<KanbanProject> {
-    ctx.db.kanban_projects().iter().find(|p| p.id == project_id)
+    ctx.db.kanban_projects().id().find(project_id.to_string())
 }
 
 // ── Webhook Lookups ─────────────────────────────────────────────────
 
 pub fn find_webhook(ctx: &ReducerContext, wh_id: &str) -> Option<WebhookSubscription> {
-    ctx.db.webhook_subscriptions().iter().find(|w| w.id == wh_id)
+    ctx.db.webhook_subscriptions().id().find(wh_id.to_string())
 }
 
 // ── Issue Link Lookups ──────────────────────────────────────────────
 
 pub fn find_issue_link(ctx: &ReducerContext, task_id: &str) -> Option<IssueLink> {
-    ctx.db.issue_links()
-        .iter()
-        .find(|l| l.kanban_task_id == task_id)
+    ctx.db.issue_links().kanban_task_id().find(task_id.to_string())
 }
 
 // ── Label Lookups ───────────────────────────────────────────────────
 
 pub fn find_label(ctx: &ReducerContext, label_id: &str) -> Option<KanbanLabel> {
-    ctx.db.kanban_labels().iter().find(|l| l.id == label_id)
+    ctx.db.kanban_labels().id().find(label_id.to_string())
 }
 
 // ── Checklist Lookups ───────────────────────────────────────────────
 
 pub fn find_checklist_item(ctx: &ReducerContext, item_id: &str) -> Option<TaskChecklistItem> {
-    ctx.db.task_checklists()
-        .iter()
-        .find(|i| i.id == item_id)
+    ctx.db.task_checklists().id().find(item_id.to_string())
 }
 
 // ── Template Lookups ────────────────────────────────────────────────
 
 pub fn find_template(ctx: &ReducerContext, template_id: &str) -> Option<TaskTemplate> {
-    ctx.db.task_templates()
-        .iter()
-        .find(|t| t.id == template_id)
+    ctx.db.task_templates().id().find(template_id.to_string())
 }
 
 // ── Type Helpers ────────────────────────────────────────────────────
@@ -177,33 +171,25 @@ pub fn is_template_due(schedule: &str, last_triggered_at: u64, now: u64) -> bool
 // ── Task Relations ─────────────────────────────────────────────────
 
 pub fn find_task_relation(ctx: &ReducerContext, relation_id: &str) -> Option<TaskRelation> {
-    ctx.db.task_relations()
-        .iter()
-        .find(|r| r.id == relation_id)
+    ctx.db.task_relations().id().find(relation_id.to_string())
 }
 
 // ── Automation Rules ──────────────────────────────────────────────
 
 pub fn find_automation_rule(ctx: &ReducerContext, rule_id: &str) -> Option<AutomationRule> {
-    ctx.db.automation_rules()
-        .iter()
-        .find(|r| r.id == rule_id)
+    ctx.db.automation_rules().id().find(rule_id.to_string())
 }
 
 // ── API Keys ──────────────────────────────────────────────────────
 
 pub fn find_api_key(ctx: &ReducerContext, key_id: &str) -> Option<ApiKey> {
-    ctx.db.api_keys()
-        .iter()
-        .find(|k| k.id == key_id)
+    ctx.db.api_keys().id().find(key_id.to_string())
 }
 
 // ── Schema Migrations ─────────────────────────────────────────────
 
 pub fn find_migration(ctx: &ReducerContext, version: &str) -> Option<SchemaMigration> {
-    ctx.db.schema_migrations()
-        .iter()
-        .find(|m| m.version == version)
+    ctx.db.schema_migrations().version().find(version.to_string())
 }
 
 // ── Unit Tests ────────────────────────────────────────────────────────────

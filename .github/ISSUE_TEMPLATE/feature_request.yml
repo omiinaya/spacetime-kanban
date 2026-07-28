@@ -1,0 +1,56 @@
+name: Feature Request
+description: Request a new feature or improvement
+title: "feat: "
+labels: ["enhancement"]
+projects: ["spacetimedb-kanban"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your suggestion! This project is an atomic multi-agent kanban on SpacetimeDB.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem does this feature solve? What is the use case?
+      placeholder: Agents currently cannot filter tasks by multiple tags simultaneously...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see.
+      placeholder: Add a `tags` query parameter to GET /api/tasks that accepts comma-separated values...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or workarounds you considered.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority Level
+      options:
+        - Critical (blocks other work)
+        - High (important feature)
+        - Medium (nice to have)
+        - Low (future consideration)
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, or references here.

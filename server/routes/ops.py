@@ -71,7 +71,7 @@ async def import_roadmap(body: RoadmapImportRequest):
                         title=sanitized_title,
                         repo=sanitized_repo,
                     )
-                    if existing_rows and existing_rows[0].get('status') != 'done':
+                    if existing_rows and existing_rows[0].get("status") != "done":
                         continue
                     await _call(
                         "add_task",
@@ -97,7 +97,7 @@ async def import_roadmap(body: RoadmapImportRequest):
             title=sanitized_title,
             repo=sanitized_repo,
         )
-        if existing_rows and existing_rows[0].get('status') != 'done':
+        if existing_rows and existing_rows[0].get("status") != "done":
             continue
         await _call(
             "add_task",

@@ -8,6 +8,7 @@ import type { KanbanLabel, IssueLink } from '../api'
 import type { Task } from '../hooks/useRealtimeTasks'
 import { useLazyLoad } from '../hooks/useLazyLoad'
 import { TableRowSkeleton } from './Skeleton'
+import { PRIORITY_LABELS, STATUS_COLORS, PRIORITY_COLORS_VIBRANT } from './constants'
 
 interface ListViewProps {
   tasks: Task[]
@@ -27,22 +28,6 @@ interface ListViewProps {
 
 type SortField = 'priority' | 'status' | 'repo' | 'assignedTo' | 'createdAt' | 'title'
 type SortDir = 'asc' | 'desc'
-
-const PRIORITY_LABELS: Record<number, string> = { 0: 'Urgent', 1: 'High', 2: 'Medium', 3: 'Low' }
-
-const STATUS_COLORS: Record<string, string> = {
-  available: 'bg-slate-500/20 text-slate-400',
-  in_progress: 'bg-blue-500/20 text-blue-400',
-  blocked: 'bg-red-500/20 text-red-400',
-  done: 'bg-emerald-500/20 text-emerald-400',
-}
-
-const PRIORITY_COLORS_VIBRANT: Record<number, string> = {
-  0: 'bg-red-600/25 text-red-300',
-  1: 'bg-orange-500/25 text-orange-300',
-  2: 'bg-blue-500/25 text-blue-300',
-  3: 'bg-slate-500/25 text-slate-300',
-}
 
 export default function ListView({
   tasks, loading, selectedIds, selectMode,

@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     dead_board_interval_seconds: int = 3600  # Don't restart too often — workers need time
     template_interval_seconds: int = 900
     metrics_interval_seconds: int = 900
-    scanner_interval_seconds: int = 21600  # Run repo scanners every 6 hours
-    improver_interval_seconds: int = 21600  # Self-improvement checker every 6 hours
+    scanner_interval_seconds: int = 1800  # Run repo scanners every 30 minutes
+    improver_interval_seconds: int = 3600  # Self-improvement checker every 1 hour
 
     # ── Webhook alerts ──
     webhook_default_url: str = ""  # Default alert destination (Discord, Slack, etc.)

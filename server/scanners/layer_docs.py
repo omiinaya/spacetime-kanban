@@ -151,14 +151,14 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
 
     # ── CONTRIBUTING check ──
     if not os.path.isfile(os.path.join(repo_path, "CONTRIBUTING.md")) and readme_age is not None:
-            findings.append(
-                {
-                    "title": f"Add CONTRIBUTING.md to {repo_name}",
-                    "description": "A CONTRIBUTING guide helps others understand how to contribute to this project.",
-                    "priority": 3,
-                    "scanner": "docs_ci",
-                }
-            )
+        findings.append(
+            {
+                "title": f"Add CONTRIBUTING.md to {repo_name}",
+                "description": "A CONTRIBUTING guide helps others understand how to contribute to this project.",
+                "priority": 3,
+                "scanner": "docs_ci",
+            }
+        )
 
     # ── Issue/PR template check ──
     gh_dir = os.path.join(repo_path, ".github")

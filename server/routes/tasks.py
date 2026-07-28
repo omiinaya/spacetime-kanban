@@ -328,12 +328,11 @@ async def create_task(body: TaskCreate):
         sanitized_title = body.title.replace("'", "''")
         sanitized_repo = body.repo.replace("'", "''")
         existing = await _sql_param(
-            "SELECT id, status FROM tasks WHERE title = '{title}' "
-            "AND repo = '{repo}' LIMIT 1",
+            "SELECT id, status FROM tasks WHERE title = '{title}' AND repo = '{repo}' LIMIT 1",
             title=sanitized_title,
             repo=sanitized_repo,
         )
-        if existing and existing[0].get('status') != 'done':
+        if existing and existing[0].get("status") != "done":
             return {
                 "status": "exists",
                 "id": existing[0]["id"],
@@ -358,7 +357,7 @@ async def create_task(body: TaskCreate):
     # Set skills if provided — using known task_id, no race condition
     if body.required_skills:
         await _call("set_task_skills", [task_id, body.required_skills])
-    asyncio.ensure_future(
+    asyncio.create_task(
         _notify(
             "created",
             {
@@ -419,7 +418,7 @@ async def delete_task(task_id: str):
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     await _call("delete_task", [task_id])
     if rows:
-        asyncio.ensure_future(
+        asyncio.create_task(
             fire_event(
                 EVENT_TASK_DELETED,
                 {
@@ -440,7 +439,7 @@ async def claim_task(task_id: str, body: ClaimRequest):
     await _call("claim_task", [task_id, body.agent_id])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
-        asyncio.ensure_future(_notify("claimed", rows[0]))
+        asyncio.create_task(_notify("claimed", rows[0]))
     return {"status": "claimed", "task_id": task_id, "assigned_to": body.agent_id}
 
 
@@ -487,8 +486,8 @@ async def unclaim_task(task_id: str):
     await _call("unclaim_task", [task_id])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
-        asyncio.ensure_future(_notify("unclaimed", rows[0]))
-        asyncio.ensure_future(_sync_to_github(task_id, "unclaimed"))
+        asyncio.create_task(_notify("unclaimed", rows[0]))
+        asyncio.create_task(_sync_to_github(task_id, "unclaimed"))
     return {"status": "unclaimed", "task_id": task_id}
 
 
@@ -499,9 +498,9 @@ async def complete_task(task_id: str, body: CompleteRequest | None = None):
     await _call("complete_task", [task_id, body.result_notes])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
-        asyncio.ensure_future(_notify("completed", rows[0], body.result_notes))
-        asyncio.ensure_future(_sync_to_github(task_id, "completed", body.result_notes))
-        asyncio.ensure_future(
+        asyncio.create_task(_notify("completed", rows[0], body.result_notes))
+        asyncio.create_task(_sync_to_github(task_id, "completed", body.result_notes))
+        asyncio.create_task(
             fire_event(
                 EVENT_TASK_COMPLETED,
                 {
@@ -523,8 +522,8 @@ def _maybe_notify_blocked(task_id: str, rows: list[dict], reason: str):
     fail_count = task.get("fail_count", 0)
     if fail_count != 1:
         return  # Only alert on first failure (fail_count became 1)
-    asyncio.ensure_future(_notify("blocked", task, reason))
-    asyncio.ensure_future(
+    asyncio.create_task(_notify("blocked", task, reason))
+    asyncio.create_task(
         fire_event(
             EVENT_TASK_BLOCKED,
             {
@@ -810,11 +809,12 @@ async def reorder_checklist_item(task_id: str, item_id: str, new_position: int):
 @router.get("/api/tasks/{task_id}/labels", response_model=list[LabelOut])
 async def get_task_labels(task_id: str):
     """Get all labels assigned to a task."""
-    rows = await _sql(f"""
-        SELECT l.* FROM kanban_labels l
-        INNER JOIN task_label_assignments a ON l.id = a.label_id
-        WHERE a.task_id = '{task_id}'
-    """)
+    rows = await _sql_param(
+        "SELECT l.* FROM kanban_labels l "
+        "INNER JOIN task_label_assignments a ON l.id = a.label_id "
+        "WHERE a.task_id = '{task_id}'",
+        task_id=task_id,
+    )
     return [
         LabelOut(
             id=r["id"],

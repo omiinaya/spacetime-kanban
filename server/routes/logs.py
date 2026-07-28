@@ -123,31 +123,46 @@ async def logs_stats():
     """Get activity log summary statistics."""
     import time
 
-    rows = await _sql("SELECT * FROM task_logs")
-    logs = [_row_to_log(r) for r in rows]
+    # Use SQL aggregations instead of loading all rows into Python
+    total_result = await _sql("SELECT COUNT(*) AS cnt FROM task_logs")
+    total_events = total_result[0]["cnt"] if total_result else 0
 
     now_ms = int(time.time() * 1000)
     day_ms = 86_400_000
 
-    today = [rec for rec in logs if rec.timestamp >= now_ms - day_ms]
+    today_result = await _sql_param(
+        "SELECT COUNT(*) AS cnt FROM task_logs WHERE timestamp > {since}",
+        since=str(now_ms - day_ms),
+    )
+    today_events = today_result[0]["cnt"] if today_result else 0
 
-    action_counts: dict[str, int] = {}
-    agent_counts: dict[str, int] = {}
-    for rec in logs:
-        action_counts[rec.action] = action_counts.get(rec.action, 0) + 1
-        if rec.agent_id:
-            agent_counts[rec.agent_id] = agent_counts.get(rec.agent_id, 0) + 1
+    # Get action breakdown via SQL grouping
+    action_rows = await _sql("SELECT action, COUNT(*) AS cnt FROM task_logs GROUP BY action")
+    action_breakdown: dict[str, int] = {}
+    for r in action_rows:
+        action_breakdown[r["action"]] = r["cnt"]
 
-    # Get unique agents who have been active today
-    today_agents = set()
-    for rec in today:
-        if rec.agent_id:
-            today_agents.add(rec.agent_id)
+    # Get unique agent count for today
+    agent_rows = await _sql_param(
+        "SELECT COUNT(DISTINCT agent_id) AS cnt FROM task_logs "
+        "WHERE timestamp > {since} AND agent_id IS NOT NULL",
+        since=str(now_ms - day_ms),
+    )
+    active_agents_today = agent_rows[0]["cnt"] if agent_rows else 0
+
+    # Top active agents
+    top_agent_rows = await _sql_param(
+        "SELECT agent_id, COUNT(*) AS cnt FROM task_logs "
+        "WHERE agent_id IS NOT NULL AND timestamp > {since} "
+        "GROUP BY agent_id ORDER BY cnt DESC LIMIT 10",
+        since=str(now_ms - day_ms),
+    )
+    top_agents: dict[str, int] = {r["agent_id"]: r["cnt"] for r in top_agent_rows}
 
     return {
-        "total_events": len(logs),
-        "today_events": len(today),
-        "active_agents_today": len(today_agents),
-        "action_breakdown": action_counts,
-        "top_agents": dict(sorted(agent_counts.items(), key=lambda x: -x[1])[:10]),
+        "total_events": total_events,
+        "today_events": today_events,
+        "active_agents_today": active_agents_today,
+        "action_breakdown": action_breakdown,
+        "top_agents": top_agents,
     }

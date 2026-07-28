@@ -60,14 +60,8 @@ pub(crate) fn log_action(
 // ── CRUD Helpers ────────────────────────────────────────────────────
 
 pub(crate) fn update_task_in_db(ctx: &ReducerContext, task: &Task) {
-    let old: Vec<Task> = ctx
-        .db
-        .tasks()
-        .iter()
-        .filter(|t| t.id == task.id)
-        .collect();
-    for t in old {
-        ctx.db.tasks().delete(t);
+    if let Some(old) = ctx.db.tasks().id().find(&task.id) {
+        ctx.db.tasks().delete(old);
     }
     ctx.db.tasks().insert(task.clone());
 }
@@ -85,40 +79,22 @@ pub(crate) fn delete_logs_for_task(ctx: &ReducerContext, task_id: &str) {
 }
 
 pub(crate) fn update_agent_in_db(ctx: &ReducerContext, agent: &SwarmAgent) {
-    let old: Vec<SwarmAgent> = ctx
-        .db
-        .swarm_agents()
-        .iter()
-        .filter(|a| a.id == agent.id)
-        .collect();
-    for a in old {
-        ctx.db.swarm_agents().delete(a);
+    if let Some(old) = ctx.db.swarm_agents().id().find(&agent.id) {
+        ctx.db.swarm_agents().delete(old);
     }
     ctx.db.swarm_agents().insert(agent.clone());
 }
 
 pub(crate) fn update_project_in_db(ctx: &ReducerContext, project: &KanbanProject) {
-    let old: Vec<KanbanProject> = ctx
-        .db
-        .kanban_projects()
-        .iter()
-        .filter(|p| p.id == project.id)
-        .collect();
-    for p in old {
-        ctx.db.kanban_projects().delete(p);
+    if let Some(old) = ctx.db.kanban_projects().id().find(&project.id) {
+        ctx.db.kanban_projects().delete(old);
     }
     ctx.db.kanban_projects().insert(project.clone());
 }
 
 pub(crate) fn update_template_in_db(ctx: &ReducerContext, template: &TaskTemplate) {
-    let old: Vec<TaskTemplate> = ctx
-        .db
-        .task_templates()
-        .iter()
-        .filter(|t| t.id == template.id)
-        .collect();
-    for t in old {
-        ctx.db.task_templates().delete(t);
+    if let Some(old) = ctx.db.task_templates().id().find(&template.id) {
+        ctx.db.task_templates().delete(old);
     }
     ctx.db.task_templates().insert(template.clone());
 }

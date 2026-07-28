@@ -1,6 +1,7 @@
 """Tests for the SATS parser (shared._extract_sats_val)."""
 
 import sys
+
 sys.path.insert(0, "server")
 
 from shared import _extract_sats_val
@@ -155,8 +156,14 @@ def test_nested_option_in_enum():
                                     "algebraic_type": {
                                         "Sum": {
                                             "variants": [
-                                                {"name": {"some": "some"}, "algebraic_type": {"String": []}},
-                                                {"name": {"some": "none"}, "algebraic_type": {"Product": {"elements": []}}},
+                                                {
+                                                    "name": {"some": "some"},
+                                                    "algebraic_type": {"String": []},
+                                                },
+                                                {
+                                                    "name": {"some": "none"},
+                                                    "algebraic_type": {"Product": {"elements": []}},
+                                                },
                                             ]
                                         }
                                     },
@@ -244,11 +251,7 @@ def test_product_empty_elements():
 def test_product_single_element():
     """Single-element Product unwraps to the element value."""
     atype = {
-        "Product": {
-            "elements": [
-                {"name": {"some": "name"}, "algebraic_type": {"String": []}}
-            ]
-        }
+        "Product": {"elements": [{"name": {"some": "name"}, "algebraic_type": {"String": []}}]}
     }
     assert _extract_sats_val(["alice"], atype) == "alice"
 
@@ -292,7 +295,10 @@ def test_product_with_optional_field_some():
                         "Sum": {
                             "variants": [
                                 {"name": {"some": "some"}, "algebraic_type": {"String": []}},
-                                {"name": {"some": "none"}, "algebraic_type": {"Product": {"elements": []}}},
+                                {
+                                    "name": {"some": "none"},
+                                    "algebraic_type": {"Product": {"elements": []}},
+                                },
                             ]
                         }
                     },
@@ -318,7 +324,10 @@ def test_product_with_optional_field_none():
                         "Sum": {
                             "variants": [
                                 {"name": {"some": "some"}, "algebraic_type": {"String": []}},
-                                {"name": {"some": "none"}, "algebraic_type": {"Product": {"elements": []}}},
+                                {
+                                    "name": {"some": "none"},
+                                    "algebraic_type": {"Product": {"elements": []}},
+                                },
                             ]
                         }
                     },
@@ -379,9 +388,18 @@ def test_sum_variant_payload_is_product_with_nested_types():
                                     "algebraic_type": {
                                         "Sum": {
                                             "variants": [
-                                                {"name": {"some": "available"}, "algebraic_type": {"Product": {"elements": []}}},
-                                                {"name": {"some": "inProgress"}, "algebraic_type": {"Product": {"elements": []}}},
-                                                {"name": {"some": "done"}, "algebraic_type": {"Product": {"elements": []}}},
+                                                {
+                                                    "name": {"some": "available"},
+                                                    "algebraic_type": {"Product": {"elements": []}},
+                                                },
+                                                {
+                                                    "name": {"some": "inProgress"},
+                                                    "algebraic_type": {"Product": {"elements": []}},
+                                                },
+                                                {
+                                                    "name": {"some": "done"},
+                                                    "algebraic_type": {"Product": {"elements": []}},
+                                                },
                                             ]
                                         }
                                     },
@@ -414,8 +432,14 @@ def test_enum_variant_with_option_none_preserves_structure():
                                     "algebraic_type": {
                                         "Sum": {
                                             "variants": [
-                                                {"name": {"some": "some"}, "algebraic_type": {"String": []}},
-                                                {"name": {"some": "none"}, "algebraic_type": {"Product": {"elements": []}}},
+                                                {
+                                                    "name": {"some": "some"},
+                                                    "algebraic_type": {"String": []},
+                                                },
+                                                {
+                                                    "name": {"some": "none"},
+                                                    "algebraic_type": {"Product": {"elements": []}},
+                                                },
                                             ]
                                         }
                                     },

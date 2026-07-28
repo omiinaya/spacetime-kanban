@@ -14,6 +14,20 @@ export const PRIORITY_COLORS: Record<number, string> = {
   3: 'bg-slate-500/20 text-slate-400',
 }
 
+export const PRIORITY_COLORS_VIBRANT: Record<number, string> = {
+  0: 'bg-red-600/25 text-red-300',
+  1: 'bg-orange-500/25 text-orange-300',
+  2: 'bg-blue-500/25 text-blue-300',
+  3: 'bg-slate-500/25 text-slate-300',
+}
+
+export const STATUS_COLORS: Record<string, string> = {
+  available: 'bg-slate-500/20 text-slate-400',
+  in_progress: 'bg-blue-500/20 text-blue-400',
+  blocked: 'bg-red-500/20 text-red-400',
+  done: 'bg-emerald-500/20 text-emerald-400',
+}
+
 export const STATUS_COLUMNS: TaskStatus[] = ['available', 'in_progress', 'blocked', 'done']
 
 export const STATUS_LABELS: Record<string, string> = {

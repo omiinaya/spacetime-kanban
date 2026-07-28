@@ -3,6 +3,9 @@ import { DbConnection } from '../stdb'
 import type { Task, TaskLog } from '../stdb/types'
 import { api } from '../api'
 
+// WebSocket URL for SpacetimeDB — configure via VITE_STDB_WS_URL env var or use default
+const STDB_WS_URL = import.meta.env.VITE_STDB_WS_URL ?? `ws://${window.location.hostname}:3001`
+
 export type { Task, TaskLog }
 export type TaskStatus = 'available' | 'in_progress' | 'done' | 'blocked'
 
@@ -150,7 +153,7 @@ export function useRealtimeTasks() {
       if (cancelled()) return
       try {
         const conn = DbConnection.builder()
-          .withUri(`ws://${window.location.hostname}:3001`)
+          .withUri(STDB_WS_URL)
           .withDatabaseName('kanban')
           .onConnect(() => {
             if (cancelled()) return
