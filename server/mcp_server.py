@@ -9,13 +9,12 @@ Transport: stdio (for Hermes native MCP client).
 
 import json
 import os
-import sys
-import urllib.request
 import urllib.error
+import urllib.request
 from urllib.parse import quote, urljoin
 
 from mcp.server import Server
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
 
 API_BASE = os.environ.get("KANBAN_API", "http://localhost:8727")
 app = Server("spacetimedb-kanban")
@@ -36,9 +35,9 @@ def api_get(path: str) -> list | dict:
         return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         body = e.read().decode()[:200]
-        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code)
+        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code) from e
     except Exception as e:
-        raise KanbanAPIError(str(e))
+        raise KanbanAPIError(str(e)) from e
 
 
 def api_post(path: str, body: dict | None = None) -> dict:
@@ -53,9 +52,9 @@ def api_post(path: str, body: dict | None = None) -> dict:
         return json.loads(text) if text else {"status": "ok"}
     except urllib.error.HTTPError as e:
         body = e.read().decode()[:200]
-        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code)
+        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code) from e
     except Exception as e:
-        raise KanbanAPIError(str(e))
+        raise KanbanAPIError(str(e)) from e
 
 
 def api_patch(path: str, body: dict) -> dict:
@@ -69,9 +68,9 @@ def api_patch(path: str, body: dict) -> dict:
         return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         body = e.read().decode()[:200]
-        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code)
+        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code) from e
     except Exception as e:
-        raise KanbanAPIError(str(e))
+        raise KanbanAPIError(str(e)) from e
 
 
 def api_put(path: str, body: dict) -> dict:
@@ -85,9 +84,9 @@ def api_put(path: str, body: dict) -> dict:
         return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         body = e.read().decode()[:200]
-        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code)
+        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code) from e
     except Exception as e:
-        raise KanbanAPIError(str(e))
+        raise KanbanAPIError(str(e)) from e
 
 
 def api_delete(path: str) -> dict:
@@ -99,9 +98,10 @@ def api_delete(path: str) -> dict:
         return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         body = e.read().decode()[:200]
-        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code)
+        raise KanbanAPIError(f"HTTP {e.code}: {body}", status_code=e.code) from e
     except Exception as e:
-        raise KanbanAPIError(str(e))
+        raise KanbanAPIError(str(e)) from e
+
 
 # ── Tool: list_tasks ─────────────────────────────────────────────────
 
@@ -110,22 +110,39 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="kanban_list_tasks",
-            description="List kanban tasks. Filter by status (available/claimed/blocked/completed) and/or repo.",
+            description=(
+                "List kanban tasks. Filter by status "
+                "(available/claimed/blocked/completed) and/or repo."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "status": {"type": "string", "description": "Filter: available, claimed, blocked, completed", "default": ""},
-                    "repo": {"type": "string", "description": "Filter by repo slug", "default": ""},
+                    "status": {
+                        "type": "string",
+                        "description": "Filter: available, claimed, blocked, completed",
+                        "default": "",
+                    },
+                    "repo": {
+                        "type": "string",
+                        "description": "Filter by repo slug",
+                        "default": "",
+                    },
                 },
             },
         ),
         Tool(
             name="kanban_get_task",
-            description="Get full task details including activity logs and downstream blockers.",
+            description=(
+                "Get full task details including activity logs"
+                " and downstream blockers."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
                 },
                 "required": ["task_id"],
             },
@@ -136,13 +153,41 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "Task title"},
-                    "description": {"type": "string", "description": "Task description", "default": ""},
-                    "priority": {"type": "integer", "description": "Priority 0-3 (0=urgent, 3=low)", "default": 2},
-                    "repo": {"type": "string", "description": "Repo slug", "default": ""},
-                    "roadmap_item": {"type": "string", "description": "Optional roadmap phase", "default": ""},
-                    "required_skills": {"type": "string", "description": "Comma-separated skills (e.g. 'rust,python,typescript')", "default": ""},
-                    "created_by": {"type": "string", "description": "Agent/creator name", "default": "hermes"},
+                    "title": {
+                        "type": "string",
+                        "description": "Task title",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Task description",
+                        "default": "",
+                    },
+                    "priority": {
+                        "type": "integer",
+                        "description": "Priority 0-3 (0=urgent, 3=low)",
+                        "default": 2,
+                    },
+                    "repo": {
+                        "type": "string",
+                        "description": "Repo slug",
+                        "default": "",
+                    },
+                    "roadmap_item": {
+                        "type": "string",
+                        "description": "Optional roadmap phase",
+                        "default": "",
+                    },
+                    "required_skills": {
+                        "type": "string",
+                        "description": "Comma-separated skills"
+                        " (e.g. 'rust,python,typescript')",
+                        "default": "",
+                    },
+                    "created_by": {
+                        "type": "string",
+                        "description": "Agent/creator name",
+                        "default": "hermes",
+                    },
                 },
                 "required": ["title"],
             },
@@ -153,23 +198,52 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "title": {"type": "string", "description": "New title", "default": ""},
-                    "description": {"type": "string", "description": "New description", "default": ""},
-                    "priority": {"type": "integer", "description": "New priority 0-3", "default": -1},
-                    "branch": {"type": "string", "description": "Git branch name", "default": ""},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "New title",
+                        "default": "",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "New description",
+                        "default": "",
+                    },
+                    "priority": {
+                        "type": "integer",
+                        "description": "New priority 0-3",
+                        "default": -1,
+                    },
+                    "branch": {
+                        "type": "string",
+                        "description": "Git branch name",
+                        "default": "",
+                    },
                 },
                 "required": ["task_id"],
             },
         ),
         Tool(
             name="kanban_claim",
-            description="Claim a task. Assigns it to an agent and sets status to 'claimed'.",
+            description=(
+                "Claim a task. Assigns it to an agent"
+                " and sets status to 'claimed'."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "agent_id": {"type": "string", "description": "Agent identifier", "default": ""},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "agent_id": {
+                        "type": "string",
+                        "description": "Agent identifier",
+                        "default": "",
+                    },
                 },
                 "required": ["task_id"],
             },
@@ -180,8 +254,15 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "notes": {"type": "string", "description": "Completion notes", "default": "Completed"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "Completion notes",
+                        "default": "Completed",
+                    },
                 },
                 "required": ["task_id"],
             },
@@ -192,32 +273,59 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "reason": {"type": "string", "description": "Block reason", "default": "Blocked"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Block reason",
+                        "default": "Blocked",
+                    },
                 },
                 "required": ["task_id"],
             },
         ),
         Tool(
             name="kanban_block_with_reason",
-            description="Mark a task as blocked with a persistent reason (stored in fail_reason field). Use this instead of kanban_block.",
+            description=(
+                "Mark a task as blocked with a persistent reason"
+                " (stored in fail_reason field)."
+                " Use this instead of kanban_block."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "reason": {"type": "string", "description": "Block reason (stored permanently)"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Block reason (stored permanently)",
+                    },
                 },
                 "required": ["task_id", "reason"],
             },
         ),
         Tool(
             name="kanban_split_task",
-            description="Split a task into subtasks. Creates child tasks and marks the parent with subtask references.",
+            description=(
+                "Split a task into subtasks. Creates child tasks"
+                " and marks the parent with subtask references."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Parent task ID to split"},
-                    "child_titles": {"type": "array", "items": {"type": "string"}, "description": "List of child task titles"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Parent task ID to split",
+                    },
+                    "child_titles": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of child task titles",
+                    },
                 },
                 "required": ["task_id", "child_titles"],
             },
@@ -228,7 +336,10 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
                 },
                 "required": ["task_id"],
             },
@@ -239,49 +350,89 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
                 },
                 "required": ["task_id"],
             },
         ),
         Tool(
             name="kanban_set_dependency",
-            description="Set which task this task depends on (or clear the dependency).",
+            description=(
+                "Set which task this task depends on"
+                " (or clear the dependency)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID to update"},
-                    "depends_on": {"type": "string", "description": "Task ID this depends on, or empty string to clear", "default": ""},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID to update",
+                    },
+                    "depends_on": {
+                        "type": "string",
+                        "description": "Task ID this depends on,"
+                        " or empty string to clear",
+                        "default": "",
+                    },
                 },
                 "required": ["task_id"],
             },
         ),
         Tool(
             name="kanban_set_skills",
-            description="Set required skills on a task (comma-separated tags).",
+            description=(
+                "Set required skills on a task"
+                " (comma-separated tags)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "skills": {"type": "string", "description": "Comma-separated skills, e.g. 'rust,python'"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "skills": {
+                        "type": "string",
+                        "description": "Comma-separated skills,"
+                        " e.g. 'rust,python'",
+                    },
                 },
                 "required": ["task_id", "skills"],
             },
         ),
         Tool(
             name="kanban_suggest",
-            description="Get top-N scored task suggestions for an agent. Uses priority scoring (base + stale + unblock + skill-match bonuses).",
+            description=(
+                "Get top-N scored task suggestions for an agent."
+                " Uses priority scoring"
+                " (base + stale + unblock + skill-match bonuses)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "agent_id": {"type": "string", "description": "Agent to tailor suggestions for (matches capabilities)", "default": ""},
-                    "limit": {"type": "integer", "description": "Max suggestions", "default": 5},
+                    "agent_id": {
+                        "type": "string",
+                        "description": "Agent to tailor suggestions for"
+                        " (matches capabilities)",
+                        "default": "",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max suggestions",
+                        "default": 5,
+                    },
                 },
             },
         ),
         Tool(
             name="kanban_list_agents",
-            description="List all registered swarm agents with their status and capabilities.",
+            description=(
+                "List all registered swarm agents"
+                " with their status and capabilities."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {},
@@ -289,27 +440,60 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_register_agent",
-            description="Register this agent in the kanban swarm so it can claim tasks and receive suggestions.",
+            description=(
+                "Register this agent in the kanban swarm"
+                " so it can claim tasks and receive suggestions."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "agent_id": {"type": "string", "description": "Unique agent identifier"},
-                    "host": {"type": "string", "description": "Hostname or origin", "default": ""},
-                    "capabilities": {"type": "string", "description": "Comma-separated skills, e.g. 'rust,python,typescript,devops'"},
-                    "repo_focus": {"type": "string", "description": "Primary repo focus", "default": ""},
+                    "agent_id": {
+                        "type": "string",
+                        "description": "Unique agent identifier",
+                    },
+                    "host": {
+                        "type": "string",
+                        "description": "Hostname or origin",
+                        "default": "",
+                    },
+                    "capabilities": {
+                        "type": "string",
+                        "description": "Comma-separated skills,"
+                        " e.g. 'rust,python,typescript,devops'",
+                    },
+                    "repo_focus": {
+                        "type": "string",
+                        "description": "Primary repo focus",
+                        "default": "",
+                    },
                 },
                 "required": ["agent_id"],
             },
         ),
         Tool(
             name="kanban_heartbeat",
-            description="Send a swarm heartbeat to keep this agent marked as online. Call regularly (every 30-60s) while active.",
+            description=(
+                "Send a swarm heartbeat to keep this agent"
+                " marked as online. Call regularly"
+                " (every 30-60s) while active."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "agent_id": {"type": "string", "description": "Agent identifier"},
-                    "status": {"type": "string", "description": "Status: online, busy, idle, offline", "default": "online"},
-                    "current_task_id": {"type": "string", "description": "Task ID currently working on", "default": ""},
+                    "agent_id": {
+                        "type": "string",
+                        "description": "Agent identifier",
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "Status: online, busy, idle, offline",
+                        "default": "online",
+                    },
+                    "current_task_id": {
+                        "type": "string",
+                        "description": "Task ID currently working on",
+                        "default": "",
+                    },
                 },
                 "required": ["agent_id"],
             },
@@ -320,9 +504,19 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "agent_id": {"type": "string", "description": "Agent identifier"},
-                    "capabilities": {"type": "string", "description": "Comma-separated skills"},
-                    "repo_focus": {"type": "string", "description": "Primary repo", "default": ""},
+                    "agent_id": {
+                        "type": "string",
+                        "description": "Agent identifier",
+                    },
+                    "capabilities": {
+                        "type": "string",
+                        "description": "Comma-separated skills",
+                    },
+                    "repo_focus": {
+                        "type": "string",
+                        "description": "Primary repo",
+                        "default": "",
+                    },
                 },
                 "required": ["agent_id", "capabilities"],
             },
@@ -330,7 +524,10 @@ async def list_tools() -> list[Tool]:
         # ── Project Management Tools ────────────────────────────────
         Tool(
             name="kanban_list_projects",
-            description="List all registered projects with their priority, colour, and active status.",
+            description=(
+                "List all registered projects with their priority,"
+                " colour, and active status."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {},
@@ -338,32 +535,89 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_add_project",
-            description="Register a new project/repo with a priority level for weighted task suggestion.",
+            description=(
+                "Register a new project/repo with a priority level"
+                " for weighted task suggestion."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "id": {"type": "string", "description": "Repo slug (e.g. 'sample-repo-q') — this maps to the `repo` field on tasks"},
-                    "name": {"type": "string", "description": "Display name", "default": ""},
-                    "description": {"type": "string", "description": "Project description", "default": ""},
-                    "color": {"type": "string", "description": "Hex colour e.g. '#0ea5e9'", "default": "#0ea5e9"},
-                    "priority": {"type": "integer", "description": "Priority 0-3 (0=most important, 3=least)", "default": 2},
-                    "active": {"type": "boolean", "description": "Whether to include this project in scoring", "default": True},
+                    "id": {
+                        "type": "string",
+                        "description": "Repo slug"
+                        " (e.g. 'sample-repo-q')"
+                        " — this maps to the `repo` field on tasks",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Display name",
+                        "default": "",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Project description",
+                        "default": "",
+                    },
+                    "color": {
+                        "type": "string",
+                        "description": "Hex colour e.g. '#0ea5e9'",
+                        "default": "#0ea5e9",
+                    },
+                    "priority": {
+                        "type": "integer",
+                        "description": "Priority 0-3"
+                        " (0=most important, 3=least)",
+                        "default": 2,
+                    },
+                    "active": {
+                        "type": "boolean",
+                        "description": "Whether to include this"
+                        " project in scoring",
+                        "default": True,
+                    },
                 },
                 "required": ["id"],
             },
         ),
         Tool(
             name="kanban_update_project",
-            description="Update a project's priority, name, colour, or active status.",
+            description=(
+                "Update a project's priority, name, colour,"
+                " or active status."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "project_id": {"type": "string", "description": "Project/repo slug"},
-                    "name": {"type": "string", "description": "New display name", "default": ""},
-                    "description": {"type": "string", "description": "New description", "default": ""},
-                    "color": {"type": "string", "description": "New hex colour", "default": ""},
-                    "priority": {"type": "integer", "description": "Priority 0-3 (0=most important)", "default": 3},
-                    "active": {"type": "boolean", "description": "Whether this project is active in scoring", "default": True},
+                    "project_id": {
+                        "type": "string",
+                        "description": "Project/repo slug",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "New display name",
+                        "default": "",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "New description",
+                        "default": "",
+                    },
+                    "color": {
+                        "type": "string",
+                        "description": "New hex colour",
+                        "default": "",
+                    },
+                    "priority": {
+                        "type": "integer",
+                        "description": "Priority 0-3 (0=most important)",
+                        "default": 3,
+                    },
+                    "active": {
+                        "type": "boolean",
+                        "description": "Whether this project"
+                        " is active in scoring",
+                        "default": True,
+                    },
                 },
                 "required": ["project_id"],
             },
@@ -374,31 +628,60 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "project_id": {"type": "string", "description": "Project/repo slug"},
+                    "project_id": {
+                        "type": "string",
+                        "description": "Project/repo slug",
+                    },
                 },
                 "required": ["project_id"],
             },
         ),
         Tool(
             name="kanban_suggest_by_project",
-            description="Get suggested tasks prioritised by project importance. Tasks from higher-priority projects are scored higher.",
+            description=(
+                "Get suggested tasks prioritised by project importance."
+                " Tasks from higher-priority projects are scored higher."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "description": "Max suggestions", "default": 10},
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max suggestions",
+                        "default": 10,
+                    },
                 },
             },
         ),
         Tool(
             name="kanban_add_log",
-            description="Add an activity log entry to a task. Useful for tracking progress.",
+            description=(
+                "Add an activity log entry to a task."
+                " Useful for tracking progress."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "action": {"type": "string", "description": "Action description, e.g. 'started work', 'investigating', 'found root cause', 'waiting on review'"},
-                    "agent_id": {"type": "string", "description": "Agent making the entry", "default": ""},
-                    "notes": {"type": "string", "description": "Detailed notes", "default": ""},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "action": {
+                        "type": "string",
+                        "description": "Action description, e.g."
+                        " 'started work', 'investigating',"
+                        " 'found root cause', 'waiting on review'",
+                    },
+                    "agent_id": {
+                        "type": "string",
+                        "description": "Agent making the entry",
+                        "default": "",
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "Detailed notes",
+                        "default": "",
+                    },
                 },
                 "required": ["task_id", "action"],
             },
@@ -409,7 +692,10 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
                 },
                 "required": ["task_id"],
             },
@@ -420,34 +706,67 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Kanban task ID"},
-                    "repo": {"type": "string", "description": "GitHub repo (owner/repo)"},
-                    "issue_number": {"type": "integer", "description": "GitHub issue number"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Kanban task ID",
+                    },
+                    "repo": {
+                        "type": "string",
+                        "description": "GitHub repo (owner/repo)",
+                    },
+                    "issue_number": {
+                        "type": "integer",
+                        "description": "GitHub issue number",
+                    },
                 },
                 "required": ["task_id", "repo", "issue_number"],
             },
         ),
         Tool(
             name="kanban_issue_create",
-            description="Create a GitHub issue from a kanban task and auto-link them.",
+            description=(
+                "Create a GitHub issue from a kanban task"
+                " and auto-link them."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Kanban task ID"},
-                    "repo": {"type": "string", "description": "GitHub repo (default: from config)", "default": ""},
-                    "labels": {"type": "string", "description": "Comma-separated labels", "default": ""},
-                    "assignee": {"type": "string", "description": "GitHub username to assign", "default": ""},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Kanban task ID",
+                    },
+                    "repo": {
+                        "type": "string",
+                        "description": "GitHub repo (default: from config)",
+                        "default": "",
+                    },
+                    "labels": {
+                        "type": "string",
+                        "description": "Comma-separated labels",
+                        "default": "",
+                    },
+                    "assignee": {
+                        "type": "string",
+                        "description": "GitHub username to assign",
+                        "default": "",
+                    },
                 },
                 "required": ["task_id"],
             },
         ),
         Tool(
             name="kanban_issue_status",
-            description="Get the GitHub issue link status for a kanban task.",
+            description=(
+                "Get the GitHub issue link status"
+                " for a kanban task."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Kanban task ID"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Kanban task ID",
+                    },
                 },
                 "required": ["task_id"],
             },
@@ -458,7 +777,11 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "repo": {"type": "string", "description": "Filter by repo (owner/repo)", "default": ""},
+                    "repo": {
+                        "type": "string",
+                        "description": "Filter by repo (owner/repo)",
+                        "default": "",
+                    },
                 },
             },
         ),
@@ -468,9 +791,19 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "body": {"type": "string", "description": "Comment body text"},
-                    "author": {"type": "string", "description": "Author name", "default": "hermes"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Comment body text",
+                    },
+                    "author": {
+                        "type": "string",
+                        "description": "Author name",
+                        "default": "hermes",
+                    },
                 },
                 "required": ["task_id", "body"],
             },
@@ -481,7 +814,10 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
                 },
                 "required": ["task_id"],
             },
@@ -492,8 +828,14 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "comment_id": {"type": "string", "description": "Comment ID to delete"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "comment_id": {
+                        "type": "string",
+                        "description": "Comment ID to delete",
+                    },
                 },
                 "required": ["task_id", "comment_id"],
             },
@@ -504,8 +846,14 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "text": {"type": "string", "description": "Checklist item text"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Checklist item text",
+                    },
                 },
                 "required": ["task_id", "text"],
             },
@@ -516,7 +864,10 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
                 },
                 "required": ["task_id"],
             },
@@ -527,8 +878,14 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "item_id": {"type": "string", "description": "Checklist item ID"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "item_id": {
+                        "type": "string",
+                        "description": "Checklist item ID",
+                    },
                 },
                 "required": ["task_id", "item_id"],
             },
@@ -539,8 +896,14 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "item_id": {"type": "string", "description": "Checklist item ID"},
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID",
+                    },
+                    "item_id": {
+                        "type": "string",
+                        "description": "Checklist item ID",
+                    },
                 },
                 "required": ["task_id", "item_id"],
             },
@@ -718,7 +1081,10 @@ def _handle_split_task(args: dict) -> dict:
     task_id = _get_str(args, "task_id")
     child_titles = args.get("child_titles", [])
     if not child_titles:
-        raise KanbanAPIError("child_titles is required and must be a non-empty list", status_code=400)
+        raise KanbanAPIError(
+            "child_titles is required and must be a non-empty list",
+            status_code=400,
+        )
     return api_post(f"/api/tasks/{task_id}/split", {"child_titles": child_titles})
 
 
@@ -953,8 +1319,9 @@ def _handle_suggest_by_project(args: dict) -> dict:
 
 def main():
     """Run the MCP server over stdio."""
-    from mcp.server.stdio import stdio_server
     import asyncio
+
+    from mcp.server.stdio import stdio_server
 
     async def run():
         async with stdio_server() as (read, write):
