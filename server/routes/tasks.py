@@ -120,8 +120,8 @@ async def list_tasks(
         filters.append(f"archived = {arch}")
     if filters:
         sql += " WHERE " + " AND ".join(filters)
-    # Server-side LIMIT — fetch limit+offset rows, STDB SQL doesn't support OFFSET
-    sql += f" LIMIT {min(limit + max(offset, 0), 5000 + 5000)}"
+    # No SQL-level LIMIT — STDB's arbitrary row ordering makes it unreliable
+    # for client-side pagination. Fetch all matching rows and paginate in Python.
     if params:
         rows = await _sql_param(sql, **params)
     else:
@@ -145,9 +145,11 @@ async def list_tasks(
             or q in t.id.lower()
         ]
     tasks.sort(key=lambda t: (t.priority, -t.created_at))
-    # Apply offset client-side (STDB SQL doesn't support OFFSET)
+    # Apply offset + limit client-side
     if offset:
         tasks = tasks[offset:]
+    if limit and limit < len(tasks):
+        tasks = tasks[:limit]
     return tasks
 
 
