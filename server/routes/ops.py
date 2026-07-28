@@ -185,6 +185,12 @@ async def list_schema_migrations():
     ]
 
 
+@router.post("/api/schema-migrations", status_code=201, dependencies=[Depends(verify_auth)])
+async def record_schema_migration(body: MigrationCreate):
+    """Alias: record a schema migration via /api/schema-migrations path."""
+    return await record_migration(body)
+
+
 @router.post("/api/migrations", status_code=201, dependencies=[Depends(verify_auth)])
 async def record_migration(body: MigrationCreate):
     """Record a schema migration."""
