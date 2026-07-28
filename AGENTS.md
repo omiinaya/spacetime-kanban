@@ -21,6 +21,31 @@ See `server/.env.example` for configuration. Alerts fire via webhook to Discord.
 
 This kanban coordinates **multiple AI agents** working on the same repo's roadmap simultaneously. Each agent claims tasks atomically via the REST API — no two agents can grab the same task.
 
+## 🆕 Schema Migrations Page
+
+A dedicated **Schema Migrations** page is available at `/schema-migrations` (nav item: "Migrations" with Database icon). It lists all recorded schema migrations with their applied status, description, and timestamps. Accessible via the sidebar.
+
+**API Endpoint:**
+```http
+GET http://localhost:8727/api/schema-migrations
+```
+
+## 🆕 Shared Skeleton Components
+
+The frontend uses a shared `Skeleton.tsx` component library for consistent loading states across all 12+ pages:
+
+| Skeleton | Usage |
+|----------|-------|
+| `CardSkeleton` | Placeholder for a single task card |
+| `CompactCardSkeleton` | Placeholder for compact view cards |
+| `TableRowSkeleton` | Placeholder for table/list rows |
+| `ColumnSkeleton` | Column with N card skeletons (default 5) |
+| `ListViewSkeleton` | Full-page list view loading state |
+| `KanbanBoardSkeleton` | Full kanban board loading state (4 columns) |
+| `PageSkeleton` | Generic page loading state with N rows (default 6) |
+
+Pages like SchemaMigrationsPage, WebhooksPage, IssuesPage, AnalyticsPage, LabelsPage, LogsPage, AgentHealthPage, and others all use these skeletons for consistent loading UX.
+
 ## How to Use (for Agents)
 
 ### 1. Get Available Tasks
@@ -387,8 +412,55 @@ kanban heartbeat --status=busy --task=task_xxx
 | `kanban heartbeat` | Send agent pulse |
 | `kanban roadmap-import` | Bulk-import from ROADMAP.md |
 | `kanban check-branch` | Validate branch name |
+|
 
 ---
+
+## ✅ Test Coverage (Jul 2026)
+
+**161 tests passing** (8 skipped) across 18 test files. Tests cover:
+
+### State Transition Edge Cases
+- Complete unclaimed task → 409 Conflict
+- Block already-blocked task → 409 Conflict
+- Block available task → 409 Conflict
+- Claim in-progress task → 409 Conflict
+- Complete already-done task → 409 Conflict
+
+### Empty/Invalid Input Handling
+- Empty title string, very long title (5000 chars)
+- Invalid priority type (string instead of int)
+- Duplicate label name, non-existent label assignment
+
+### Analytics with Empty Data
+- Throughput (daily zeros when no done tasks)
+- Burndown, cycle times, per-agent stats — all return clean zero structures
+
+### Webhook CRUD Edge Cases
+- Delete nonexistent webhook → 404
+- Test nonexistent webhook → 404
+- Webhook deliveries with real data
+
+### Schema Migrations
+- List schema migrations via `/api/schema-migrations` alias endpoint
+- Record migration with all fields
+
+### Auth Middleware
+- PATCH task without API key → 401
+- DELETE task without API key → 401
+- Claim task without API key → 401
+
+### MCP Error Handling (Fixed)
+
+The MCP server (`server/mcp_server.py`) now uses proper Python exceptions instead of error dicts:
+
+| Before | After |
+|--------|-------|
+| `try/except` wrapper in `call_tool` returns `{"error": ...}` | `KanbanAPIError(Exception)` propagates to MCP framework |
+| MCP returns success with error dict inside | MCP returns `isError: true` responses |
+| Silent failures on HTTP errors | Proper exception chains with status codes |
+
+The `KanbanAPIError` class carries both an error message and HTTP status code, allowing the MCP framework to surface errors correctly to the client.
 
 ## Fragile Interface Registry
 
