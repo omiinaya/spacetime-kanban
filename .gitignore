@@ -26,3 +26,9 @@ web/test-results/
 web/playwright-report/
 web/playwright/.cache/
 web/coverage/
+
+# Runtime logs
+server/fountain.log
+
+# Generated audit artifacts (from subagent runs)
+server/spacetimedb/src/AUDIT_REPORT.md
