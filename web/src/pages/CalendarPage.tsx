@@ -114,6 +114,12 @@ export default function CalendarPage() {
         <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
           <AlertCircle className="w-4 h-4" /> {error}
         </div>
+      ) : tasks.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-2 py-16 text-[var(--color-muted)]">
+          <CalendarDays className="w-8 h-8 opacity-40" />
+          <p className="text-sm">No tasks with due dates this month</p>
+          <p className="text-xs">Tasks with a due date set will appear on the calendar</p>
+        </div>
       ) : (
         <>
           {/* Calendar grid */}

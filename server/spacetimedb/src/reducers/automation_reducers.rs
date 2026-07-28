@@ -239,20 +239,18 @@ pub fn update_automation_rule(
     rule.repo = if repo.is_empty() { None } else { Some(repo) };
     rule.active = active;
     rule.updated_at = now;
-    let old: Vec<AutomationRule> = ctx.db.automation_rules().iter()
-        .filter(|r| r.id == rule_id)
-        .collect();
-    for r in old { ctx.db.automation_rules().delete(r); }
+    if let Some(old) = ctx.db.automation_rules().id().find(&rule_id) {
+        ctx.db.automation_rules().delete(old);
+    }
     ctx.db.automation_rules().insert(rule);
     Ok(())
 }
 
 #[reducer]
 pub fn delete_automation_rule(ctx: &ReducerContext, rule_id: String) -> Result<(), String> {
-    let old: Vec<AutomationRule> = ctx.db.automation_rules().iter()
-        .filter(|r| r.id == rule_id)
-        .collect();
-    for r in old { ctx.db.automation_rules().delete(r); }
+    if let Some(old) = ctx.db.automation_rules().id().find(&rule_id) {
+        ctx.db.automation_rules().delete(old);
+    }
     Ok(())
 }
 
@@ -288,10 +286,9 @@ pub fn create_api_key(
 pub fn revoke_api_key(ctx: &ReducerContext, key_id: String) -> Result<(), String> {
     let mut key = find_api_key(ctx, &key_id).ok_or_else(|| "API key not found".to_string())?;
     key.active = false;
-    let old: Vec<ApiKey> = ctx.db.api_keys().iter()
-        .filter(|k| k.id == key_id)
-        .collect();
-    for k in old { ctx.db.api_keys().delete(k); }
+    if let Some(old) = ctx.db.api_keys().id().find(&key_id) {
+        ctx.db.api_keys().delete(old);
+    }
     ctx.db.api_keys().insert(key);
     Ok(())
 }
@@ -309,9 +306,7 @@ pub fn record_migration(
     let now = now_ms(ctx);
     let sender = ctx.sender().to_string();
     // Check already applied
-    let exists = ctx.db.schema_migrations().iter()
-        .any(|m| m.version == version);
-    if exists {
+    if ctx.db.schema_migrations().version().find(&version).is_some() {
         return Err(format!("Migration '{}' already applied", version));
     }
     ctx.db.schema_migrations().insert(SchemaMigration {

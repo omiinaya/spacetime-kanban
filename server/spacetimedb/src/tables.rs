@@ -82,8 +82,11 @@ pub struct Task {
     pub title: String,
     pub description: String,
     pub priority: u8,
+    #[index(btree)]
     pub status: TaskStatus,
+    #[index(btree)]
     pub assigned_to: Option<String>,
+    #[index(btree)]
     pub repo: String,
     pub branch: Option<String>,
     pub roadmap_item: String,
@@ -218,7 +221,7 @@ pub struct TaskLabelAssignment {
 
 // ── Dispatcher State (key-value store) ──────────────────────────────
 
-#[spacetimedb::table(accessor = dispatcher_state, public)]
+#[spacetimedb::table(accessor = dispatcher_state)]
 #[derive(Debug, Clone)]
 pub struct DispatcherStateRow {
     #[primary_key]
@@ -229,7 +232,7 @@ pub struct DispatcherStateRow {
 
 // ── Webhook Delivery Log ────────────────────────────────────────────
 
-#[spacetimedb::table(accessor = webhook_deliveries, public)]
+#[spacetimedb::table(accessor = webhook_deliveries)]
 #[derive(Debug, Clone)]
 pub struct WebhookDelivery {
     #[primary_key]
@@ -324,7 +327,7 @@ pub struct AutomationRule {
 
 // ── Automation Rule Execution Log ───────────────────────────────────
 
-#[spacetimedb::table(accessor = automation_rule_logs, public)]
+#[spacetimedb::table(accessor = automation_rule_logs)]
 #[derive(Debug, Clone)]
 pub struct AutomationRuleLog {
     #[primary_key]
@@ -341,7 +344,7 @@ pub struct AutomationRuleLog {
 
 // ── Schema Migration Tracking ───────────────────────────────────────
 
-#[spacetimedb::table(accessor = schema_migrations, public)]
+#[spacetimedb::table(accessor = schema_migrations)]
 #[derive(Debug, Clone)]
 pub struct SchemaMigration {
     #[primary_key]

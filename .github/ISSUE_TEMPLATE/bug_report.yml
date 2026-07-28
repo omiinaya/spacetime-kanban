@@ -1,0 +1,70 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "bug: "
+labels: ["bug"]
+projects: ["spacetimedb-kanban"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! Before filing, please check the [existing issues](https://github.com/omiinaya/spacetimedb-kanban/issues) and [AGENTS.md](./AGENTS.md) for known gotchas.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+      placeholder: The claim endpoint returns a 500 when the task does not exist...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Start server
+        2. POST /api/tasks/nonexistent/claim
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project is affected?
+      options:
+        - API (server/)
+        - Frontend (web/)
+        - CLI (kanban)
+        - SpacetimeDB module
+        - CI / deployment
+        - Documentation
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of the project are you running?
+      placeholder: "0.1.0"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs / Error Output
+      description: Copy and paste any relevant error output or log entries.
+      render: text

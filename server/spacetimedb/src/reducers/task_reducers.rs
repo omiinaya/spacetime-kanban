@@ -531,19 +531,11 @@ pub fn add_comment(
 
 #[reducer]
 pub fn delete_comment(ctx: &ReducerContext, comment_id: String) -> Result<(), String> {
-    let comment: Vec<TaskComment> = ctx
-        .db
-        .task_comments()
-        .iter()
-        .filter(|c| c.id == comment_id)
-        .collect();
-    if comment.is_empty() {
-        return Err("Comment not found".to_string());
-    }
-    for c in comment {
-        ctx.db.task_comments().delete(c);
-    }
+    let comment = ctx.db.task_comments().id().find(&comment_id)
+        .ok_or_else(|| "Comment not found".to_string())?;
+    ctx.db.task_comments().delete(comment);
     Ok(())
+
 }
 
 // ── Task Checklists / Subtasks ──────────────────────────────────────
@@ -592,14 +584,8 @@ pub fn toggle_checklist_item(
     let mut item = find_checklist_item(ctx, &item_id)
         .ok_or_else(|| "Checklist item not found".to_string())?;
     item.completed = !item.completed;
-    let old: Vec<TaskChecklistItem> = ctx
-        .db
-        .task_checklists()
-        .iter()
-        .filter(|i| i.id == item.id)
-        .collect();
-    for i in old {
-        ctx.db.task_checklists().delete(i);
+    if let Some(old) = ctx.db.task_checklists().id().find(&item.id) {
+        ctx.db.task_checklists().delete(old);
     }
     ctx.db.task_checklists().insert(item);
     Ok(())
@@ -625,14 +611,8 @@ pub fn reorder_checklist_items(
     let mut item = find_checklist_item(ctx, &item_id)
         .ok_or_else(|| "Checklist item not found".to_string())?;
     item.position = new_position;
-    let old: Vec<TaskChecklistItem> = ctx
-        .db
-        .task_checklists()
-        .iter()
-        .filter(|i| i.id == item.id)
-        .collect();
-    for i in old {
-        ctx.db.task_checklists().delete(i);
+    if let Some(old) = ctx.db.task_checklists().id().find(&item.id) {
+        ctx.db.task_checklists().delete(old);
     }
     ctx.db.task_checklists().insert(item);
     Ok(())

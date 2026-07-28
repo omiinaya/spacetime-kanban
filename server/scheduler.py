@@ -64,8 +64,8 @@ def _get_client() -> httpx.AsyncClient:
 async def _api_get(path: str, timeout: float = 15) -> Any:
     try:
         client = _get_client()
-        if '%' not in path:
-            path = urllib.parse.quote(path, safe='/:@!$&\'()*+,;=?&=')
+        if "%" not in path:
+            path = urllib.parse.quote(path, safe="/:@!$&'()*+,;=?&=")
         resp = await client.get(f"{API_BASE}{path}", timeout=timeout)
         if resp.status_code == 200:
             return resp.json()
@@ -77,8 +77,8 @@ async def _api_get(path: str, timeout: float = 15) -> Any:
 async def _api_post(path: str, data: dict, timeout: float = 15) -> dict | None:
     try:
         client = _get_client()
-        if '%' not in path:
-            path = urllib.parse.quote(path, safe='/:@!$&\'()*+,;=?&=')
+        if "%" not in path:
+            path = urllib.parse.quote(path, safe="/:@!$&'()*+,;=?&=")
         resp = await client.post(f"{API_BASE}{path}", json=data, timeout=timeout)
         if resp.status_code < 500:
             return resp.json() if resp.content else {"status": "ok"}
@@ -218,8 +218,8 @@ def _kill_worker(task_id: str) -> bool:
         try:
             proc.kill()
             return True
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[scheduler] Failed to kill worker: {exc}")
     return False
 
 
@@ -264,8 +264,8 @@ async def task_dispatcher(interval: int):
                     used_pct = 100 * (1 - avail_kb / total_kb)
                     if used_pct > settings.max_memory_pct:
                         continue  # Skip if memory too high
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[scheduler] Memory check failed: {exc}")
 
             # Fetch available tasks
             available = await _api_get("/api/tasks?status=available&limit=200")
@@ -274,7 +274,9 @@ async def task_dispatcher(interval: int):
 
             # Filter out tasks that have exhausted their retry budget
             # (permanent-block tasks go straight to "blocked", not "available")
-            eligible = [t for t in available if t.get("fail_count", 0) < t.get("max_attempts", 3) * 100]
+            eligible = [
+                t for t in available if t.get("fail_count", 0) < t.get("max_attempts", 3) * 100
+            ]
 
             # Sort: priority asc (P0 first), then fail_count asc, then oldest first
             eligible.sort(
@@ -336,11 +338,7 @@ async def stale_watcher(interval: int):
             unclaimed = 0
 
             # Batch-check heartbeats: fetch logs for all our inProgress tasks in one call
-            our_tids = [
-                t["id"]
-                for t in in_progress
-                if t.get("assigned_to") == settings.agent_id
-            ]
+            our_tids = [t["id"] for t in in_progress if t.get("assigned_to") == settings.agent_id]
             if not our_tids:
                 continue
 
@@ -349,11 +347,13 @@ async def stale_watcher(interval: int):
             heartbeat_map: dict[str, int | None] = {}
             try:
                 tid_param = ",".join(our_tids[:100])  # Batch limit
-                batch_logs = await _api_get(f"/api/logs/batch?task_ids={tid_param}&action=heartbeat&limit=1")
+                batch_logs = await _api_get(
+                    f"/api/logs/batch?task_ids={tid_param}&action=heartbeat&limit=1"
+                )
                 if batch_logs and isinstance(batch_logs, dict):
                     heartbeat_map = batch_logs
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[scheduler] Heartbeat batch fetch failed: {exc}")
 
             if not heartbeat_map:
                 # Fallback: per-task heartbeat check (slower but works)
@@ -442,9 +442,13 @@ async def dead_board_monitor(interval: int):
             if not overview:
                 # Re-check workers after the async gap — a worker may have started
                 if _get_worker_count() > 0:
-                    print("[scheduler:deadboard] Worker started during async gap — skipping restart")
+                    print(
+                        "[scheduler:deadboard] Worker started during async gap — skipping restart"
+                    )
                     continue
-                print("[scheduler:deadboard] Overview API returned nothing — no workers active either")
+                print(
+                    "[scheduler:deadboard] Overview API returned nothing — no workers active either"
+                )
                 _restart_server()
                 await asyncio.sleep(5)
                 health = await _api_get("/api/health")
@@ -464,19 +468,25 @@ async def dead_board_monitor(interval: int):
 
             # Zero completions with no active workers — something is wrong
             if completions == 0 and (ip > 0 or avail > 0) and done > 0:
-                print(f"[scheduler:deadboard] Zero completions, no active workers — alerting "
-                      f"(ip={ip}, avail={avail}, done={done})")
+                print(
+                    f"[scheduler:deadboard] Zero completions, no active workers — alerting "
+                    f"(ip={ip}, avail={avail}, done={done})"
+                )
                 await fire_event(
                     EVENT_BOARD_DEAD,
                     {
                         "total": overview.get("total", 0),
                         "available": avail,
                         "in_progress": ip,
-                        "blocked": overview.get("by_status", {}).get("blocked", 0) if overview else 0,
+                        "blocked": overview.get("by_status", {}).get("blocked", 0)
+                        if overview
+                        else 0,
                         "done": done,
                         "completions_last_hour": 0,
                         "claims_last_hour": claims,
-                        "claim_complete_ratio": overview.get("claim_complete_ratio", 0) if overview else 0,
+                        "claim_complete_ratio": overview.get("claim_complete_ratio", 0)
+                        if overview
+                        else 0,
                         "active_workers": 0,
                     },
                 )
@@ -484,37 +494,46 @@ async def dead_board_monitor(interval: int):
                 continue
 
             # Alert-only: dead board with work (after cooldown)
-            if completions == 0 and (ip > 0 or avail > 0) and now_ms - last_alert_ms > alert_cooldown_ms:
-                    await fire_event(
-                        EVENT_BOARD_DEAD,
-                        {
-                            "total": overview.get("total", 0),
-                            "available": avail,
-                            "in_progress": ip,
-                            "blocked": overview.get("by_status", {}).get("blocked", 0),
-                            "done": overview.get("total_done", 0),
-                            "completions_last_hour": 0,
-                            "claims_last_hour": claims,
-                            "claim_complete_ratio": overview.get("claim_complete_ratio", 0),
-                            "active_workers": 0,
-                        },
-                    )
-                    last_alert_ms = now_ms
+            if (
+                completions == 0
+                and (ip > 0 or avail > 0)
+                and now_ms - last_alert_ms > alert_cooldown_ms
+            ):
+                await fire_event(
+                    EVENT_BOARD_DEAD,
+                    {
+                        "total": overview.get("total", 0),
+                        "available": avail,
+                        "in_progress": ip,
+                        "blocked": overview.get("by_status", {}).get("blocked", 0),
+                        "done": overview.get("total_done", 0),
+                        "completions_last_hour": 0,
+                        "claims_last_hour": claims,
+                        "claim_complete_ratio": overview.get("claim_complete_ratio", 0),
+                        "active_workers": 0,
+                    },
+                )
+                last_alert_ms = now_ms
 
             # Stalled check: abnormally high claim:complete ratio
             ratio = overview.get("claim_complete_ratio", 0)
-            if ratio > 20 and claims > 50 and completions == 0 and now_ms - last_alert_ms > alert_cooldown_ms:
-                    await fire_event(
-                        EVENT_BOARD_STALLED,
-                        {
-                            "claims_last_hour": claims,
-                            "completions_last_hour": 0,
-                            "claim_complete_ratio": ratio,
-                            "in_progress": ip,
-                            "available": avail,
-                        },
-                    )
-                    last_alert_ms = now_ms
+            if (
+                ratio > 20
+                and claims > 50
+                and completions == 0
+                and now_ms - last_alert_ms > alert_cooldown_ms
+            ):
+                await fire_event(
+                    EVENT_BOARD_STALLED,
+                    {
+                        "claims_last_hour": claims,
+                        "completions_last_hour": 0,
+                        "claim_complete_ratio": ratio,
+                        "in_progress": ip,
+                        "available": avail,
+                    },
+                )
+                last_alert_ms = now_ms
 
         except asyncio.CancelledError:
             break
@@ -552,6 +571,7 @@ async def metrics_collector(interval: int):
             # Low-backlog check — trigger scanner if work is running out
             try:
                 from scheduler_low_backlog import check_backlog_and_trigger
+
                 loop = asyncio.get_event_loop()
                 loop.create_task(check_backlog_and_trigger(overview))
             except Exception as ble:
@@ -621,7 +641,9 @@ async def task_archiver(interval: int):
                     result = await _api_post("/api/tasks/bulk-archive", {"task_ids": old_seed})
                     if result:
                         archived += len(old_seed)
-                        print(f"[scheduler:archiver] Archived {len(old_seed)} old seed/sample task(s)")
+                        print(
+                            f"[scheduler:archiver] Archived {len(old_seed)} old seed/sample task(s)"
+                        )
 
             # Done tasks >7 days
             done_tasks = await _api_get("/api/tasks?status=done&archived=false&limit=500")
@@ -758,8 +780,8 @@ async def worker_death_watcher(interval: int):
                             decoded = stderr_data.decode("utf-8", errors="replace")[:2000]
                             if decoded.strip():
                                 stderr_text = f" | stderr: {decoded.strip()[:200]}"
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        print(f"[scheduler] Stderr read failed: {exc}")
 
                 if age < _IMMEDIATE_CRASH_THRESHOLD:
                     # Immediate crash — unclaim and potentially block
@@ -849,10 +871,7 @@ async def zombie_cleaner(interval: int):
             if not available:
                 continue
 
-            zombies = [
-                t for t in available
-                if t.get("fail_count", 0) >= t.get("max_attempts", 3)
-            ]
+            zombies = [t for t in available if t.get("fail_count", 0) >= t.get("max_attempts", 3)]
 
             if not zombies:
                 continue
@@ -885,6 +904,7 @@ def _restart_server():
     If running standalone (no service manager), this causes an abrupt exit.
     """
     import os as _os
+
     print("[scheduler:self-heal] Exiting with code 42 for service manager restart")
     _os._exit(42)
 
@@ -900,7 +920,7 @@ async def self_improver(interval: int):
             await asyncio.sleep(interval)
 
             now = _now_ms()
-            print(f"[scheduler:improver] Self-improvement check starting")
+            print("[scheduler:improver] Self-improvement check starting")
 
             # Phase 1: Server health
             health = await _api_get("/api/health")
@@ -913,7 +933,7 @@ async def self_improver(interval: int):
                     await _create_improvement_task(
                         title="[Critical] Kanban server not responding",
                         description="Server health endpoint unreachable after restart attempt. "
-                                    "Needs manual intervention.",
+                        "Needs manual intervention.",
                         priority=0,
                     )
                 continue
@@ -925,7 +945,9 @@ async def self_improver(interval: int):
 
             ip = await _api_get("/api/tasks?status=inProgress&limit=100")
             if ip:
-                stale = [t for t in ip if (now - t.get("updated_at", t.get("created_at", 0))) > 1800000]
+                stale = [
+                    t for t in ip if (now - t.get("updated_at", t.get("created_at", 0))) > 1800000
+                ]
                 if stale:
                     print(f"[scheduler:improver] {len(stale)} task(s) in_progress >30min")
                     for t in stale[:3]:
@@ -944,23 +966,28 @@ async def self_improver(interval: int):
 
                 # Auto-fix: reduce max_attempts for definitive failures
                 doomed = [
-                    t for t in cycling
+                    t
+                    for t in cycling
                     if t.get("fail_count", 0) > 0
-                    and (t.get("fail_reason", "") or "").lower().startswith(
-                        ("no indexable fields", "no unused imports", "nothing found")
-                    )
+                    and (t.get("fail_reason", "") or "")
+                    .lower()
+                    .startswith(("no indexable fields", "no unused imports", "nothing found"))
                     and t.get("max_attempts", 3) > 1
                 ]
                 for t in doomed[:5]:
                     await _api_post(f"/api/tasks/{t['id']}/max-attempts", {"max_attempts": 1})
-                    print(f"[scheduler:improver] Set max_attempts=1 for cycling task {t['id'][:25]}")
+                    print(
+                        f"[scheduler:improver] Set max_attempts=1 for cycling task {t['id'][:25]}"
+                    )
                 if doomed:
                     print(f"[scheduler:improver] Auto-fixed {len(doomed)} definitive-failure tasks")
 
             # Phase 3: Git status check
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "git", "status", "--porcelain",
+                    "git",
+                    "status",
+                    "--porcelain",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.DEVNULL,
                     cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -969,14 +996,22 @@ async def self_improver(interval: int):
                 if stdout and stdout.decode().strip():
                     lines = [l for l in stdout.decode().strip().split("\n") if l.strip()]
                     print(f"[scheduler:improver] {len(lines)} uncommitted change(s)")
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[scheduler:improver] git status failed: {exc}")
 
             # Phase 4: LLM analysis (every 3rd run via run count in status)
             improver_status = _load_improver_status()
             improver_status["run_count"] = improver_status.get("run_count", 0) + 1
             improver_status["last_run"] = now
             _save_improver_status(improver_status)
+
+            # Phase 5: generate improvement tasks based on what was found
+            try:
+                from scanners.runner import scan_and_generate_tasks
+
+                await scan_and_generate_tasks()
+            except Exception as exc:
+                print(f"[scheduler:improver] scanner task generation failed: {exc}")
 
             print(f"[scheduler:improver] Check complete (run #{improver_status['run_count']})")
 
@@ -996,25 +1031,30 @@ _IMPROVER_STATUS_FILE = os.path.join(
 
 def _load_improver_status() -> dict:
     import json
+
     if os.path.exists(_IMPROVER_STATUS_FILE):
         try:
             with open(_IMPROVER_STATUS_FILE) as f:
                 return json.load(f)
-        except Exception:
-            pass
-    return {"last_run": 0, "run_count": 0, "known_issues": [], "fixed_issues": [], "server_restarts": 0}
+        except Exception as exc:
+            print(f"[scheduler] Failed to load improver status: {exc}")
+            return {}
+    return {}
 
 
-def _save_improver_status(status: dict):
+def _save_improver_status(data: dict) -> None:
     import json
+
     try:
         with open(_IMPROVER_STATUS_FILE, "w") as f:
-            json.dump(status, f, indent=2)
-    except Exception as e:
-        print(f"[scheduler:improver] Failed to save status: {e}")
+            json.dump(data, f, indent=2)
+    except Exception as exc:
+        print(f"[scheduler] Failed to save improver status: {exc}")
 
 
-async def _create_improvement_task(title: str, description: str, priority: int = 3, repo: str = "spacetimedb-kanban"):
+async def _create_improvement_task(
+    title: str, description: str, priority: int = 3, repo: str = "spacetimedb-kanban"
+):
     """Create an improvement task on the kanban board."""
     result = await _api_post(
         "/api/tasks",
@@ -1036,6 +1076,52 @@ async def _create_improvement_task(title: str, description: str, priority: int =
     return result
 
 
+async def _task_fountain_loop(interval: int):
+    """Fast task-creation loop — runs the task fountain every `interval` seconds.
+    Logs to a file because service stdout is not visible."""
+    import sys as _sys
+
+    log_path = os.path.join(os.path.dirname(__file__), "fountain.log")
+    while True:
+        try:
+            await asyncio.sleep(interval)
+
+            # Run the fountain using subprocess (isolated, reliable)
+            fountain_script = os.path.join(os.path.dirname(__file__), "_task_fountain.py")
+            proc = await asyncio.create_subprocess_exec(
+                _sys.executable,
+                fountain_script,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+
+            # Write results to log
+            ts = time.strftime("%Y-%m-%d %H:%M:%S")
+            with open(log_path, "a") as f:
+                f.write(f"[{ts}] stdout: {stdout.decode().strip()}\n")
+                if stderr:
+                    f.write(f"[{ts}] stderr: {stderr.decode().strip()}\n")
+
+            if proc.returncode == 0:
+                created = 0
+                if stdout:
+                    import re
+
+                    m = re.search(rb"Created (\d+) task", stdout)
+                    if m:
+                        created = int(m.group(1))
+                print(f"[scheduler:fountain] Created {created} task(s)")
+            else:
+                print(f"[scheduler:fountain] Fountain exited with code {proc.returncode}")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[scheduler:fountain] Error: {e}")
+            with open(log_path, "a") as f:
+                f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Error: {e}\n")
+
+
 async def _recover_stale_tasks() -> int:
     """Unclaim any tasks left in_progress from a previous server lifecycle.
 
@@ -1052,8 +1138,10 @@ async def _recover_stale_tasks() -> int:
             break
         await asyncio.sleep(2)
     else:
-        print("[scheduler] FAILED to fetch inProgress tasks for stale recovery "
-              "(API returned None 3 times) — tasks may stay stuck")
+        print(
+            "[scheduler] FAILED to fetch inProgress tasks for stale recovery "
+            "(API returned None 3 times) — tasks may stay stuck"
+        )
         return 0
 
     if not stale:
@@ -1116,6 +1204,9 @@ async def start_scheduler():
     if settings.improver_interval_seconds > 0:
         loops.append(("improver", settings.improver_interval_seconds, self_improver))
 
+    # Task fountain — fast replenishment every 60 seconds to keep workers fed
+    loops.append(("fountain", 60, _task_fountain_loop))
+
     for name, interval, coro in loops:
         task = asyncio.create_task(coro(interval), name=f"scheduler-{name}")
         _scheduler_tasks.append(task)
@@ -1135,7 +1226,8 @@ async def start_scheduler():
     # Seed initial worker immediately — don't wait for the 30s dispatcher tick
     if settings.worker_script:
         print("[scheduler] Seeding initial worker(s)...")
-        asyncio.create_task(_seed_initial_workers())
+        seed_task = asyncio.create_task(_seed_initial_workers(), name="scheduler-seed-workers")
+        _scheduler_tasks.append(seed_task)
 
 
 async def stop_scheduler():

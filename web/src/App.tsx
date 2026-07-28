@@ -3,6 +3,8 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban, LayoutDashboard, CalendarDays, Key, LifeBuoy } from 'lucide-react'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.1.0'
+
 const BoardPage = lazy(() => import('./pages/BoardPage'))
 const LogsPage = lazy(() => import('./pages/LogsPage'))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
@@ -64,7 +66,7 @@ export default function App() {
         })}
       </nav>
       <div className="p-3 border-t border-[var(--color-border)] text-xs text-[var(--color-muted)]">
-        spacetimedb-kanban v0.1
+        spacetimedb-kanban v{APP_VERSION}
       </div>
     </>
   )

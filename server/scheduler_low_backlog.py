@@ -10,7 +10,6 @@ This is the "never dead kanban" guarantee.
 import asyncio
 import functools
 import os
-import sys
 from typing import Any
 
 import httpx
@@ -61,12 +60,12 @@ async def _trigger_scanner() -> dict:
     global _scanner_running
     if _scanner_running:
         return {"status": "already_running"}
-    
+
     _scanner_running = True
     try:
         # Import and run in executor (scanner is synchronous)
         from scanners.runner import run_all_scanners
-        
+
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(None, functools.partial(run_all_scanners))
         total_created = sum(c.get("created", 0) for c in results.values())
@@ -75,6 +74,7 @@ async def _trigger_scanner() -> dict:
     except Exception as e:
         print(f"[scheduler:low-backlog] Scanner trigger failed: {e}")
         import traceback
+
         traceback.print_exc()
         return {"error": str(e)}
     finally:
@@ -101,6 +101,7 @@ async def _generate_improvement_tasks() -> int:
     """
     try:
         from scanners.runner import discover_repos
+
         repos = discover_repos()
     except Exception:
         return 0
@@ -135,7 +136,8 @@ async def _generate_improvement_tasks() -> int:
 
             # Parse markdown headings as potential task titles
             import re
-            headings = re.findall(r'^##\s+(.*)', content, re.MULTILINE)
+
+            headings = re.findall(r"^##\s+(.*)", content, re.MULTILINE)
             for h in headings:
                 h = h.strip()
                 # Skip generic/section headings
@@ -147,13 +149,16 @@ async def _generate_improvement_tasks() -> int:
                 norm = h.strip().lower()
                 if norm in existing_titles:
                     continue
-                result = _api_post("/api/tasks", {
-                    "title": h[:200],
-                    "description": f"Auto-detected from {imp_file} in {repo_name}",
-                    "priority": 2,
-                    "repo": repo_name,
-                    "roadmap_item": f"Improvement: {imp_file}",
-                })
+                result = _api_post(
+                    "/api/tasks",
+                    {
+                        "title": h[:200],
+                        "description": f"Auto-detected from {imp_file} in {repo_name}",
+                        "priority": 2,
+                        "repo": repo_name,
+                        "roadmap_item": f"Improvement: {imp_file}",
+                    },
+                )
                 if result:
                     existing_titles.add(norm)
                     created += 1
@@ -168,20 +173,28 @@ async def _generate_improvement_tasks() -> int:
             try:
                 with open(readme_path, encoding="utf-8", errors="replace") as f:
                     readme = f.read(5000)
-                has_badge = "github/actions" in readme.lower() or "ci" in readme.lower() and "badge" in readme.lower() or "[![ci" in readme.lower()
+                has_badge = (
+                    "github/actions" in readme.lower()
+                    or "ci" in readme.lower()
+                    and "badge" in readme.lower()
+                    or "[![ci" in readme.lower()
+                )
             except Exception:
                 pass
 
         title = f"Add CI badge to README for {repo_name}"
         norm = title.strip().lower()
         if has_ci and not has_badge and norm not in existing_titles:
-            result = _api_post("/api/tasks", {
-                "title": title,
-                "description": f"{repo_name} has CI workflows but no status badge in README.md",
-                "priority": 3,
-                "repo": repo_name,
-                "roadmap_item": "Improvement: CI Visibility",
-            })
+            result = _api_post(
+                "/api/tasks",
+                {
+                    "title": title,
+                    "description": f"{repo_name} has CI workflows but no status badge in README.md",
+                    "priority": 3,
+                    "repo": repo_name,
+                    "roadmap_item": "Improvement: CI Visibility",
+                },
+            )
             if result:
                 existing_titles.add(norm)
                 created += 1
@@ -202,6 +215,7 @@ async def check_backlog_and_trigger(overview: dict | None = None) -> bool:
     global _last_trigger_ms
 
     import time
+
     now_ms = int(time.time() * 1000)
 
     # Cooldown check
@@ -222,11 +236,17 @@ async def check_backlog_and_trigger(overview: dict | None = None) -> bool:
         print(f"[scheduler:low-backlog] CRITICAL: only {actionable} actionable, triggering scanner")
         _last_trigger_ms = now_ms
         scanner_result = await _trigger_scanner()
-        total_created = sum(c.get("created", 0) for c in scanner_result.values()) if isinstance(scanner_result, dict) else 0
+        total_created = (
+            sum(c.get("created", 0) for c in scanner_result.values())
+            if isinstance(scanner_result, dict)
+            else 0
+        )
         # If scanner found nothing, generate improvement tasks
         if total_created == 0:
             imp_created = await _generate_improvement_tasks()
-            print(f"[scheduler:low-backlog] Scanner found nothing, generated {imp_created} improvement task(s)")
+            print(
+                f"[scheduler:low-backlog] Scanner found nothing, generated {imp_created} improvement task(s)"
+            )
         return True
 
     # Low: running out of work
@@ -234,10 +254,16 @@ async def check_backlog_and_trigger(overview: dict | None = None) -> bool:
         print(f"[scheduler:low-backlog] Low backlog: {actionable} actionable, triggering scanner")
         _last_trigger_ms = now_ms
         scanner_result = await _trigger_scanner()
-        total_created = sum(c.get("created", 0) for c in scanner_result.values()) if isinstance(scanner_result, dict) else 0
+        total_created = (
+            sum(c.get("created", 0) for c in scanner_result.values())
+            if isinstance(scanner_result, dict)
+            else 0
+        )
         if total_created == 0:
             imp_created = await _generate_improvement_tasks()
-            print(f"[scheduler:low-backlog] Scanner found nothing, generated {imp_created} improvement task(s)")
+            print(
+                f"[scheduler:low-backlog] Scanner found nothing, generated {imp_created} improvement task(s)"
+            )
         return True
 
     return False

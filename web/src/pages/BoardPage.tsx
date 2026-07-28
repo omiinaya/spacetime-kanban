@@ -18,6 +18,8 @@ import { ShortcutsDialog, SavedViewsPills, SaveViewDialog } from '../components/
 import { useSavedViews } from '../hooks/useSavedViews'
 import { useTaskActions } from '../hooks/useTaskActions'
 import { useBoardToasts } from '../hooks/useBoardToasts'
+import { useBoardShortcuts } from '../hooks/useBoardShortcuts'
+import { useColumnReorder } from '../hooks/useColumnReorder'
 
 export default function BoardPage() {
   const { tasks, connected, loading } = useRealtimeTasks()
@@ -40,27 +42,12 @@ export default function BoardPage() {
   const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set())
   const [compactMode, setCompactMode] = useState(false)
 
-  // Column collapse/expand state (stored per-column key in localStorage)
-  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('kanban_collapsed_columns') || '[]')
-      return new Set(stored)
-    } catch { return new Set() }
-  })
-
-  // Column ordering state (stored in localStorage)
-  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('kanban_column_order') || 'null')
-      if (Array.isArray(stored) && stored.length === STATUS_COLUMNS.length &&
-          stored.every((s: string) => STATUS_COLUMNS.includes(s as TaskStatus)))
-        return stored
-    } catch { /* ignore invalid stored value */ }
-    return [...STATUS_COLUMNS]
-  })
-
-  // Column drag-reorder state
-  const [draggedColumnIdx, setDraggedColumnIdx] = useState<number | null>(null)
+  // ── Column collapse/reorder (extracted hook) ──────────────────────
+  const {
+    collapsedColumns, toggleCollapse,
+    columnOrder, draggedColumnIdx,
+    handleColumnDragStart, handleColumnDragOver, handleColumnDragEnd,
+  } = useColumnReorder()
   const [viewMode, setViewMode] = useState<'board' | 'list'>('list')
   const [showFilters, setShowFilters] = useState(false)
   const [filterPriorities, setFilterPriorities] = useState<Set<number>>(new Set())
@@ -136,14 +123,6 @@ export default function BoardPage() {
     handleSetDependency, handleSetSkills, handleQuickAdd,
     handleExport, dropTaskOnColumn,
   } = useTaskActions(tasks, filtered)
-
-  // Persist collapsed columns + column order
-  useEffect(() => {
-    localStorage.setItem('kanban_collapsed_columns', JSON.stringify([...collapsedColumns]))
-  }, [collapsedColumns])
-  useEffect(() => {
-    localStorage.setItem('kanban_column_order', JSON.stringify(columnOrder))
-  }, [columnOrder])
 
   // Extract unique repos sorted by frequency
   const repos = [...new Set(tasks.map(t => t.repo).filter(Boolean))]
@@ -274,29 +253,7 @@ export default function BoardPage() {
     setBatchProcessing(false)
   }
 
-  // ── Column collapse / reorder ────────────────────────────────────
-  const toggleCollapse = (status: string) => {
-    setCollapsedColumns(prev => {
-      const next = new Set(prev)
-      if (next.has(status)) next.delete(status)
-      else next.add(status)
-      return next
-    })
-  }
-
-  const handleColumnDragStart = (idx: number) => setDraggedColumnIdx(idx)
-  const handleColumnDragOver = (e: React.DragEvent, idx: number) => {
-    e.preventDefault()
-    if (draggedColumnIdx === null || draggedColumnIdx === idx) return
-    setColumnOrder(prev => {
-      const next = [...prev]
-      const [removed] = next.splice(draggedColumnIdx, 1)
-      next.splice(idx, 0, removed)
-      return next
-    })
-    setDraggedColumnIdx(idx)
-  }
-  const handleColumnDragEnd = () => setDraggedColumnIdx(null)
+  // ── Column collapse / reorder (handled by useColumnReorder hook) ──
 
   // ── Polling effects ──────────────────────────────────────────────
   // Load suggestions and agents periodically — pause when tab hidden
@@ -326,7 +283,6 @@ export default function BoardPage() {
 
   // Load issue links for board badges — 30s polling, skip when tab hidden
   useEffect(() => {
-    const controller = new AbortController()
     const load = async () => {
       if (document.hidden) return
       try {
@@ -340,94 +296,19 @@ export default function BoardPage() {
     }
     load()
     const interval = setInterval(load, 30000)
-    return () => { clearInterval(interval); controller.abort() }
+    return () => { clearInterval(interval) }
   }, [])
 
-  // ── Keyboard shortcuts ───────────────────────────────────────────
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-        if (e.key === 'Escape') {
-          (e.target as HTMLElement)?.blur()
-        }
-        return
-      }
-
-      switch (e.key) {
-        case 'n':
-          e.preventDefault()
-          setShowCreate(true)
-          break
-        case 's':
-        case '/':
-          e.preventDefault()
-          searchRef.current?.focus()
-          break
-        case 'c':
-          e.preventDefault()
-          if (viewMode === 'board' && !compactMode) {
-            setCompactMode(true)
-          } else if (viewMode === 'board' && compactMode) {
-            setViewMode('list')
-          } else {
-            setViewMode('board')
-            setCompactMode(false)
-          }
-          break
-        case 'f':
-          e.preventDefault()
-          setShowFilters(prev => !prev)
-          break
-        case 'b':
-          e.preventDefault()
-          setSelectMode(prev => !prev)
-          break
-        case 'g':
-          e.preventDefault()
-          setShowGraph(prev => !prev)
-          break
-        case 'e':
-          e.preventDefault()
-          handleExport('csv', repoFilter)
-          break
-        case '1':
-          setMobileStatusTab('available')
-          break
-        case '2':
-          setMobileStatusTab('in_progress')
-          break
-        case '3':
-          setMobileStatusTab('blocked')
-          break
-        case '4':
-          setMobileStatusTab('done')
-          break
-        case '?':
-          e.preventDefault()
-          setShowShortcuts(true)
-          break
-        case 'Escape':
-          if (showPanel !== 'none') {
-            setShowPanel('none')
-          } else if (showFilters) {
-            setShowFilters(false)
-          } else if (showCreate) {
-            setShowCreate(false)
-          } else if (detailTaskId) {
-            setDetailTaskId(null)
-          } else if (showGraph) {
-            setShowGraph(false)
-          } else if (selectMode) {
-            setSelectMode(false)
-          } else if (showShortcuts) {
-            setShowShortcuts(false)
-          }
-          break
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+  // ── Keyboard shortcuts (extracted hook) ──────────────────────────
+  useBoardShortcuts({
+    searchRef,
+    viewMode, setViewMode, compactMode, setCompactMode,
+    setShowCreate, setShowFilters, setSelectMode, setShowGraph,
+    setShowShortcuts, setMobileStatusTab,
+    handleExport, repoFilter,
+    showPanel, setShowPanel,
+    showFilters, showCreate, detailTaskId, setDetailTaskId,
+    showGraph, selectMode, showShortcuts,
   })
 
   const columnProps = {

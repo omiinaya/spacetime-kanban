@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: AI Agent Guidelines
+    url: https://github.com/omiinaya/spacetimedb-kanban/blob/main/AGENTS.md
+    about: Read the agent workflow guide before creating a task
+  - name: Contributing Guide
+    url: https://github.com/omiinaya/spacetimedb-kanban/blob/main/CONTRIBUTING.md
+    about: How to contribute to this project

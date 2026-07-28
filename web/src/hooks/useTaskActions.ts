@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { api } from '../api'
 import type { Task, TaskStatus } from './useRealtimeTasks'
 import { STATUS_LABELS } from '../components/constants'
@@ -6,17 +5,12 @@ import { STATUS_LABELS } from '../components/constants'
 /** All task-mutating actions for the board (claim/complete/block/archive/etc).
  *  Drag-and-drop state handlers stay in BoardPage — this hook is API calls only. */
 export function useTaskActions(tasks: Task[], filtered: Task[]) {
-  const [, setClaiming] = useState<string | null>(null)
-
   const handleClaim = async (taskId: string, agentId: string) => {
-    setClaiming(taskId)
     try {
       await api.tasks.claim(taskId, agentId)
       // STDB subscription will push the update — no manual refresh needed
     } catch (e: unknown) {
       alert(`Claim failed: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setClaiming(null)
     }
   }
 

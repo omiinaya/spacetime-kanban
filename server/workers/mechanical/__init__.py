@@ -263,7 +263,6 @@ def handle_remove_unused_imports(ctx: WorkerContext) -> tuple[bool, str]:
 # The boilerplate handler was removed as the scaffold handler is more comprehensive.
 
 
-
 @register(r"extract\s+.*\s+into\s+(sub.module|separate|module)")
 def handle_extract_module(ctx: WorkerContext) -> tuple[bool, str]:
     """Extract a function or class from a monolithic file into a new module.
@@ -565,48 +564,48 @@ def _find_rust_top_level_items(content: str) -> list[dict]:
         stripped = line.strip()
 
         if not in_item and brace_depth == 0:
-                m = item_re.search(stripped)
-                if m:
-                    kind = m.group("kind")
-                    name = m.group("name")
-                    if kind == "impl":
-                        # impl blocks usually have a meaningful type name in the
-                        # "impl <Name>" pattern; sometimes "impl<T> Name"
-                        # We'll use the type after impl as the "name"
-                        type_part = (
-                            stripped[m.end("kind") :]
-                            .strip()
-                            .split("{")[0]
-                            .split("for")[-1]
-                            .strip()
-                            .strip(",")
-                        )
-                        if type_part:
-                            # Handle generics
-                            name = type_part.split("<")[0].strip()
-                            if not name:
-                                name = f"impl_{kind}"
-                        else:
-                            name = f"impl_block_{len(items)}"
+            m = item_re.search(stripped)
+            if m:
+                kind = m.group("kind")
+                name = m.group("name")
+                if kind == "impl":
+                    # impl blocks usually have a meaningful type name in the
+                    # "impl <Name>" pattern; sometimes "impl<T> Name"
+                    # We'll use the type after impl as the "name"
+                    type_part = (
+                        stripped[m.end("kind") :]
+                        .strip()
+                        .split("{")[0]
+                        .split("for")[-1]
+                        .strip()
+                        .strip(",")
+                    )
+                    if type_part:
+                        # Handle generics
+                        name = type_part.split("<")[0].strip()
+                        if not name:
+                            name = f"impl_{kind}"
+                    else:
+                        name = f"impl_block_{len(items)}"
 
-                    current = {
-                        "name": name,
-                        "kind": kind,
-                        "start_line": i,
-                        "end_line": None,
-                    }
-                    in_item = True
+                current = {
+                    "name": name,
+                    "kind": kind,
+                    "start_line": i,
+                    "end_line": None,
+                }
+                in_item = True
 
-                    # Count braces on this line
-                    brace_depth += stripped.count("{") - stripped.count("}")
-                    if brace_depth <= 0:
-                        # Single-line item
-                        in_item = False
-                        brace_depth = 0
-                        current["end_line"] = i
-                        items.append(current)
-                        current = None
-                    continue  # already handled brace counting
+                # Count braces on this line
+                brace_depth += stripped.count("{") - stripped.count("}")
+                if brace_depth <= 0:
+                    # Single-line item
+                    in_item = False
+                    brace_depth = 0
+                    current["end_line"] = i
+                    items.append(current)
+                    current = None
+                continue  # already handled brace counting
 
         # Track brace depth everywhere (needed even outside items to know
         # when we're at top level)
@@ -1397,7 +1396,10 @@ def handle_add_init_py(ctx: WorkerContext) -> tuple[bool, str]:
         if errors:
             msg += f" ({'; '.join(errors)})"
         return True, msg
-    return False, f"No __init__.py files created ({'; '.join(errors) if errors else 'all already exist'})"
+    return (
+        False,
+        f"No __init__.py files created ({'; '.join(errors) if errors else 'all already exist'})",
+    )
 
 
 @register(r"add\s+(license|contributing\.md|issue\s+template|pr\s+template)")
@@ -1415,7 +1417,9 @@ def handle_add_project_files(ctx: WorkerContext) -> tuple[bool, str]:
         if not os.path.isfile(license_path):
             try:
                 with open(license_path, "w") as f:
-                    f.write("MIT License\n\nCopyright (c) 2026\n\nPermission is hereby granted...\n")
+                    f.write(
+                        "MIT License\n\nCopyright (c) 2026\n\nPermission is hereby granted...\n"
+                    )
                 created.append("LICENSE")
             except OSError:
                 pass
@@ -1425,7 +1429,9 @@ def handle_add_project_files(ctx: WorkerContext) -> tuple[bool, str]:
         if not os.path.isfile(contrib_path):
             try:
                 with open(contrib_path, "w") as f:
-                    f.write("# Contributing\n\n## How to contribute\n\n1. Fork the repo\n2. Create a feature branch\n3. Commit your changes\n4. Open a pull request\n")
+                    f.write(
+                        "# Contributing\n\n## How to contribute\n\n1. Fork the repo\n2. Create a feature branch\n3. Commit your changes\n4. Open a pull request\n"
+                    )
                 created.append("CONTRIBUTING.md")
             except OSError:
                 pass
@@ -1437,7 +1443,9 @@ def handle_add_project_files(ctx: WorkerContext) -> tuple[bool, str]:
         if not os.path.isfile(bug_path):
             try:
                 with open(bug_path, "w") as f:
-                    f.write("---\nname: Bug report\nabout: Create a report to help us improve\n---\n\n**Describe the bug**\n...\n")
+                    f.write(
+                        "---\nname: Bug report\nabout: Create a report to help us improve\n---\n\n**Describe the bug**\n...\n"
+                    )
                 created.append(".github/ISSUE_TEMPLATE/bug_report.md")
             except OSError:
                 pass
@@ -1445,7 +1453,9 @@ def handle_add_project_files(ctx: WorkerContext) -> tuple[bool, str]:
         if not os.path.isfile(feat_path):
             try:
                 with open(feat_path, "w") as f:
-                    f.write("---\nname: Feature request\nabout: Suggest an idea\n---\n\n**Is your feature request related to a problem?**\n...\n")
+                    f.write(
+                        "---\nname: Feature request\nabout: Suggest an idea\n---\n\n**Is your feature request related to a problem?**\n...\n"
+                    )
                 created.append(".github/ISSUE_TEMPLATE/feature_request.md")
             except OSError:
                 pass
@@ -1456,7 +1466,9 @@ def handle_add_project_files(ctx: WorkerContext) -> tuple[bool, str]:
         if not os.path.isfile(pr_path):
             try:
                 with open(pr_path, "w") as f:
-                    f.write("## Description\n\nFixes #...\n\n## Type of change\n\n- [ ] Bug fix\n- [ ] New feature\n- [ ] Breaking change\n")
+                    f.write(
+                        "## Description\n\nFixes #...\n\n## Type of change\n\n- [ ] Bug fix\n- [ ] New feature\n- [ ] Breaking change\n"
+                    )
                 created.append(".github/PULL_REQUEST_TEMPLATE.md")
             except OSError:
                 pass
@@ -1679,7 +1691,10 @@ def handle_replace_unwrap_scanner(ctx: WorkerContext) -> tuple[bool, str]:
             unwrap_files.append(stripped)
 
     if not unwrap_files:
-        return True, "No previously flagged unwrap() calls remain — they may have been fixed manually"
+        return (
+            True,
+            "No previously flagged unwrap() calls remain — they may have been fixed manually",
+        )
 
     # Read the actual file(s) to see if the issue still exists
     changed = False
@@ -1705,7 +1720,12 @@ def handle_replace_unwrap_scanner(ctx: WorkerContext) -> tuple[bool, str]:
                 insert_at = 0
                 for i, line in enumerate(lines):
                     stripped = line.strip()
-                    if stripped.startswith("//!") or stripped.startswith("/*") or stripped.startswith("*") or stripped == "":
+                    if (
+                        stripped.startswith("//!")
+                        or stripped.startswith("/*")
+                        or stripped.startswith("*")
+                        or stripped == ""
+                    ):
                         insert_at = i + 1
                     else:
                         break
@@ -1743,7 +1763,10 @@ def handle_bare_except_scanner(ctx: WorkerContext) -> tuple[bool, str]:
 
     # Just report that the issue is documented
     if "bare" in description:
-        return True, "Bare except: clause flagged for manual review — replace with 'except Exception:'"
+        return (
+            True,
+            "Bare except: clause flagged for manual review — replace with 'except Exception:'",
+        )
     return True, "No bare except: issues remain in this file"
 
 
@@ -1762,7 +1785,10 @@ def handle_ci_pipeline(ctx: WorkerContext) -> tuple[bool, str]:
     if os.path.isdir(github_actions):
         existing = [f for f in os.listdir(github_actions) if f.endswith((".yml", ".yaml"))]
         if existing:
-            return True, f"CI already configured ({len(existing)} workflow(s): {', '.join(existing[:3])})"
+            return (
+                True,
+                f"CI already configured ({len(existing)} workflow(s): {', '.join(existing[:3])})",
+            )
 
     # Create basic CI
     os.makedirs(github_actions, exist_ok=True)
@@ -1784,4 +1810,3 @@ jobs:
             return False, "Failed to create CI workflow"
 
     return True, "CI workflow already exists"
-

@@ -1027,6 +1027,7 @@ async def test_get_task_labels(client, mock_all):
     mock_all["sql"].return_value = [
         {"id": "lbl_bug", "name": "bug", "color": "#ef4444", "description": "", "created_at": 1000},
     ]
+    mock_all["param"].return_value = mock_all["sql"].return_value
     resp = await client.get("/api/tasks/task_1/labels")
     assert resp.status_code == 200
     data = resp.json()

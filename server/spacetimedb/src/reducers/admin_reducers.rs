@@ -231,14 +231,8 @@ pub fn update_webhook_subscription(
     if !label.is_empty() {
         wh.label = label;
     }
-    let old: Vec<WebhookSubscription> = ctx
-        .db
-        .webhook_subscriptions()
-        .iter()
-        .filter(|w| w.id == wh.id)
-        .collect();
-    for w in old {
-        ctx.db.webhook_subscriptions().delete(w);
+    if let Some(old) = ctx.db.webhook_subscriptions().id().find(&wh.id) {
+        ctx.db.webhook_subscriptions().delete(old);
     }
     ctx.db.webhook_subscriptions().insert(wh);
     Ok(())
@@ -259,6 +253,14 @@ pub fn log_webhook_delivery(
     success: bool,
 ) -> Result<(), String> {
     let now = now_ms(ctx);
+    // Before inserting, clean up delivery logs older than 7 days
+    let cutoff = now.saturating_sub(7 * 24 * 60 * 60 * 1000);
+    let old: Vec<_> = ctx.db.webhook_deliveries().iter()
+        .filter(|d| d.delivered_at < cutoff)
+        .collect();
+    for d in old {
+        ctx.db.webhook_deliveries().delete(d);
+    }
     let delivery_id = if id.is_empty() {
         make_id("whdel", ctx)
     } else {
@@ -330,14 +332,8 @@ pub fn update_issue_link_status(
         _ => IssueLinkStatus::Open,
     };
     link.status = new_status;
-    let old: Vec<IssueLink> = ctx
-        .db
-        .issue_links()
-        .iter()
-        .filter(|l| l.kanban_task_id == link.kanban_task_id)
-        .collect();
-    for l in old {
-        ctx.db.issue_links().delete(l);
+    if let Some(old) = ctx.db.issue_links().kanban_task_id().find(&link.kanban_task_id) {
+        ctx.db.issue_links().delete(old);
     }
     ctx.db.issue_links().insert(link);
     Ok(())
@@ -404,14 +400,8 @@ pub fn update_label(
         label.color = color;
     }
     label.description = description;
-    let old: Vec<KanbanLabel> = ctx
-        .db
-        .kanban_labels()
-        .iter()
-        .filter(|l| l.id == label.id)
-        .collect();
-    for l in old {
-        ctx.db.kanban_labels().delete(l);
+    if let Some(old) = ctx.db.kanban_labels().id().find(&label.id) {
+        ctx.db.kanban_labels().delete(old);
     }
     ctx.db.kanban_labels().insert(label);
     Ok(())
@@ -584,14 +574,8 @@ pub fn set_dispatcher_state(
 ) -> Result<(), String> {
     let now = now_ms(ctx);
     // Delete existing row for this key
-    let old: Vec<DispatcherStateRow> = ctx
-        .db
-        .dispatcher_state()
-        .iter()
-        .filter(|r| r.key == key)
-        .collect();
-    for r in old {
-        ctx.db.dispatcher_state().delete(r);
+    if let Some(old) = ctx.db.dispatcher_state().key().find(&key) {
+        ctx.db.dispatcher_state().delete(old);
     }
     ctx.db.dispatcher_state().insert(DispatcherStateRow {
         key,
@@ -606,17 +590,8 @@ pub fn delete_dispatcher_state_row(
     ctx: &ReducerContext,
     key: String,
 ) -> Result<(), String> {
-    let old: Vec<DispatcherStateRow> = ctx
-        .db
-        .dispatcher_state()
-        .iter()
-        .filter(|r| r.key == key)
-        .collect();
-    if old.is_empty() {
-        return Err("Key not found".to_string());
-    }
-    for r in old {
-        ctx.db.dispatcher_state().delete(r);
-    }
+    let old = ctx.db.dispatcher_state().key().find(&key)
+        .ok_or_else(|| "Key not found".to_string())?;
+    ctx.db.dispatcher_state().delete(old);
     Ok(())
 }

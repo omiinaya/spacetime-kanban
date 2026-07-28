@@ -198,7 +198,7 @@ async def github_webhook(request: Request):
                 gh_task_id, repo_full, issue_number, issue.get("url", ""), issue_html
             )
             issue_sync.update_issue_status(gh_task_id, issue_state)
-            asyncio.ensure_future(
+            asyncio.create_task(
                 _notify(
                     "created",
                     {
@@ -228,7 +228,7 @@ async def github_webhook(request: Request):
                     else:
                         await _call("complete_task", [task_id, notes])
                     issue_sync.update_issue_status(task_id, "closed")
-                    asyncio.ensure_future(_notify("completed", rows[0], notes))
+                    asyncio.create_task(_notify("completed", rows[0], notes))
                     return {"status": "completed", "task_id": task_id}
             return {"status": "ignored", "reason": "no linked task found"}
 
@@ -252,7 +252,7 @@ async def github_webhook(request: Request):
                             ],
                         )
                     issue_sync.update_issue_status(task_id, "open")
-                    asyncio.ensure_future(
+                    asyncio.create_task(
                         _notify("unclaimed", rows[0], f"Issue #{issue_number} reopened")
                     )
                     return {"status": "reopened", "task_id": task_id}
@@ -290,7 +290,7 @@ async def github_webhook(request: Request):
         with contextlib.suppress(HTTPException):
             await _call("update_task", [task_id, original_title, f"PR: {pr_url}", 2, branch])
             # Task may not exist yet — expected, not an error
-        asyncio.ensure_future(
+        asyncio.create_task(
             _notify(
                 "linked",
                 {
@@ -318,7 +318,7 @@ async def github_webhook(request: Request):
                     # Claim as github-actions, then complete
                     await _call("claim_task", [task_id, "github-actions"])
                     await _call("complete_task", [task_id, notes])
-                asyncio.ensure_future(_notify("completed", t, notes))
+                asyncio.create_task(_notify("completed", t, notes))
                 return {"status": "completed", "task_id": task_id}
         except HTTPException:
             pass

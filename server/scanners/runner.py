@@ -181,10 +181,7 @@ def _verify_completed_tasks(repos: list[tuple[str, str]], existing: set[str]) ->
                 tid = t.get("id", "")
                 if title in fresh_titles:
                     _api_post(f"/api/tasks/{tid}/unarchive", {})
-                    _api_post(
-                        f"/api/tasks/{tid}/block",
-                        {"reason": "Regression: issue still present after prior fix"},
-                    )
+                    # Unarchive transitions done→available; skip 409 errors silently
                     existing.add(title)
                     regressed += 1
                     print(f"[scanner] ⚠ Re-opened regressed: {title[:60]}...", file=sys.stderr)

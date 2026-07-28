@@ -54,8 +54,7 @@ async def analytics_overview():
     # completed_today>0 made the board look "healthy". Ratio ~1-2 is normal.
     hour_ago = now - 3_600_000
     churn_logs = await _sql(
-        f"SELECT * FROM task_logs WHERE timestamp > {hour_ago}"
-        " AND (action = 'claimed')"
+        f"SELECT * FROM task_logs WHERE timestamp > {hour_ago} AND (action = 'claimed')"
     )
     claims_last_hour = sum(1 for l in churn_logs if l.get("action") == "claimed")
     # Count completions from task status (updated_at), not task_logs — the complete

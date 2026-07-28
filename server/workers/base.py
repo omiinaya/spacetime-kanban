@@ -27,15 +27,15 @@ HEARTBEAT_INTERVAL = 15  # seconds between heartbeats
 
 def _url(path: str) -> str:
     """Build a full API URL, encoding the path if needed.
-    
+
     Uses urllib.parse.quote to encode special characters in the path
     (spaces, unicode, etc.) while preserving URL-safe characters like /.
     This is the belt alongside the suspenders of pre-encoding task_ids
     at the WorkerContext level.
     """
     # Only encode if not already encoded (check for %)
-    if '%' not in path:
-        path = urllib.parse.quote(path, safe='/:@!$&\'()*+,;=')
+    if "%" not in path:
+        path = urllib.parse.quote(path, safe="/:@!$&'()*+,;=")
     return f"{API_BASE.rstrip('/')}/{path.lstrip('/')}"
 
 
@@ -76,7 +76,7 @@ class WorkerContext:
 
     def __init__(self, task_id: str):
         self.task_id = task_id
-        self._safe_task_id = urllib.parse.quote(task_id, safe='')
+        self._safe_task_id = urllib.parse.quote(task_id, safe="")
         self.task = None
         self._heartbeat_count = 0
         self._running = True
