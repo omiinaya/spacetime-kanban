@@ -980,9 +980,20 @@ async def _recover_stale_tasks() -> int:
     On server restart/kill, worker processes die but their claimed tasks
     stay in_progress forever. This releases them back to available so
     the next dispatcher tick can re-claim them.
+
+    Retries up to 3 times if the API is temporarily unavailable.
     Returns the number of tasks recovered.
     """
-    stale = await _api_get("/api/tasks?status=inProgress")
+    for attempt in range(3):
+        stale = await _api_get("/api/tasks?status=inProgress")
+        if stale is not None:
+            break
+        await asyncio.sleep(2)
+    else:
+        print("[scheduler] FAILED to fetch inProgress tasks for stale recovery "
+              "(API returned None 3 times) — tasks may stay stuck")
+        return 0
+
     if not stale:
         return 0
 
