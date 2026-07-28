@@ -336,7 +336,10 @@ async def create_task(body: TaskCreate):
             return {
                 "status": "exists",
                 "id": existing[0]["id"],
-                "message": f"Task with same title already exists in {body.repo} (status: {existing[0]['status']})",
+                "message": (
+                    f"Task with same title already exists in {body.repo} "
+                    f"(status: {existing[0]['status']})"
+                ),
             }
 
     task_id = f"task_{_uuid.uuid4().hex[:16]}"

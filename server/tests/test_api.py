@@ -385,7 +385,7 @@ async def test_analytics_claim_churn(client, mock_all):
     ]
     with patch("routes.analytics._sql", new_callable=AsyncMock) as mock_sql:
         # Endpoint filters in SQL; emulate by returning only in-window rows
-        mock_sql.return_value = [l for l in logs if l["timestamp"] > now_ms - 3_600_000]
+        mock_sql.return_value = [line for line in logs if line["timestamp"] > now_ms - 3_600_000]
         resp = await client.get("/api/analytics/claim-churn?minutes=60&threshold=3")
     assert resp.status_code == 200
     data = resp.json()

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban, LayoutDashboard, CalendarDays, Key, LifeBuoy } from 'lucide-react'
+import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban, LayoutDashboard, CalendarDays, Key, LifeBuoy, Database } from 'lucide-react'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.1.0'
@@ -17,6 +17,7 @@ const CrossProjectPage = lazy(() => import('./pages/CrossProjectPage'))
 const CalendarPage = lazy(() => import('./pages/CalendarPage'))
 const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'))
 const TriagePage = lazy(() => import('./pages/TriagePage'))
+const SchemaMigrationsPage = lazy(() => import('./pages/SchemaMigrationsPage'))
 
 const navItems = [
   { path: '/', label: 'Board', icon: KanbanSquare },
@@ -30,6 +31,7 @@ const navItems = [
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
   { path: '/cross-project', label: 'Cross-Project', icon: LayoutDashboard },
   { path: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { path: '/schema-migrations', label: 'Migrations', icon: Database },
   { path: '/api-keys', label: 'API Keys', icon: Key },
 ]
 
@@ -131,6 +133,7 @@ export default function App() {
               <Route path="/analytics" element={<ErrorBoundary><AnalyticsPage /></ErrorBoundary>} />
               <Route path="/cross-project" element={<ErrorBoundary><CrossProjectPage /></ErrorBoundary>} />
               <Route path="/calendar" element={<ErrorBoundary><CalendarPage /></ErrorBoundary>} />
+              <Route path="/schema-migrations" element={<ErrorBoundary><SchemaMigrationsPage /></ErrorBoundary>} />
               <Route path="/api-keys" element={<ErrorBoundary><ApiKeysPage /></ErrorBoundary>} />
             </Routes>
           </ErrorBoundary>

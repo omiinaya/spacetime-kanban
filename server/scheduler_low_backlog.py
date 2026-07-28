@@ -245,7 +245,8 @@ async def check_backlog_and_trigger(overview: dict | None = None) -> bool:
         if total_created == 0:
             imp_created = await _generate_improvement_tasks()
             print(
-                f"[scheduler:low-backlog] Scanner found nothing, generated {imp_created} improvement task(s)"
+                f"[scheduler:low-backlog] Scanner found nothing, "
+                f"generated {imp_created} improvement task(s)"
             )
         return True
 
@@ -262,7 +263,8 @@ async def check_backlog_and_trigger(overview: dict | None = None) -> bool:
         if total_created == 0:
             imp_created = await _generate_improvement_tasks()
             print(
-                f"[scheduler:low-backlog] Scanner found nothing, generated {imp_created} improvement task(s)"
+                f"[scheduler:low-backlog] Scanner found nothing, "
+                f"generated {imp_created} improvement task(s)"
             )
         return True
 

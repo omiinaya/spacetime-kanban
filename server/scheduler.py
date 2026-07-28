@@ -245,7 +245,8 @@ async def task_dispatcher(interval: int):
             if worker_count >= settings.max_workers:
                 if worker_count % 60 == 0:  # Log ~every 2 min at 30s interval
                     print(
-                        f"[scheduler:dispatcher] All {settings.max_workers} worker slots full — waiting"
+                        f"[scheduler:dispatcher] All {settings.max_workers} "
+                        f"worker slots full — waiting"
                     )
                 continue
 
@@ -741,7 +742,8 @@ async def worker_death_watcher(interval: int):
                     proc = _worker_processes.get(tid)
                     if proc and proc.poll() is None:
                         print(
-                            f"[scheduler:deathwatch] Task {tid[:20]} worker hung for >{max_hung}s — killing"
+                            f"[scheduler:deathwatch] Task {tid[:20]} worker hung "
+                            f"for >{max_hung}s — killing"
                         )
                         proc.kill()
                         _worker_processes.pop(tid, None)
@@ -786,7 +788,8 @@ async def worker_death_watcher(interval: int):
                 if age < _IMMEDIATE_CRASH_THRESHOLD:
                     # Immediate crash — unclaim and potentially block
                     print(
-                        f"[scheduler:deathwatch] Task {tid[:20]} worker crashed (exit={exit_code}, age={age:.1f}s){stderr_text}"
+                        f"[scheduler:deathwatch] Task {tid[:20]} worker crashed "
+                        f"(exit={exit_code}, age={age:.1f}s){stderr_text}"
                     )
                     await _api_post(
                         f"/api/tasks/{tid}/unclaim",
@@ -796,7 +799,8 @@ async def worker_death_watcher(interval: int):
                     crash_count = _worker_crash_counts.get(tid, 0)
                     if crash_count >= 3:
                         print(
-                            f"[scheduler:deathwatch] Task {tid[:20]} crashed {crash_count}x — blocking"
+                            f"[scheduler:deathwatch] Task {tid[:20]} crashed "
+                            f"{crash_count}x — blocking"
                         )
                         await _api_post(
                             f"/api/tasks/{tid}/block",
@@ -806,7 +810,8 @@ async def worker_death_watcher(interval: int):
                 else:
                     # Worker ran for a while but died — unclaim
                     print(
-                        f"[scheduler:deathwatch] Task {tid[:20]} worker died after {age:.0f}s (exit={exit_code}){stderr_text}"
+                        f"[scheduler:deathwatch] Task {tid[:20]} worker died "
+                        f"after {age:.0f}s (exit={exit_code}){stderr_text}"
                     )
                     await _api_post(
                         f"/api/tasks/{tid}/unclaim",
@@ -953,7 +958,10 @@ async def self_improver(interval: int):
                     for t in stale[:3]:
                         await _create_improvement_task(
                             title=f"[Stale] Task stuck in_progress: {t.get('title', '?')[:60]}",
-                            description=f"Task {t['id'][:30]} has been in_progress without heartbeat for >30min",
+                            description=(
+                                f"Task {t['id'][:30]} has been in_progress "
+                                f"without heartbeat for >30min"
+                            ),
                             priority=2,
                         )
 
@@ -994,7 +1002,7 @@ async def self_improver(interval: int):
                 )
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
                 if stdout and stdout.decode().strip():
-                    lines = [l for l in stdout.decode().strip().split("\n") if l.strip()]
+                    lines = [line for line in stdout.decode().strip().split("\n") if line.strip()]
                     print(f"[scheduler:improver] {len(lines)} uncommitted change(s)")
             except Exception as exc:
                 print(f"[scheduler:improver] git status failed: {exc}")

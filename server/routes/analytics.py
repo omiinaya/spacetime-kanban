@@ -56,7 +56,7 @@ async def analytics_overview():
     churn_logs = await _sql(
         f"SELECT * FROM task_logs WHERE timestamp > {hour_ago} AND (action = 'claimed')"
     )
-    claims_last_hour = sum(1 for l in churn_logs if l.get("action") == "claimed")
+    claims_last_hour = sum(1 for line in churn_logs if line.get("action") == "claimed")
     # Count completions from task status (updated_at), not task_logs — the complete
     # endpoint doesn't write to task_logs, so the old approach always returned 0
     completions_last_hour = sum(
