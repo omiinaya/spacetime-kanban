@@ -208,6 +208,14 @@ export interface ApiKeyItemFull extends ApiKeyItem {
   full_key: string
 }
 
+export interface SchemaMigration {
+  version: string
+  description: string
+  applied_at: number
+  applied_by: string
+  checksum: string | null
+}
+
 export interface TaskRelation {
   id: string
   task_id: string
@@ -415,6 +423,9 @@ export const api = {
       apiPost<{ status: string }>(`/api-keys/${keyId}/revoke`),
     delete: (keyId: string) =>
       apiDelete<{ status: string }>(`/api-keys/${keyId}`),
+  },
+  migrations: {
+    list: () => apiGet<SchemaMigration[]>('/schema-migrations'),
   },
   taskRelations: {
     list: (taskId: string) =>

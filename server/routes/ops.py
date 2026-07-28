@@ -67,7 +67,8 @@ async def import_roadmap(body: RoadmapImportRequest):
                     sanitized_title = t["title"].replace("'", "''")
                     sanitized_repo = t["repo"].replace("'", "''")
                     existing_rows = await _sql_param(
-                        "SELECT id, status FROM tasks WHERE title = '{title}' AND repo = '{repo}' LIMIT 1",
+                        "SELECT id, status FROM tasks "
+                        "WHERE title = '{title}' AND repo = '{repo}' LIMIT 1",
                         title=sanitized_title,
                         repo=sanitized_repo,
                     )
@@ -156,6 +157,22 @@ async def list_migrations():
     """List applied schema migrations."""
     rows = await _sql("SELECT * FROM schema_migrations")
     rows = sorted(rows, key=lambda r: r.get("applied_at", 0))
+    return [
+        MigrationOut(
+            version=r["version"],
+            description=r.get("description", ""),
+            applied_at=r.get("applied_at", 0),
+            applied_by=r.get("applied_by", ""),
+            checksum=r.get("checksum"),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/api/schema-migrations", response_model=list[MigrationOut])
+async def list_schema_migrations():
+    """Alias: list all schema migrations from the schema_migrations table."""
+    rows = await _sql("SELECT * FROM schema_migrations ORDER BY applied_at DESC")
     return [
         MigrationOut(
             version=r["version"],
