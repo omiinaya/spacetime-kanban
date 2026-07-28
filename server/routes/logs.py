@@ -83,12 +83,13 @@ async def batch_logs(
 
     # SQL WHERE on action (String field) to reduce rows — STDB doesn't support IN
     sql = "SELECT * FROM task_logs"
+    params = {}
     if action:
-        # Single action only (default: "heartbeat") — no multi-action support in SQL
         action_val = action.split(",")[0].strip()
-        sql += f" WHERE action = '{action_val}'"
+        sql += " WHERE action = '{action_val}'"
+        params["action_val"] = action_val
 
-    rows = await _sql(sql)
+    rows = await _sql_param(sql, **params)
     logs = [_row_to_log(r) for r in rows]
 
     # Filter to requested task IDs (Python-side — STDB has no IN)

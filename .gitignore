@@ -32,3 +32,6 @@ server/fountain.log
 
 # Generated audit artifacts (from subagent runs)
 server/spacetimedb/src/AUDIT_REPORT.md
+
+# mypy cache
+.mypy_cache/

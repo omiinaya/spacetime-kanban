@@ -65,7 +65,7 @@ def mock_all():
     # ── Route modules that import STDB helpers from shared ──────
     route_modules = {
         "routes.agents": ["_sql", "_sql_param", "_call"],
-        "routes.analytics": ["_sql"],
+        "routes.analytics": ["_sql", "_sql_param"],
         "routes.github": ["_sql_param", "_call", "_notify"],
         "routes.labels": ["_sql", "_sql_param", "_call"],
         "routes.logs": ["_sql"],
@@ -383,9 +383,10 @@ async def test_analytics_claim_churn(client, mock_all):
         # t4: claimed 4x but OUTSIDE the window → excluded
         *[{"task_id": "t4", "action": "claimed", "timestamp": now_ms - 7_200_000}] * 4,
     ]
-    with patch("routes.analytics._sql", new_callable=AsyncMock) as mock_sql:
+    with patch("shared._sql", new_callable=AsyncMock) as mock_sql:
         # Endpoint filters in SQL; emulate by returning only in-window rows
         mock_sql.return_value = [line for line in logs if line["timestamp"] > now_ms - 3_600_000]
+        mock_all["param"].return_value = mock_sql.return_value
         resp = await client.get("/api/analytics/claim-churn?minutes=60&threshold=3")
     assert resp.status_code == 200
     data = resp.json()
@@ -1837,3 +1838,298 @@ async def test_record_schema_migration_alias(client, mock_all):
     assert len(migration_calls) >= 1
     args = migration_calls[-1][0][1]
     assert "v2.3.0" in args
+
+
+# ════════════════════════════════════════════════════════════════════════
+# ═══ EDGE CASES: Unclaim, Dedup, Bulk, Export, Search, PATCH ══════════
+# ════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_unclaim_available_task_409(client, mock_all):
+    """Unclaim a task that's already available should return 409 Conflict."""
+    mock_all["call"].side_effect = HTTPException(
+        status_code=409,
+        detail="Reducer failed: Cannot unclaim — task is not in_progress (status: available)",
+    )
+    resp = await client.post("/api/tasks/task_1/unclaim")
+    assert resp.status_code == 409
+    data = resp.json()
+    assert "detail" in data
+    assert "available" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_filter_tasks_by_label(client, mock_all):
+    """Filter tasks by label should return only tasks with that label."""
+    # Mock the label-task assignment query → returns one task_id
+    mock_all["param"].return_value = [{"task_id": "t1"}]
+    # Mock the main tasks query → returns two tasks
+    mock_all["sql"].return_value = [
+        _make_task("t1", "Labeled task", repo="test"),
+        _make_task("t2", "Unlabeled task", repo="test"),
+    ]
+    resp = await client.get("/api/tasks", params={"label": "lbl_bug"})
+    assert resp.status_code == 200
+    data = resp.json()
+    # Only t1 should be returned (client-side label filter after SQL fetch)
+    assert len(data) == 1
+    assert data[0]["id"] == "t1"
+    assert data[0]["title"] == "Labeled task"
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_task(client, mock_all):
+    """DELETE for a non-existent task — API calls the reducer and returns 200
+    (the STDB reducer is idempotent; no 404 is raised by the route itself)."""
+    mock_all["param"].return_value = []  # no rows found
+    resp = await client.delete("/api/tasks/nonexistent_id")
+    # The route fetches task data (empty), calls delete_task reducer, returns 200
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_get_nonexistent_agent_404(client, mock_all):
+    """GET /api/agents/{id} for a non-existent agent should return 404."""
+    mock_all["param"].return_value = []  # no rows
+    resp = await client.get("/api/agents/nonexistent_agent")
+    assert resp.status_code == 404
+    data = resp.json()
+    assert "detail" in data
+
+
+@pytest.mark.asyncio
+async def test_create_duplicate_task_title_repo(client, mock_all):
+    """Creating a task with the same title+repo as an existing non-done task
+    returns status='exists' with the existing task's ID (dedup)."""
+    mock_all["param"].return_value = [
+        {"id": "task_1", "status": "available"}
+    ]
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post(
+        "/api/tasks",
+        json={"title": "Existing task", "repo": "test"},
+    )
+    assert resp.status_code == 200 or resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "exists"
+    assert data["id"] == "task_1"
+    assert "same title" in data.get("message", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_bulk_retry_empty_array(client, mock_all):
+    """Bulk-retry with an empty task_ids array should handle gracefully."""
+    resp = await client.post("/api/tasks/bulk-retry", json={"task_ids": []})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["retried"] == 0
+    assert data["failed"] == []
+
+
+@pytest.mark.asyncio
+async def test_bulk_archive_empty_array(client, mock_all):
+    """Bulk-archive with an empty task_ids array should handle gracefully."""
+    resp = await client.post("/api/tasks/bulk-archive", json={"task_ids": []})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["archived"] == 0
+    assert data["failed"] == []
+
+
+@pytest.mark.asyncio
+async def test_block_task_empty_reason(client, mock_all):
+    """POST /api/tasks/{id}/block with an empty reason string should succeed."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [_make_task("task_1", "Block me", status="in_progress")]
+    resp = await client.post(
+        "/api/tasks/task_1/block",
+        json={"reason": ""},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "blocked"
+    assert data["task_id"] == "task_1"
+
+
+@pytest.mark.asyncio
+async def test_block_task_no_body(client, mock_all):
+    """POST /api/tasks/{id}/block with no request body should succeed (defaults)."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [_make_task("task_1", "Block me", status="in_progress")]
+    resp = await client.post("/api/tasks/task_1/block")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "blocked"
+    assert data["task_id"] == "task_1"
+
+
+@pytest.mark.asyncio
+async def test_complete_task_very_long_notes(client, mock_all):
+    """Completing a task with very long result notes should be accepted."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [_make_task("task_1", "Long notes task", status="in_progress")]
+    long_notes = "Result: " + "A" * 10000
+    resp = await client.post(
+        "/api/tasks/task_1/complete",
+        json={"result_notes": long_notes},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "completed"
+    assert data["task_id"] == "task_1"
+
+
+@pytest.mark.asyncio
+async def test_get_logs_for_nonexistent_task(client, mock_all):
+    """GET /api/logs?task_id=nonexistent should return an empty array."""
+    # _sql_param returns [] by default (no logs for that task_id)
+    resp = await client.get("/api/logs", params={"task_id": "nonexistent"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
+@pytest.mark.asyncio
+async def test_analytics_overview_only_blocked(client, mock_all):
+    """Analytics overview should not crash when all tasks are blocked."""
+    mock_all["sql"].return_value = [
+        _make_task("t1", "Blocked one", status="blocked"),
+        _make_task("t2", "Blocked two", status="blocked"),
+    ]
+    resp = await client.get("/api/analytics/overview")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert data["by_status"].get("blocked", 0) == 2
+    assert data["completed_today"] == 0
+    assert data["completed_week"] == 0
+    assert data["total_done"] == 0
+
+
+@pytest.mark.asyncio
+async def test_export_invalid_format(client, mock_all):
+    """Export with an invalid format string defaults to JSON (200), not 422."""
+    mock_all["sql"].return_value = [
+        _make_task("t1", "Task 1"),
+    ]
+    # The endpoint only checks format == 'csv'; anything else returns JSON
+    resp = await client.get("/api/tasks/export", params={"format": "xml"})
+    assert resp.status_code == 200
+    # Should be JSON (not CSV) for unrecognised format
+    content_type = resp.headers.get("content-type", "")
+    assert "json" in content_type or "application" in content_type
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+
+
+@pytest.mark.asyncio
+async def test_search_special_characters(client, mock_all):
+    """Search with SQL-injection-like characters should be handled safely
+    (search is applied client-side in Python, not passed raw to SQL)."""
+    mock_all["sql"].return_value = [
+        _make_task("t1", "Normal task", "Just a normal description"),
+        _make_task("t2", "Auth module", "Authentication and authorization"),
+    ]
+    # SQL injection attempt in the search string
+    resp = await client.get(
+        "/api/tasks", params={"search": "' OR 1=1; DROP TABLE tasks --"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    # Should not crash, should return filtered results (empty in this case)
+    assert isinstance(data, list)
+    # The search string doesn't match any task title/desc, so empty
+    assert len(data) == 0
+
+
+@pytest.mark.asyncio
+async def test_search_sql_injection_in_title(client, mock_all):
+    """Creating a task with SQL injection in the title should be accepted
+    (STDB parameterised queries prevent injection)."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = []  # no dedup match
+    payload = "Task'; DROP TABLE tasks; --"
+    resp = await client.post(
+        "/api/tasks",
+        json={"title": payload, "repo": "test"},
+    )
+    assert resp.status_code == 200 or resp.status_code == 201
+    data = resp.json()
+    assert data.get("status") == "created"
+    assert "id" in data
+
+
+@pytest.mark.asyncio
+async def test_patch_task_no_changes(client, mock_all):
+    """PATCH /api/tasks/{id} with an empty JSON body should succeed (no-op)."""
+    mock_all["param"].return_value = [_make_task("t1", "My task")]
+    resp = await client.patch("/api/tasks/t1", json={})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "updated"
+
+
+@pytest.mark.asyncio
+async def test_patch_task_empty_body(client, mock_all):
+    """PATCH /api/tasks/{id} with '{ }' (all-null fields) should succeed."""
+    mock_all["param"].return_value = [_make_task("t1", "My task")]
+    resp = await client.patch(
+        "/api/tasks/t1",
+        json={
+            "title": None,
+            "description": None,
+            "priority": None,
+            "branch": None,
+            "due_by": None,
+            "sprint": None,
+            "archived": None,
+            "estimated_hours": None,
+            "spent_hours": None,
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "updated"
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_invalid_label(client, mock_all):
+    """Filtering tasks by a non-existent label should return an empty list."""
+    mock_all["param"].return_value = []  # no task-label assignments found
+    mock_all["sql"].return_value = [
+        _make_task("t1", "Some task"),
+        _make_task("t2", "Another task"),
+    ]
+    resp = await client.get("/api/tasks", params={"label": "nonexistent_label_id"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
+@pytest.mark.asyncio
+async def test_list_agents_with_data(client, mock_all):
+    """GET /api/agents should return enriched agent data when agents exist."""
+    mock_all["sql"].return_value = [
+        {
+            "id": "agent-1",
+            "host": "host1.local",
+            "capabilities": "python,typescript",
+            "repo_focus": "sample-repo-q",
+            "current_task_id": None,
+            "status": "idle",
+            "last_heartbeat": 2000000,
+            "first_seen": 1000000,
+        },
+    ]
+    resp = await client.get("/api/agents")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["id"] == "agent-1"
+    assert data[0]["status"] == "idle"
