@@ -1819,3 +1819,21 @@ async def test_claim_without_auth_401(client, mock_all, enable_auth):
         json={"agent_id": "test-agent"},
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_record_schema_migration_alias(client, mock_all):
+    """POST /api/schema-migrations (alias) should record a migration."""
+    resp = await client.post(
+        "/api/schema-migrations",
+        json={"version": "v2.3.0", "description": "Add test table"},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "recorded"
+    migration_calls = [
+        c for c in mock_all["call"].call_args_list if c[0][0] == "record_migration"
+    ]
+    assert len(migration_calls) >= 1
+    args = migration_calls[-1][0][1]
+    assert "v2.3.0" in args

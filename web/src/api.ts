@@ -426,6 +426,8 @@ export const api = {
   },
   migrations: {
     list: () => apiGet<SchemaMigration[]>('/schema-migrations'),
+    create: (body: { version: string; description?: string; applied_by?: string; checksum?: string }) =>
+      apiPost<{ status: string }>('/schema-migrations', body),
   },
   taskRelations: {
     list: (taskId: string) =>
