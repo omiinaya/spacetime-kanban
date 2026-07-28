@@ -107,7 +107,7 @@ async def _generate_improvement_tasks() -> int:
 
     existing_titles = set()
     try:
-        for status in ("available", "in_progress", "blocked", "done"):
+        for status in ("available", "inProgress", "blocked", "done"):
             tasks = await _api_get(f"/api/tasks?status={status}&limit=500")
             if tasks:
                 existing_titles.update(t["title"].strip().lower() for t in tasks if t.get("title"))

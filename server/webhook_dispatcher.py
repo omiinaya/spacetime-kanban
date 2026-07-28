@@ -77,6 +77,22 @@ def _format_message(event: str, data: dict) -> str:
     return f"[{event}] {json.dumps(data)[:200]}"
 
 
+# ── Shared HTTP client ───────────────────────────────────────────────
+# Reuse a single client across all webhook deliveries to avoid creating
+# a connection pool (with TCP handshake) for every event.
+_webhook_client: httpx.AsyncClient | None = None
+
+
+def _get_webhook_client() -> httpx.AsyncClient:
+    global _webhook_client
+    if _webhook_client is None:
+        _webhook_client = httpx.AsyncClient(
+            timeout=settings.webhook_timeout_seconds,
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+        )
+    return _webhook_client
+
+
 async def fire_event(
     event: str,
     data: dict,
@@ -106,15 +122,15 @@ async def fire_event(
     last_error = None
     for attempt in range(settings.webhook_max_retries):
         try:
-            async with httpx.AsyncClient(timeout=settings.webhook_timeout_seconds) as client:
-                resp = await client.post(
-                    url,
-                    content=body,
-                    headers={"Content-Type": "application/json"},
-                )
-                if resp.status_code < 500:
-                    return True
-                last_error = f"HTTP {resp.status_code}"
+            client = _get_webhook_client()
+            resp = await client.post(
+                url,
+                content=body,
+                headers={"Content-Type": "application/json"},
+            )
+            if resp.status_code < 500:
+                return True
+            last_error = f"HTTP {resp.status_code}"
         except Exception as e:
             last_error = str(e)
 
