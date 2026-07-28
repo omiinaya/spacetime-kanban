@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Github, ExternalLink, Loader2, RefreshCw, Search } from 'lucide-react'
+import { Github, ExternalLink, RefreshCw, Search } from 'lucide-react'
 import { api, type IssueLink } from '../api'
+import { ListViewSkeleton } from '../components/Skeleton'
 
 export default function IssuesPage() {
   const [links, setLinks] = useState<IssueLink[]>([])
@@ -72,11 +73,7 @@ export default function IssuesPage() {
       </div>
 
       {/* Content */}
-      {loading && !error ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-5 h-5 animate-spin text-[var(--color-muted)]" />
-        </div>
-      ) : error ? (
+      {loading && !error ? <ListViewSkeleton /> : error ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <p className="text-sm text-red-400 mb-2">Failed to load issue links</p>
           <p className="text-xs text-[var(--color-muted)] mb-3">{error}</p>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api, type ApiKeyItem, type ApiKeyItemFull } from '../api'
 import { Key, Loader2, AlertCircle, Plus, Trash2, Copy, Check, X } from 'lucide-react'
+import { ListViewSkeleton } from '../components/Skeleton'
 
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKeyItem[]>([])
@@ -155,11 +156,7 @@ export default function ApiKeysPage() {
       )}
 
       {/* Keys list */}
-      {loading ? (
-        <div className="flex items-center justify-center gap-2 text-[var(--color-muted)] py-12">
-          <Loader2 className="w-3 h-3 animate-spin" /> Loading API keys...
-        </div>
-      ) : keys.length === 0 ? (
+      {loading ? <ListViewSkeleton /> : keys.length === 0 ? (
         <div className="text-center py-12 text-[var(--color-muted)]">
           <Key className="w-8 h-8 mx-auto mb-2 opacity-40" />
           <p className="text-sm">No API keys yet.</p>

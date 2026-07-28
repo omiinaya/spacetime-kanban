@@ -1455,3 +1455,367 @@ async def test_bulk_archive_missing_task(client, mock_all):
     data = resp.json()
     assert data["archived"] == 0
     assert data["failed"][0]["error"] == "not found"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# ═══ NEW TESTS: Edge Cases, State Transitions, Error Handling ═════════
+# ════════════════════════════════════════════════════════════════════════
+
+# ── State Transition Edge Cases ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_complete_unclaimed_task_409(client, mock_all):
+    """Completing an unclaimed/available task should return 409 Conflict."""
+    mock_all["call"].side_effect = HTTPException(
+        status_code=409,
+        detail="Reducer failed: Cannot complete — task is not in_progress (status: available)",
+    )
+    resp = await client.post(
+        "/api/tasks/task_1/complete",
+        json={"result_notes": "Trying to complete an available task"},
+    )
+    assert resp.status_code == 409
+    data = resp.json()
+    assert "detail" in data
+    assert "not in_progress" in data["detail"] or "available" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_block_already_blocked_task_409(client, mock_all):
+    """Blocking an already-blocked task should return 409 Conflict."""
+    mock_all["call"].side_effect = HTTPException(
+        status_code=409,
+        detail="Reducer failed: Cannot block — task is already blocked",
+    )
+    resp = await client.post(
+        "/api/tasks/task_1/block",
+        json={"reason": "Block again"},
+    )
+    assert resp.status_code == 409
+    data = resp.json()
+    assert "detail" in data
+
+
+@pytest.mark.asyncio
+async def test_block_available_task_409(client, mock_all):
+    """Blocking an available (unclaimed) task should return 409 Conflict."""
+    mock_all["call"].side_effect = HTTPException(
+        status_code=409,
+        detail="Reducer failed: Cannot block — task is not in_progress (status: available)",
+    )
+    resp = await client.post(
+        "/api/tasks/task_1/block",
+        json={"reason": "Block before claim"},
+    )
+    assert resp.status_code == 409
+    data = resp.json()
+    assert "detail" in data
+
+
+@pytest.mark.asyncio
+async def test_claim_in_progress_task_409(client, mock_all):
+    """Claiming a task that's already in_progress should return 409 Conflict."""
+    mock_all["call"].side_effect = HTTPException(
+        status_code=409,
+        detail="Reducer failed: Task is already claimed by other-agent",
+    )
+    resp = await client.post(
+        "/api/tasks/task_1/claim",
+        json={"agent_id": "second-agent"},
+    )
+    assert resp.status_code == 409
+    data = resp.json()
+    assert "detail" in data
+    assert "already claimed" in data["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_complete_already_done_task_409(client, mock_all):
+    """Completing a task that's already done should return 409 Conflict."""
+    mock_all["call"].side_effect = HTTPException(
+        status_code=409,
+        detail="Reducer failed: Cannot complete — task is already done",
+    )
+    resp = await client.post(
+        "/api/tasks/task_1/complete",
+        json={"result_notes": "Already finished"},
+    )
+    assert resp.status_code == 409
+    data = resp.json()
+    assert "detail" in data
+
+
+# ── Empty / Invalid Input Handling ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_task_empty_title_string(client, mock_all):
+    """Creating a task with empty title string — API accepts it (no Pydantic constraint)."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = []  # no dedup match
+    resp = await client.post(
+        "/api/tasks",
+        json={"title": "", "repo": "test"},
+    )
+    # The Pydantic model allows empty strings; backend processes it
+    assert resp.status_code in (200, 201)
+    data = resp.json()
+    assert data.get("status") == "created"
+
+
+@pytest.mark.asyncio
+async def test_create_task_very_long_title(client, mock_all):
+    """Creating a task with a very long title should succeed."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = []
+    long_title = "A" * 5000
+    resp = await client.post(
+        "/api/tasks",
+        json={"title": long_title, "repo": "test"},
+    )
+    assert resp.status_code in (200, 201)
+    data = resp.json()
+    assert data.get("status") == "created"
+
+
+@pytest.mark.asyncio
+async def test_create_task_invalid_priority_type(client, mock_all):
+    """Creating a task with a string instead of int for priority should return 422."""
+    resp = await client.post(
+        "/api/tasks",
+        json={"title": "Bad priority", "priority": "not-a-number", "repo": "test"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_assign_non_existent_label_to_task(client, mock_all):
+    """Assigning a non-existent label ID to a task should still return updated."""
+    mock_all["param"].return_value = []  # No existing labels
+    resp = await client.post(
+        "/api/tasks/task_1/labels",
+        json={"label_ids": ["lbl_nonexistent"]},
+    )
+    # The endpoint calls assign_label_to_task which may succeed or fail silently
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "updated"
+
+
+@pytest.mark.asyncio
+async def test_create_label_duplicate_name(client, mock_all):
+    """Creating a label with a duplicate name should return 201 or 409 depending on backend."""
+    # Simulate label already existing by having param return a row
+    mock_all["param"].return_value = [
+        {
+            "id": "lbl_existing",
+            "name": "bug",
+            "color": "#ef4444",
+            "description": "Existing bug label",
+            "created_at": 1000,
+        }
+    ]
+    resp = await client.post(
+        "/api/labels",
+        json={"name": "bug", "color": "#ef4444", "description": "Duplicate label"},
+    )
+    # The route doesn't check for duplicates; it calls add_label reducer
+    # If the reducer rejects duplicates, we'd see 409; otherwise 201
+    assert resp.status_code in (201, 409)
+
+
+# ── Analytics with Empty Data ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_analytics_throughput_empty(client, mock_all):
+    """Throughput analytics should return daily zeros when no done tasks exist."""
+    resp = await client.get("/api/analytics/throughput?days=7")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 8  # days=7 → 8 entries (today + 7 past days)
+    for entry in data:
+        assert "date" in entry
+        assert entry["completed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_analytics_burndown_empty(client, mock_all):
+    """Burndown analytics should return zero structure when no tasks exist."""
+    resp = await client.get("/api/analytics/burndown?days=7")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "days" in data
+    assert "total_open_start" in data
+    assert "total_completed" in data
+    assert "total_remaining" in data
+    assert data["total_completed"] == 0
+    assert data["total_remaining"] == 0
+    assert len(data["days"]) == 7
+
+
+@pytest.mark.asyncio
+async def test_analytics_cycle_times_empty(client, mock_all):
+    """Cycle-times analytics should return empty list when no completed tasks exist."""
+    # _sql is mocked to return empty by default (no tasks, no logs)
+    resp = await client.get("/api/analytics/cycle-times")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
+@pytest.mark.asyncio
+async def test_analytics_agents_empty(client, mock_all):
+    """Agents analytics should return empty list when no agents registered."""
+    resp = await client.get("/api/analytics/agents")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
+# ── Webhook CRUD Edge Cases ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_webhook_404(client, mock_webhooks, mock_all):
+    """DELETE /api/webhooks/{id} for a non-existent webhook should return 404."""
+    # Mock webhooks.remove_webhook to return False (not found)
+    with patch("routes.webhook_subs.webhooks.remove_webhook", return_value=False):
+        resp = await client.delete("/api/webhooks/wh_nonexistent")
+    assert resp.status_code == 404
+    data = resp.json()
+    assert "detail" in data
+
+
+@pytest.mark.asyncio
+async def test_webhook_test_not_found_404(client, mock_webhooks, mock_all, enable_auth):
+    """POST /api/webhooks/{id}/test for a non-existent webhook should return 404."""
+    mock_webhooks["param"].return_value = []  # get_webhook returns None
+    resp = await client.post(
+        "/api/webhooks/wh_nonexistent/test",
+        headers={"X-API-Key": "test-api-key-123"},
+    )
+    assert resp.status_code == 404
+    data = resp.json()
+    assert "detail" in data
+
+
+@pytest.mark.asyncio
+async def test_get_webhook_deliveries_with_data(client, mock_webhooks):
+    """GET /api/webhooks/{id}/deliveries should return stored deliveries."""
+    mock_webhooks["param"].return_value = [
+        {
+            "id": "del_1",
+            "webhook_id": "wh_test123",
+            "event": "created",
+            "url": "https://hooks.example.com/hook",
+            "status_code": 200,
+            "response_body": "OK",
+            "success": True,
+            "delivered_at": 2000,
+        }
+    ]
+    resp = await client.get("/api/webhooks/wh_test123/deliveries")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["event"] == "created"
+    assert data[0]["success"] is True
+
+
+# ── Schema Migrations ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_schema_migrations_alias(client, mock_all):
+    """GET /api/schema-migrations (alias) should return unordered migrations."""
+    mock_all["sql"].return_value = [
+        {
+            "version": "2026-07-14-01-add-sprint",
+            "description": "Add sprint and archive fields",
+            "applied_at": 2000,
+            "applied_by": "test-user",
+            "checksum": "abc123",
+        },
+        {
+            "version": "2026-07-13-01-initial",
+            "description": "Initial schema",
+            "applied_at": 1000,
+            "applied_by": "system",
+            "checksum": None,
+        },
+    ]
+    resp = await client.get("/api/schema-migrations")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    versions = {m["version"] for m in data}
+    assert "2026-07-14-01-add-sprint" in versions
+    assert "2026-07-13-01-initial" in versions
+    # Check that all fields are present
+    for m in data:
+        assert "applied_at" in m
+        assert "applied_by" in m
+        assert "checksum" in m or m.get("checksum") is None
+
+
+@pytest.mark.asyncio
+async def test_record_migration_all_fields(client, mock_all):
+    """POST /api/migrations with all optional fields should record successfully."""
+    resp = await client.post(
+        "/api/migrations",
+        json={
+            "version": "2026-07-20-01-add-labels",
+            "description": "Add kanban_labels table and assignments",
+            "applied_by": "ci-bot",
+            "checksum": "sha256:aabbccddee",
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "recorded"
+    assert data["version"] == "2026-07-20-01-add-labels"
+    # Verify the reducer was called with all fields
+    migration_calls = [
+        c for c in mock_all["call"].call_args_list if c[0][0] == "record_migration"
+    ]
+    assert len(migration_calls) == 1
+    args = migration_calls[0][0][1]
+    assert args[0] == "2026-07-20-01-add-labels"
+    assert args[1] == "Add kanban_labels table and assignments"
+    assert args[2] == "ci-bot"
+    assert args[3] == "sha256:aabbccddee"
+
+
+# ── Auth Middleware Additional Tests ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_patch_task_without_auth_401(client, mock_all, enable_auth):
+    """PATCH /api/tasks/{id} without API key should return 401."""
+    resp = await client.patch(
+        "/api/tasks/task_1",
+        json={"title": "Hacked title"},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_delete_task_without_auth_401(client, mock_all, enable_auth):
+    """DELETE /api/tasks/{id} without API key should return 401."""
+    resp = await client.delete("/api/tasks/task_1")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_claim_without_auth_401(client, mock_all, enable_auth):
+    """POST /api/tasks/{id}/claim without API key should return 401."""
+    resp = await client.post(
+        "/api/tasks/task_1/claim",
+        json={"agent_id": "test-agent"},
+    )
+    assert resp.status_code == 401

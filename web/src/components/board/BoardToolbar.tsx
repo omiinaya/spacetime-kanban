@@ -122,6 +122,7 @@ export function BoardToolbar({
                 : 'text-[var(--color-muted)] hover:text-[var(--color-foreground)]'
             }`}
             title="Card view (detailed)"
+            aria-label="Card view (detailed)"
           ><LayoutGrid className="w-3 h-3" /></button>
           <button onClick={() => { setViewMode('board'); setCompactMode(true) }}
             className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors ${
@@ -130,6 +131,7 @@ export function BoardToolbar({
                 : 'text-[var(--color-muted)] hover:text-[var(--color-foreground)]'
             }`}
             title="Card view (compact)"
+            aria-label="Card view (compact)"
           ><List className="w-3 h-3" /></button>
           <button onClick={() => setViewMode('list')}
             className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors ${
@@ -138,6 +140,7 @@ export function BoardToolbar({
                 : 'text-[var(--color-muted)] hover:text-[var(--color-foreground)]'
             }`}
             title="Table / list view"
+            aria-label="Table / list view"
           ><span className="text-[11px] font-mono font-bold">≡</span></button>
         </div>
         <button onClick={onShowGraph}

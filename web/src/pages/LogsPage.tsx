@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Loader2, AlertCircle, Search, X, ChevronDown, Clock, Activity, Users, Filter } from 'lucide-react'
 import { api, LogEntry, LogStats } from '../api'
+import { ListViewSkeleton } from '../components/Skeleton'
 
 const ACTION_ICONS: Record<string, string> = {
   created: '🆕', claimed: '👤', unclaimed: '↩️', completed: '✅',
@@ -247,11 +248,7 @@ export default function LogsPage() {
       )}
 
       {/* Log timeline */}
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-6 h-6 animate-spin text-[var(--color-muted)]" />
-        </div>
-      ) : logs.length === 0 ? (
+      {loading ? <ListViewSkeleton /> : logs.length === 0 ? (
         <div className="text-center py-12 text-sm text-[var(--color-muted)]">
           {hasActiveFilters ? 'No logs match your filters.' : 'No activity yet. Create or claim a task to see logs.'}
         </div>

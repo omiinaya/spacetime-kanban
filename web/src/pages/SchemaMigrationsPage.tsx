@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api, type SchemaMigration } from '../api'
 import { Database, Loader2, AlertCircle } from 'lucide-react'
+import { ListViewSkeleton } from '../components/Skeleton'
 
 export default function SchemaMigrationsPage() {
   const [migrations, setMigrations] = useState<SchemaMigration[]>([])
@@ -49,11 +50,7 @@ export default function SchemaMigrationsPage() {
         </div>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center gap-2 text-[var(--color-muted)] py-12">
-          <Loader2 className="w-3 h-3 animate-spin" /> Loading migrations...
-        </div>
-      ) : migrations.length === 0 ? (
+      {loading ? <ListViewSkeleton /> : migrations.length === 0 ? (
         <div className="text-center py-12 text-[var(--color-muted)]">
           <Database className="w-8 h-8 mx-auto mb-2 opacity-40" />
           <p className="text-sm">No schema migrations recorded.</p>
