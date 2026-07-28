@@ -296,7 +296,8 @@ async def task_dispatcher(interval: int):
                     f"/api/tasks/{tid}/claim",
                     {"agent_id": settings.agent_id},
                 )
-                if result and "error" not in str(result):
+                # Only spawn if claim succeeded (status 200 = claimed, 409 = already claimed)
+                if result and result.get("status") in ("claimed", "ok"):
                     _spawn_worker(tid, title, repo)
 
         except asyncio.CancelledError:
@@ -324,6 +325,38 @@ async def stale_watcher(interval: int):
             now_ms = _now_ms()
             unclaimed = 0
 
+            # Batch-check heartbeats: fetch logs for all our inProgress tasks in one call
+            our_tids = [
+                t["id"]
+                for t in in_progress
+                if t.get("assigned_to") == settings.agent_id
+            ]
+            if not our_tids:
+                continue
+
+            # Fetch heartbeat timestamps for all our tasks in one batch call
+            # (requires endpoint support — fallback to per-task if unavailable)
+            heartbeat_map: dict[str, int | None] = {}
+            try:
+                tid_param = ",".join(our_tids[:100])  # Batch limit
+                batch_logs = await _api_get(f"/api/logs/batch?task_ids={tid_param}&action=heartbeat&limit=1")
+                if batch_logs and isinstance(batch_logs, dict):
+                    heartbeat_map = batch_logs
+            except Exception:
+                pass
+
+            if not heartbeat_map:
+                # Fallback: per-task heartbeat check (slower but works)
+                for tid in our_tids:
+                    logs = await _api_get(f"/api/logs?task_id={tid}&limit=5")
+                    if logs:
+                        for entry in reversed(logs):
+                            if entry.get("action") == "heartbeat" and entry.get("timestamp"):
+                                heartbeat_map[tid] = entry["timestamp"]
+                                break
+                    if tid not in heartbeat_map:
+                        heartbeat_map[tid] = None
+
             for t in in_progress:
                 if t.get("assigned_to") != settings.agent_id:
                     continue
@@ -335,14 +368,7 @@ async def stale_watcher(interval: int):
                 if claim_age_min < 5:
                     continue  # Grace period for worker boot
 
-                # Check heartbeat via task logs
-                hb_ts = None
-                logs = await _api_get(f"/api/logs?task_id={tid}&limit=5")
-                if logs:
-                    for entry in reversed(logs):
-                        if entry.get("action") == "heartbeat" and entry.get("timestamp"):
-                            hb_ts = entry["timestamp"]
-                            break
+                hb_ts = heartbeat_map.get(tid)
 
                 hb_age_min = (now_ms - hb_ts) / 60000 if hb_ts else 999
 
@@ -652,23 +678,27 @@ async def worker_death_watcher(interval: int):
             await asyncio.sleep(interval)
 
             crashed = _check_crashed_workers()
+
+            # Always check for hung workers (regardless of crashed workers)
+            now = time.monotonic()
+            for tid in list(_worker_spawn_times.keys()):
+                spawn_time = _worker_spawn_times.get(tid)
+                # Use KANBAN_LLM_TIMEOUT + 300s grace to avoid killing workers
+                # before their own timeout fires
+                max_hung = int(os.environ.get("KANBAN_LLM_TIMEOUT", "3600")) + 300
+                if spawn_time and now - spawn_time > max_hung:
+                    proc = _worker_processes.get(tid)
+                    if proc and proc.poll() is None:
+                        print(
+                            f"[scheduler:deathwatch] Task {tid[:20]} worker hung for >{max_hung}s — killing"
+                        )
+                        proc.kill()
+                        _worker_processes.pop(tid, None)
+                        _worker_spawn_times.pop(tid, None)
+                        _worker_stderr_data.pop(tid, None)
+                        _worker_crash_counts.pop(tid, None)
+
             if not crashed:
-                # Check for hung workers that have been alive too long
-                now = time.monotonic()
-                for tid in list(_worker_spawn_times.keys()):
-                    spawn_time = _worker_spawn_times.get(tid)
-                    # Use KANBAN_LLM_TIMEOUT + 300s grace to avoid killing workers
-                    # before their own timeout fires
-                    max_hung = int(os.environ.get("KANBAN_LLM_TIMEOUT", "3600")) + 300
-                    if spawn_time and now - spawn_time > max_hung:
-                        proc = _worker_processes.get(tid)
-                        if proc and proc.poll() is None:
-                            print(
-                                f"[scheduler:deathwatch] Task {tid[:20]} worker hung for >10m — killing"
-                            )
-                            proc.kill()
-                            _worker_processes.pop(tid, None)
-                            _worker_spawn_times.pop(tid, None)
                 continue
 
             now = time.monotonic()
@@ -759,7 +789,7 @@ async def _seed_initial_workers():
             title = task.get("title", "?")
             repo = task.get("repo", "")
             result = await _api_post(f"/api/tasks/{tid}/claim", {"agent_id": settings.agent_id})
-            if result and "error" not in str(result):
+            if result and result.get("status") in ("claimed", "ok"):
                 _spawn_worker(tid, title, repo)
                 print(f"[scheduler:seed] Spawned worker for {tid[:20]} — {title[:40]}")
     except Exception as e:
@@ -816,15 +846,15 @@ async def zombie_cleaner(interval: int):
 
 
 def _restart_server():
-    """Kill the current process and let the service manager restart it.
+    """Kill the current process so the service manager restarts it.
 
-    Uses os._exit(42) — the service manager systemd/supervisor should
-    see the non-zero exit and auto-restart the process.
-    If running standalone (no service manager), this is a no-op warning.
+    Uses os._exit(42) — the service manager (systemd) sees the non-zero
+    exit code and auto-restarts the process.
+    If running standalone (no service manager), this causes an abrupt exit.
     """
-    import signal
-    print("[scheduler:self-heal] Sending SIGTERM to self for restart")
-    os.kill(os.getpid(), signal.SIGTERM)
+    import os as _os
+    print("[scheduler:self-heal] Exiting with code 42 for service manager restart")
+    _os._exit(42)
 
 
 async def self_improver(interval: int):
@@ -984,7 +1014,7 @@ async def _recover_stale_tasks() -> int:
     Retries up to 3 times if the API is temporarily unavailable.
     Returns the number of tasks recovered.
     """
-    for attempt in range(3):
+    for _attempt in range(3):
         stale = await _api_get("/api/tasks?status=inProgress")
         if stale is not None:
             break

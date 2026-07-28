@@ -81,7 +81,7 @@ def _api_post(path: str, data: dict) -> dict | None:
 def _fetch_existing_titles() -> set[str]:
     """Fetch all task titles from the board (including done tasks) for dedup."""
     existing = set()
-    for status in ("available", "in_progress", "blocked", "done"):
+    for status in ("available", "inProgress", "blocked", "done"):
         tasks = _api_get(f"/api/tasks?status={status}&limit=500")
         if tasks:
             for t in tasks:

@@ -50,6 +50,52 @@ async def list_logs(
     return page
 
 
+@router.get("/api/logs/batch")
+async def batch_logs(
+    task_ids: str,
+    action: str = "heartbeat",
+    limit: int = 1,
+):
+    """Batch fetch the latest log entries for multiple task IDs.
+
+    Returns dict of {task_id: latest_log_or_null} for up to 100 task IDs.
+    Used by the scheduler stale_watcher to check heartbeats in one API call
+    instead of N individual calls.
+    """
+    tids = [t.strip() for t in task_ids.split(",") if t.strip()][:100]
+    if not tids:
+        return {}
+
+    rows = await _sql("SELECT * FROM task_logs")
+    logs = [_row_to_log(r) for r in rows]
+
+    # Filter to requested task IDs
+    tid_set = set(tids)
+    matching = [rec for rec in logs if rec.task_id in tid_set]
+
+    # Filter by action
+    if action:
+        action_set = set(a.strip() for a in action.split(",") if a.strip())
+        matching = [rec for rec in matching if rec.action in action_set]
+
+    # Sort by timestamp descending per task
+    matching.sort(key=lambda rec: (rec.task_id, -rec.timestamp))
+
+    # Take the latest entry per task
+    result: dict[str, dict | None] = {}
+    for rec in matching:
+        tid = rec.task_id
+        if tid not in result:
+            result[tid] = rec.model_dump()
+
+    # Ensure all requested task IDs appear (None = no heartbeat found)
+    for tid in tids:
+        if tid not in result:
+            result[tid] = None
+
+    return result
+
+
 @router.get("/api/logs/stats")
 async def logs_stats():
     """Get activity log summary statistics."""

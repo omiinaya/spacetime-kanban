@@ -1,8 +1,9 @@
 node_modules/
 dist/
 target/
-# Auto-generated status files
+# Kanban runtime artifacts
 _improvement_status.json
+server/_improvement_status.json
 _execution_status.md
 
 # Python

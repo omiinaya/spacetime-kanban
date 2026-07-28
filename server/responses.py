@@ -33,7 +33,7 @@ def _row_to_task(r: dict) -> Any:
         max_attempts=r.get("max_attempts", 3),
         fail_reason=r.get("fail_reason"),
         subtask_of=r.get("subtask_of"),
-        subtasks=r.get("subtaks"),
+        subtasks=r.get("subtasks"),
         due_by=r.get("due_by"),
         sprint=r.get("sprint"),
         archived=r.get("archived", False),
