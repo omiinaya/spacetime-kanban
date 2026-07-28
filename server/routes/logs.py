@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from shared import LogOut, _row_to_log, _sql
+from shared import LogOut, _row_to_log, _sql, _sql_param
 
 router = APIRouter()
 
@@ -19,17 +19,37 @@ async def list_logs(
     limit: int = 50,
 ):
     """List activity logs with filtering and pagination."""
-    rows = await _sql("SELECT * FROM task_logs")
+    # Build targeted SQL query instead of loading ALL rows
+    conditions = []
+    params: dict[str, str] = {}
+    if task_id:
+        conditions.append("task_id = '{task_id}'")
+        params["task_id"] = task_id
+    if action:
+        # Multiple actions: "claimed,completed,blocked"
+        actions = [a.strip() for a in action.split(",") if a.strip()]
+        if actions:
+            # STDB doesn't support OR or IN — filter in Python
+            pass
+    if agent_id:
+        conditions.append("agent_id = '{agent_id}'")
+        params["agent_id"] = agent_id
+    if since:
+        conditions.append(f"timestamp > {since}")
+    if until:
+        conditions.append(f"timestamp < {until}")
+
+    sql = "SELECT * FROM task_logs"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+
+    rows = await _sql_param(sql, **params) if params else await _sql(sql)
     logs = [_row_to_log(r) for r in rows]
 
-    # Apply filters
-    if task_id:
-        logs = [rec for rec in logs if rec.task_id == task_id]
+    # Apply Python-side filters for unsupported SQL patterns
     if action:
         action_set = set(a.strip() for a in action.split(",") if a.strip())
         logs = [rec for rec in logs if rec.action in action_set]
-    if agent_id:
-        logs = [rec for rec in logs if rec.agent_id == agent_id]
     if search:
         q = search.lower()
         logs = [
@@ -39,13 +59,8 @@ async def list_logs(
             or q in rec.task_id.lower()
             or q in rec.action.lower()
         ]
-    if since:
-        logs = [rec for rec in logs if rec.timestamp >= since]
-    if until:
-        logs = [rec for rec in logs if rec.timestamp <= until]
 
     logs.sort(key=lambda rec: -rec.timestamp)
-    len(logs)
     page = logs[offset : offset + limit]
     return page
 
@@ -66,15 +81,22 @@ async def batch_logs(
     if not tids:
         return {}
 
-    rows = await _sql("SELECT * FROM task_logs")
+    # SQL WHERE on action (String field) to reduce rows — STDB doesn't support IN
+    sql = "SELECT * FROM task_logs"
+    if action:
+        # Single action only (default: "heartbeat") — no multi-action support in SQL
+        action_val = action.split(",")[0].strip()
+        sql += f" WHERE action = '{action_val}'"
+
+    rows = await _sql(sql)
     logs = [_row_to_log(r) for r in rows]
 
-    # Filter to requested task IDs
+    # Filter to requested task IDs (Python-side — STDB has no IN)
     tid_set = set(tids)
     matching = [rec for rec in logs if rec.task_id in tid_set]
 
-    # Filter by action
-    if action:
+    # Filter by rest of actions (if multi-action)
+    if action and len(action.split(",")) > 1:
         action_set = set(a.strip() for a in action.split(",") if a.strip())
         matching = [rec for rec in matching if rec.action in action_set]
 

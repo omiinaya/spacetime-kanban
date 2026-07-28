@@ -298,7 +298,17 @@ async def task_dispatcher(interval: int):
                 )
                 # Only spawn if claim succeeded (status 200 = claimed, 409 = already claimed)
                 if result and result.get("status") in ("claimed", "ok"):
-                    _spawn_worker(tid, title, repo)
+                    spawned = _spawn_worker(tid, title, repo)
+                    if not spawned:
+                        # Spawn failed — unclaim so task isn't stuck inProgress
+                        print(
+                            f"[scheduler:dispatcher] Spawn FAILED for {tid[:20]} "
+                            f"({title[:40]}) — unclaiming"
+                        )
+                        await _api_post(
+                            f"/api/tasks/{tid}/unclaim",
+                            {"agent_id": settings.agent_id},
+                        )
 
         except asyncio.CancelledError:
             break
@@ -430,7 +440,10 @@ async def dead_board_monitor(interval: int):
 
             overview = await _api_get("/api/analytics/overview")
             if not overview:
-                # Server might be down — but only restart if no workers are running
+                # Re-check workers after the async gap — a worker may have started
+                if _get_worker_count() > 0:
+                    print("[scheduler:deadboard] Worker started during async gap — skipping restart")
+                    continue
                 print("[scheduler:deadboard] Overview API returned nothing — no workers active either")
                 _restart_server()
                 await asyncio.sleep(5)
@@ -593,6 +606,22 @@ async def task_archiver(interval: int):
             now_ms = _now_ms()
             day_ms = 86400_000
             archived = 0
+
+            # Seed/sample tasks >24h → archive (created by "seed" for onboarding)
+            available_tasks = await _api_get("/api/tasks?status=available&archived=false&limit=500")
+            if available_tasks:
+                old_seed = [
+                    t["id"]
+                    for t in available_tasks
+                    if t.get("created_by") == "seed"
+                    and t.get("created_at", 0)
+                    and (now_ms - t["created_at"]) > day_ms
+                ]
+                if old_seed:
+                    result = await _api_post("/api/tasks/bulk-archive", {"task_ids": old_seed})
+                    if result:
+                        archived += len(old_seed)
+                        print(f"[scheduler:archiver] Archived {len(old_seed)} old seed/sample task(s)")
 
             # Done tasks >7 days
             done_tasks = await _api_get("/api/tasks?status=done&archived=false&limit=500")
@@ -790,8 +819,11 @@ async def _seed_initial_workers():
             repo = task.get("repo", "")
             result = await _api_post(f"/api/tasks/{tid}/claim", {"agent_id": settings.agent_id})
             if result and result.get("status") in ("claimed", "ok"):
-                _spawn_worker(tid, title, repo)
-                print(f"[scheduler:seed] Spawned worker for {tid[:20]} — {title[:40]}")
+                if _spawn_worker(tid, title, repo):
+                    print(f"[scheduler:seed] Spawned worker for {tid[:20]} — {title[:40]}")
+                else:
+                    print(f"[scheduler:seed] Spawn FAILED for {tid[:20]} — unclaiming")
+                    await _api_post(f"/api/tasks/{tid}/unclaim", {"agent_id": settings.agent_id})
     except Exception as e:
         print(f"[scheduler:seed] Error: {e}")
 

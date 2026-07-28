@@ -258,87 +258,10 @@ def handle_remove_unused_imports(ctx: WorkerContext) -> tuple[bool, str]:
     )
 
 
-@register(r"add\s+test\s+for")
-def handle_add_test_boilerplate(ctx: WorkerContext) -> tuple[bool, str]:
-    """Add a basic test boilerplate for a module or function.
+# NOTE: "Add test for X" and "Add (unit)? tests? for N untested...module(s)"
+# are handled by handle_add_test_scaffold below (registered later in file).
+# The boilerplate handler was removed as the scaffold handler is more comprehensive.
 
-    Creates a test file if one doesn't exist, or adds a test function
-    to an existing test file. Follows the project's test conventions.
-    """
-    repo_path = ctx.repo_path
-    if not repo_path:
-        return False, f"Repo directory not found: {ctx.repo}"
-
-    title = ctx.title
-    # Extract the target from "Add test for X"
-    match = re.search(r"add\s+test\s+for\s+(.+)", title, re.IGNORECASE)
-    if not match:
-        return False, "Could not determine what to add a test for from the task title"
-
-    target = match.group(1).strip().rstrip(".")
-
-    # Determine file type based on target
-    if any(kw in target.lower() for kw in ["api", "endpoint", "route", "handler"]):
-        # Python API test
-        test_dir = os.path.join(repo_path, "server", "tests")
-        if not os.path.isdir(test_dir):
-            os.makedirs(test_dir, exist_ok=True)
-
-        test_file = os.path.join(test_dir, "test_api.py")
-        test_fn = f"test_{target.lower().replace(' ', '_').replace('-', '_')[:40]}"
-
-        if os.path.isfile(test_file):
-            with open(test_file) as f:
-                content = f.read()
-            if f"def {test_fn}" in content:
-                return False, f"Test {test_fn} already exists in {test_file}"
-
-        boilerplate = f"""
-async def {test_fn}():
-    \"\"\"Test {target}.\"\"\"
-    # TODO: implement
-    assert True
-"""
-        with open(test_file, "a") as f:
-            f.write(boilerplate)
-
-        return True, f"Added test boilerplate {test_fn} to {test_file}"
-
-    elif any(kw in target.lower() for kw in ["rust", "fn ", "function", "module", "reducer"]):
-        # Rust test
-        stdb_dir = os.path.join(repo_path, "server", "spacetimedb", "src")
-        if not os.path.isdir(stdb_dir):
-            return False, f"No STDB src directory in {ctx.repo}"
-
-        # Find the most relevant test file
-        test_files = [f for f in os.listdir(stdb_dir) if f.endswith("tests.rs") or f == "mod.rs"]
-        if not test_files:
-            test_files = [f for f in os.listdir(stdb_dir) if f.endswith(".rs")]
-            test_files = test_files[:1]
-
-        if not test_files:
-            return False, "No Rust source files found for tests"
-
-        test_file = os.path.join(stdb_dir, test_files[0])
-        safe_name = target.lower().replace(" ", "_").replace("-", "_")[:30]
-        boilerplate = f"""
-#[cfg(test)]
-mod {safe_name}_tests {{
-    use super::*;
-
-    #[test]
-    fn test_{safe_name}() {{
-        // TODO: implement
-        assert!(true);
-    }}
-}}
-"""
-        with open(test_file, "a") as f:
-            f.write(boilerplate)
-
-        return True, f"Added test module {safe_name}_tests to {test_file}"
-
-    return False, f"Could not determine test type from: {target}"
 
 
 @register(r"extract\s+.*\s+into\s+(sub.module|separate|module)")
@@ -1594,8 +1517,8 @@ def handle_stale_todos(ctx: WorkerContext) -> tuple[bool, str]:
     return True, "No stale TODOs found in the scanned files (may have been resolved)"
 
 
+@register(r"add\s+test\s+for\s+\w+")
 @register(r"add\s+(unit\s+)?tests?\s+for\s+\d+\s+untested\s+.*module")
-@register(r"add\s+test\s+for\s+")
 def handle_add_test_scaffold(ctx: WorkerContext) -> tuple[bool, str]:
     """Create test file scaffolds for untested modules.
 
@@ -1608,7 +1531,6 @@ def handle_add_test_scaffold(ctx: WorkerContext) -> tuple[bool, str]:
         return False, f"Repo directory not found: {ctx.repo}"
 
     description = (ctx.task or {}).get("description", "")  # type: ignore[union-attr]
-    title = ctx.title.lower()
 
     # Parse files from description or title
     files_to_test: list[str] = []
@@ -1658,7 +1580,6 @@ def handle_add_test_scaffold(ctx: WorkerContext) -> tuple[bool, str]:
             if test_path and not os.path.isfile(test_path):
                 os.makedirs(os.path.dirname(test_path), exist_ok=True)
                 module_path = rel_path.replace("/", ".").rstrip(".py")
-                rel_dir_for_import = dir_name.replace("/", ".") if dir_name else "."
 
                 content = f'''"""Tests for {rel_path}."""
 import pytest

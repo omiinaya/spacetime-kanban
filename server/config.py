@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # ── Scheduler (background tasks inside server process) ──
     scheduler_enabled: bool = True
-    dispatcher_interval_seconds: int = 30
+    dispatcher_interval_seconds: int = 5
     stale_check_interval_seconds: int = 120
     dead_board_interval_seconds: int = 3600  # Don't restart too often — workers need time
     template_interval_seconds: int = 900
