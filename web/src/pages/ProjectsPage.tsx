@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Loader2, AlertCircle, Plus, FolderKanban, ChevronUp, ChevronDown, Eye, EyeOff, Trash2, Save } from 'lucide-react'
 import { api, Project } from '../api'
+import { CardGridSkeleton } from '../components/Skeleton'
 
 const PRIORITY_LABELS: Record<number, string> = {
   0: 'Urgent',
@@ -116,13 +117,7 @@ export default function ProjectsPage() {
 
   const sorted = [...projects].sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name))
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="w-6 h-6 animate-spin text-[var(--color-muted)]" />
-      </div>
-    )
-  }
+  if (loading) return <CardGridSkeleton />
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">

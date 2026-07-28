@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { api, type Task } from '../api'
-import { CalendarDays, Loader2, AlertCircle, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
+import { CalendarDays, AlertCircle, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS } from '../components/constants'
+import { CalendarSkeleton } from '../components/Skeleton'
 
 const STATUS_COLORS: Record<string, string> = {
   available: '#3b82f6',
@@ -106,11 +107,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center gap-2 text-[var(--color-muted)] py-12">
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading...
-        </div>
-      ) : error ? (
+      {loading ? <CalendarSkeleton /> : error ? (
         <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
           <AlertCircle className="w-4 h-4" /> {error}
         </div>

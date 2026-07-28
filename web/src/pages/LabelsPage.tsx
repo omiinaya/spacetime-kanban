@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Loader2, AlertCircle, Plus, X, Tag, Palette } from 'lucide-react'
 import { api, KanbanLabel } from '../api'
+import { CardGridSkeleton } from '../components/Skeleton'
 
 const PRESET_COLORS = [
   '#0ea5e9', '#06b6d4', '#10b981', '#22c55e', '#84cc16',
@@ -89,13 +90,7 @@ export default function LabelsPage() {
     setEditDesc(label.description)
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 animate-spin text-[var(--color-muted)]" />
-      </div>
-    )
-  }
+  if (loading) return <CardGridSkeleton />
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6">

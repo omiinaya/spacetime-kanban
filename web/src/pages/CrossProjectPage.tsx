@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { LayoutDashboard, Loader2, AlertCircle, Layers, CheckCircle2, Clock, Ban, Archive } from 'lucide-react'
+import { LayoutDashboard, AlertCircle, Layers, CheckCircle2, Clock, Ban, Archive } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS } from '../components/constants'
+import { CardGridSkeleton } from '../components/Skeleton'
 
 const STATUS_COLORS: Record<string, string> = {
   available: '#3b82f6',
@@ -43,11 +44,7 @@ export default function CrossProjectPage() {
     load()
   }, [])
 
-  if (loading) return (
-    <div className="p-8 flex items-center justify-center gap-2 text-[var(--color-muted)]">
-      <Loader2 className="w-4 h-4 animate-spin" /> Loading cross-project data...
-    </div>
-  )
+  if (loading) return <CardGridSkeleton cards={4} />
 
   if (error) return (
     <div className="p-8">

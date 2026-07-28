@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { BarChart3, CheckCircle2, Clock, Users, AlertCircle, Layers, Loader2, Download, Activity } from 'lucide-react'
+import { BarChart3, CheckCircle2, Clock, Users, AlertCircle, Layers, Download, Activity } from 'lucide-react'
 import type { ComponentType } from 'react'
+import { AnalyticsSkeleton } from '../components/Skeleton'
 
 interface Overview {
   total: number
@@ -69,11 +70,7 @@ export default function AnalyticsPage() {
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVis) }
   }, [])
 
-  if (loading) return (
-    <div className="p-8 flex items-center justify-center gap-2 text-[var(--color-muted)]">
-      <Loader2 className="w-4 h-4 animate-spin" /> Loading analytics...
-    </div>
-  )
+  if (loading) return <AnalyticsSkeleton />
 
   if (error) return (
     <div className="p-8">

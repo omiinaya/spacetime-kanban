@@ -5,6 +5,7 @@ import {
   Activity, Cpu, Loader2, AlertCircle, Wifi, WifiOff,
   Clock, Circle, CheckCircle2, ExternalLink, RefreshCw
 } from 'lucide-react'
+import { AgentListSkeleton } from '../components/Skeleton'
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   online: { color: '#22c55e', label: 'Online' },
@@ -70,11 +71,7 @@ export default function AgentHealthPage() {
   const staleCount = agents.filter(a => a.stale).length
   const workingCount = agents.filter(a => a.current_task).length
 
-  if (loading) return (
-    <div className="p-8 flex items-center justify-center gap-2 text-[var(--color-muted)]">
-      <Loader2 className="w-4 h-4 animate-spin" /> Loading agents...
-    </div>
-  )
+  if (loading) return <AgentListSkeleton />
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-6">

@@ -4,6 +4,7 @@ import {
   WebhookIcon, Plus, Loader2, AlertCircle, Trash2, Send,
   CheckCircle2, XCircle, X, Zap, Edit3, History, ChevronDown, ChevronUp
 } from 'lucide-react'
+import { PageSkeleton } from '../components/Skeleton'
 
 const WEBHOOK_TYPES = ['discord', 'slack', 'telegram', 'generic']
 const ALL_EVENTS = ['created', 'claimed', 'unclaimed', 'completed', 'blocked', 'linked']
@@ -132,11 +133,7 @@ export default function WebhooksPage() {
     }
   }
 
-  if (loading) return (
-    <div className="p-8 flex items-center justify-center gap-2 text-[var(--color-muted)]">
-      <Loader2 className="w-4 h-4 animate-spin" /> Loading webhooks...
-    </div>
-  )
+  if (loading) return <PageSkeleton rows={4} />
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-6">

@@ -4,6 +4,7 @@ import {
   AlertTriangle, CheckCircle2,
 } from 'lucide-react'
 import { api, type Task } from '../api'
+import { PageSkeleton } from '../components/Skeleton'
 
 /** Normalize a fail_reason into a cluster key by stripping volatile counters/ids. */
 function clusterKey(reason: string | null | undefined): string {
@@ -116,6 +117,8 @@ export default function TriagePage() {
   }
 
   const now = Date.now()
+
+  if (loading) return <PageSkeleton rows={5} />
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
