@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type AgentHealth } from '../api'
 import { useNavigate } from 'react-router-dom'
 import {
-  Activity, Cpu, Loader2, AlertCircle, Wifi, WifiOff,
+  Activity, Cpu, AlertCircle, Wifi, WifiOff,
   Clock, Circle, CheckCircle2, ExternalLink, RefreshCw
 } from 'lucide-react'
 import { AgentListSkeleton } from '../components/Skeleton'
