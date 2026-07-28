@@ -1,5 +1,4 @@
 """Tests for server/mcp_server.py."""
-import pytest
 from server.mcp_server import *  # noqa: F401, F403
 
 

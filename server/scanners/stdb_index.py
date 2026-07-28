@@ -119,7 +119,8 @@ def _scan_rust_file(filepath: str) -> list[dict]:
                         "description": (
                             f"STDB table `{f['struct']}` has field `{f['field']}: {f['type']}` "
                             f"without `#[index(btree)]` in {f['file']}:{f['line']}. "
-                            f"This field looks like a foreign key and will be slow to query without an index."
+                            f"This field looks like a foreign key "
+                            f"and will be slow to query without an index."
                         ),
                         "priority": 1,
                         "scanner": "stdb_index",
@@ -151,22 +152,24 @@ def scan_stdb_index(repo_name: str, repo_path: str) -> list[dict]:
                 filepath = os.path.join(root, f)
                 findings.extend(_scan_rust_file(filepath))
 
-    total = len(findings)
     # No unindexed FK fields found at all — return empty, don't create a task
     if not findings:
         return []
 
     # Chunk into tasks of max 5 fields each
-    MAX_PER_TASK = 5
+    max_per_task = 5
     result = []
-    for i in range(0, len(findings), MAX_PER_TASK):
-        chunk = findings[i : i + MAX_PER_TASK]
-        task_num = i // MAX_PER_TASK + 1
-        total_chunks = (len(findings) + MAX_PER_TASK - 1) // MAX_PER_TASK
+    for i in range(0, len(findings), max_per_task):
+        chunk = findings[i : i + max_per_task]
+        task_num = i // max_per_task + 1
+        total_chunks = (len(findings) + max_per_task - 1) // max_per_task
         label = f" ({task_num}/{total_chunks})" if total_chunks > 1 else ""
 
         field_list = "\n".join(
-            f"  - `{f.get('struct', '?')}.{f.get('field', '?')}` in {f.get('file', '?')}:{f.get('line', '?')}"
+            (
+                f"  - `{f.get('struct', '?')}.{f.get('field', '?')}` "
+                f"in {f.get('file', '?')}:{f.get('line', '?')}"
+            )
             for f in chunk
         )
         file_count = len(set(f.get("file", "") for f in chunk))

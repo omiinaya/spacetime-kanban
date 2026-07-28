@@ -736,7 +736,8 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
                     if m:
                         findings["python"].append((rel, i, "raise X(literal)", m.group(1)[:80]))
                         continue
-                    # raise SomeException(non_string, "message") or raise SomeException("message", ...)
+                    # raise SomeException(non_string, "message")
+                    # or raise SomeException("message", ...)
                     for m in re.finditer(
                         r'raise\s+\w+\(.*?["\']([A-Za-z][A-Za-z0-9 \'\"().,:!?-]+?)["\']\s*\)', line
                     ):
@@ -817,7 +818,8 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
     if total == 0:
         return (
             True,
-            "No string-based errors found — typed errors already in use or not applicable in this repo",
+            "No string-based errors found — typed errors already"
+            " in use or not applicable in this repo",
         )
 
     # Group by file for reporting
@@ -928,7 +930,8 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
             created_msg = "error.rs already exists"
 
         suggested_enums.append(
-            f"Rust: `{enum_name}` ({len(variants)} variant(s) across {len(rust_combined)} file(s), {created_msg})"
+            f"Rust: `{enum_name}` ({len(variants)} variant(s)"
+            f" across {len(rust_combined)} file(s), {created_msg})"
         )
 
     # Python enum
@@ -972,7 +975,8 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
             created_msg = "errors.py already exists"
 
         suggested_enums.append(
-            f"Python: `{enum_name}` ({len(sorted_py_msgs)} variant(s) across {len(py_by_file)} file(s), {created_msg})"
+            f"Python: `{enum_name}` ({len(sorted_py_msgs)} variant(s)"
+            f" across {len(py_by_file)} file(s), {created_msg})"
         )
 
     # ── 6. Build summary ──────────────────────────────────────────
@@ -989,7 +993,8 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
             f"{f} ({c})" for f, c in sorted(py_by_file.items(), key=lambda x: -x[1])
         )
         parts.append(
-            f"Python: {python_total} string-based error(s) in {len(py_by_file)} file(s): {file_list}"
+            f"Python: {python_total} string-based error(s)"
+            f" in {len(py_by_file)} file(s): {file_list}"
         )
 
     if suggested_enums:
@@ -1196,7 +1201,7 @@ def handle_scan_todos(ctx: WorkerContext) -> tuple[bool, str]:
             text=True,
             timeout=30,
         )
-        lines = [l for l in result.stdout.strip().split("\n") if l.strip()]
+        lines = [entry for entry in result.stdout.strip().split("\n") if entry.strip()]
         total = 0
         for line in lines[:30]:
             if ":" in line:
@@ -1306,7 +1311,11 @@ def handle_lint_code(ctx: WorkerContext) -> tuple[bool, str]:
             )
             fixed = result.stdout.strip()
             if fixed:
-                count = len([l for l in fixed.split("\n") if l.strip() and "Fixed" not in l])
+                filtered = [
+                    line for line in fixed.split("\n")
+                    if line.strip() and "Fixed" not in line
+                ]
+                count = len(filtered)
                 results.append(f"Python: {count} issue(s) fixed")
             else:
                 results.append("Python: ruff OK")
@@ -1430,7 +1439,11 @@ def handle_add_project_files(ctx: WorkerContext) -> tuple[bool, str]:
             try:
                 with open(contrib_path, "w") as f:
                     f.write(
-                        "# Contributing\n\n## How to contribute\n\n1. Fork the repo\n2. Create a feature branch\n3. Commit your changes\n4. Open a pull request\n"
+                        "# Contributing\n\n## How to contribute\n\n"
+                        "1. Fork the repo\n"
+                        "2. Create a feature branch\n"
+                        "3. Commit your changes\n"
+                        "4. Open a pull request\n"
                     )
                 created.append("CONTRIBUTING.md")
             except OSError:
@@ -1444,7 +1457,9 @@ def handle_add_project_files(ctx: WorkerContext) -> tuple[bool, str]:
             try:
                 with open(bug_path, "w") as f:
                     f.write(
-                        "---\nname: Bug report\nabout: Create a report to help us improve\n---\n\n**Describe the bug**\n...\n"
+                        "---\nname: Bug report\n"
+                        "about: Create a report to help us improve\n"
+                        "---\n\n**Describe the bug**\n...\n"
                     )
                 created.append(".github/ISSUE_TEMPLATE/bug_report.md")
             except OSError:
@@ -1454,7 +1469,10 @@ def handle_add_project_files(ctx: WorkerContext) -> tuple[bool, str]:
             try:
                 with open(feat_path, "w") as f:
                     f.write(
-                        "---\nname: Feature request\nabout: Suggest an idea\n---\n\n**Is your feature request related to a problem?**\n...\n"
+                        "---\nname: Feature request\n"
+                        "about: Suggest an idea\n"
+                        "---\n\n**Is your feature request related"
+                        " to a problem?**\n...\n"
                     )
                 created.append(".github/ISSUE_TEMPLATE/feature_request.md")
             except OSError:
@@ -1467,7 +1485,11 @@ def handle_add_project_files(ctx: WorkerContext) -> tuple[bool, str]:
             try:
                 with open(pr_path, "w") as f:
                     f.write(
-                        "## Description\n\nFixes #...\n\n## Type of change\n\n- [ ] Bug fix\n- [ ] New feature\n- [ ] Breaking change\n"
+                        "## Description\n\nFixes #...\n\n"
+                        "## Type of change\n\n"
+                        "- [ ] Bug fix\n"
+                        "- [ ] New feature\n"
+                        "- [ ] Breaking change\n"
                     )
                 created.append(".github/PULL_REQUEST_TEMPLATE.md")
             except OSError:
@@ -1729,7 +1751,10 @@ def handle_replace_unwrap_scanner(ctx: WorkerContext) -> tuple[bool, str]:
                         insert_at = i + 1
                     else:
                         break
-                comment = f"// TODO (kanban): Replace {unwrap_count} unwrap() call(s) with proper error handling"
+                comment = (
+                    f"// TODO (kanban): Replace {unwrap_count}"
+                    f" unwrap() call(s) with proper error handling"
+                )
                 if insert_at < len(lines) and "#" in lines[insert_at]:
                     insert_at += 1
                 lines.insert(insert_at, comment)

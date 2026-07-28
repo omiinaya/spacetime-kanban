@@ -85,37 +85,49 @@ def scan_test_gaps(repo_name: str, repo_path: str) -> list[dict]:
     py_gaps = _find_test_gaps_python(repo_path)
     rust_gaps = _find_test_gaps_rust(repo_path)
 
-    MAX_PER_TASK = (
+    max_per_task = (
         5  # Split findings into tasks of this max size so workers can actually finish them
     )
 
     if rust_gaps:
-        for i in range(0, len(rust_gaps), MAX_PER_TASK):
-            chunk = rust_gaps[i : i + MAX_PER_TASK]
+        for i in range(0, len(rust_gaps), max_per_task):
+            chunk = rust_gaps[i : i + max_per_task]
             summary = "\n".join(f"  - {g}" for g in chunk)
-            task_num = i // MAX_PER_TASK + 1
-            total_chunks = (len(rust_gaps) + MAX_PER_TASK - 1) // MAX_PER_TASK
+            task_num = i // max_per_task + 1
+            total_chunks = (len(rust_gaps) + max_per_task - 1) // max_per_task
             label = f" ({task_num}/{total_chunks})" if total_chunks > 1 else ""
             findings.append(
                 {
-                    "title": f"Add unit tests for {len(chunk)} untested Rust module(s) in {repo_name}{label}",
-                    "description": f"The following Rust source files are missing `#[cfg(test)]` blocks:\n\n{summary}",
+                    "title": (
+                        f"Add unit tests for {len(chunk)} untested "
+                        f"Rust module(s) in {repo_name}{label}"
+                    ),
+                    "description": (
+                        f"The following Rust source files "
+                        f"are missing `#[cfg(test)]` blocks:\n\n{summary}"
+                    ),
                     "priority": 3,
                     "scanner": "test_gaps",
                 }
             )
 
     if py_gaps:
-        for i in range(0, len(py_gaps), MAX_PER_TASK):
-            chunk = py_gaps[i : i + MAX_PER_TASK]
+        for i in range(0, len(py_gaps), max_per_task):
+            chunk = py_gaps[i : i + max_per_task]
             summary = "\n".join(f"  - {g}" for g in chunk)
-            task_num = i // MAX_PER_TASK + 1
-            total_chunks = (len(py_gaps) + MAX_PER_TASK - 1) // MAX_PER_TASK
+            task_num = i // max_per_task + 1
+            total_chunks = (len(py_gaps) + max_per_task - 1) // max_per_task
             label = f" ({task_num}/{total_chunks})" if total_chunks > 1 else ""
             findings.append(
                 {
-                    "title": f"Add tests for {len(chunk)} untested Python module(s) in {repo_name}{label}",
-                    "description": f"The following Python source files don't have corresponding test files:\n\n{summary}",
+                    "title": (
+                        f"Add tests for {len(chunk)} untested "
+                        f"Python module(s) in {repo_name}{label}"
+                    ),
+                    "description": (
+                        f"The following Python source files "
+                        f"don't have corresponding test files:\n\n{summary}"
+                    ),
                     "priority": 3,
                     "scanner": "test_gaps",
                 }

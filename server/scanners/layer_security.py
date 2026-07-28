@@ -26,7 +26,7 @@ def _check_env_in_git(repo_path: str) -> int:
             text=True,
             timeout=15,
         )
-        return len([l for l in result.stdout.strip().split("\n") if l.strip()])
+        return len([line for line in result.stdout.strip().split("\n") if line.strip()])
     except Exception:
         return 0
 
@@ -59,7 +59,7 @@ def _check_branch_protection(repo_path: str) -> bool:
             text=True,
             timeout=10,
         )
-        branches = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
+        branches = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
         return len(branches) > 1  # More than just origin/main
     except Exception:
         return False
@@ -76,8 +76,11 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
         findings.append(
             {
                 "title": f"Remove .env from git history in {repo_name} ({env_commits} commit(s))",
-                "description": f"The `.env` file was committed {env_commits} time(s). This may expose secrets "
-                f"in git history. Use `git filter-branch` or `bfg` to purge it.",
+                "description": (
+                    f"The `.env` file was committed {env_commits} time(s). "
+                    f"This may expose secrets in git history. "
+                    f"Use `git filter-branch` or `bfg` to purge it."
+                ),
                 "priority": 2,
                 "scanner": "prod_readiness",
             }
@@ -99,8 +102,10 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
             findings.append(
                 {
                     "title": f"Add Dockerfile to {repo_name}",
-                    "description": "This project has server code but no Dockerfile. Containerization "
-                    "simplifies deployment and environment consistency.",
+                    "description": (
+                        "This project has server code but no Dockerfile. "
+                        "Containerization simplifies deployment and environment consistency."
+                    ),
                     "priority": 3,
                     "scanner": "prod_readiness",
                 }
@@ -116,8 +121,11 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
             findings.append(
                 {
                     "title": f"Add Makefile or justfile to {repo_name}",
-                    "description": "This Rust project has no build automation (Makefile, justfile). "
-                    "Common commands like `build`, `test`, `lint` should be documented.",
+                    "description": (
+                        "This Rust project has no build automation "
+                        "(Makefile, justfile). "
+                        "Common commands like `build`, `test`, `lint` should be documented."
+                    ),
                     "priority": 3,
                     "scanner": "prod_readiness",
                 }
@@ -197,8 +205,11 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
         findings.append(
             {
                 "title": f"Enable pre-commit hooks in {repo_name}",
-                "description": f"Found {len(hooks)} hook(s) in `.githooks/` but they need to be activated "
-                f"with `git config core.hooksPath .githooks`.",
+                "description": (
+                    f"Found {len(hooks)} hook(s) in `.githooks/` "
+                    f"but they need to be activated "
+                    f"with `git config core.hooksPath .githooks`."
+                ),
                 "priority": 3,
                 "scanner": "prod_readiness",
             }

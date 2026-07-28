@@ -169,12 +169,12 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
     # ── Check large files ──
     large_files = _check_large_files(repo_path)
     if large_files:
-        MAX_PER_TASK = 2
-        for i in range(0, len(large_files), MAX_PER_TASK):
-            chunk = large_files[i : i + MAX_PER_TASK]
-            file_list = "\n".join(f"  - {f} ({l} lines)" for f, l in chunk)
-            task_num = i // MAX_PER_TASK + 1
-            total_chunks = (len(large_files) + MAX_PER_TASK - 1) // MAX_PER_TASK
+        max_per_task = 2
+        for i in range(0, len(large_files), max_per_task):
+            chunk = large_files[i : i + max_per_task]
+            file_list = "\n".join(f"  - {f} ({line} lines)" for f, line in chunk)
+            task_num = i // max_per_task + 1
+            total_chunks = (len(large_files) + max_per_task - 1) // max_per_task
             label = f" ({task_num}/{total_chunks})" if total_chunks > 1 else ""
             findings.append(
                 {
@@ -192,9 +192,13 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
     unwraps = _check_rust_unwraps(repo_path)
     if unwraps:
         for uw in unwraps:
+            file_name = uw.split(":")[0].split("/")[-1]
             findings.append(
                 {
-                    "title": f"Replace unwrap() calls with error handling in {uw.split(':')[0].split('/')[-1]} ({repo_name})",
+                    "title": (
+                        f"Replace unwrap() calls with error handling "
+                        f"in {file_name} ({repo_name})"
+                    ),
                     "description": (
                         f"Found Rust files with excessive `.unwrap()` calls. These crash "
                         f"at runtime if the value is None/Err.\n\n"
@@ -210,7 +214,6 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
     if bare:
         for b in bare:
             file_name = b.split(":")[0].split("/")[-1]
-            count = b.split(": ")[-1].split()[0]
             findings.append(
                 {
                     "title": f"Replace bare `except:` in {file_name} ({repo_name})",

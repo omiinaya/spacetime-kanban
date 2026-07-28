@@ -56,11 +56,15 @@ def _check_cargo_deps(repo_name: str, repo_path: str) -> list[dict]:
         deps = data.get("dependencies", {})
         for dep_name, dep_spec in deps.items():
             if isinstance(dep_spec, str) and dep_spec.startswith("="):
+                cargo_rel = f"{os.path.basename(os.path.dirname(path))}/Cargo.toml"
                 findings.append(
                     {
-                        "title": f"Unpin {dep_name} in {os.path.basename(os.path.dirname(path))}/Cargo.toml",
-                        "description": f"`{dep_name}` is pinned to exact version `{dep_spec}` in {path}. "
-                        f"Consider using `{dep_spec[1:]}` or a semver range to get bug fixes.",
+                        "title": f"Unpin {dep_name} in {cargo_rel}",
+                        "description": (
+                            f"`{dep_name}` is pinned to exact version `{dep_spec}` "
+                            f"in {path}. "
+                            f"Consider using `{dep_spec[1:]}` or a semver range to get bug fixes."
+                        ),
                         "priority": 3,
                         "scanner": "deps",
                     }
@@ -73,8 +77,11 @@ def _check_cargo_deps(repo_name: str, repo_path: str) -> list[dict]:
             findings.append(
                 {
                     "title": f"Review {len(git_deps)} git dependencies in {repo_name}",
-                    "description": f"{len(git_deps)} dependencies use git URLs instead of crates.io: {names}. "
-                    f"These should be migrated to published versions when available.",
+                    "description": (
+                        f"{len(git_deps)} dependencies use git URLs "
+                        f"instead of crates.io: {names}. "
+                        f"These should be migrated to published versions when available."
+                    ),
                     "priority": 3,
                     "scanner": "deps",
                 }
@@ -111,8 +118,11 @@ def _check_npm_deps(repo_path: str) -> list[dict]:
             findings.append(
                 {
                     "title": f"Unpin {len(pinned)} npm deps in {rel_root}",
-                    "description": f"{len(pinned)} packages in {rel_root} are pinned to exact versions: {names}. "
-                    f"Use ^ or ~ ranges to get patch/minor updates automatically.",
+                    "description": (
+                        f"{len(pinned)} packages in {rel_root} "
+                        f"are pinned to exact versions: {names}. "
+                        f"Use ^ or ~ ranges to get patch/minor updates automatically."
+                    ),
                     "priority": 3,
                     "scanner": "deps",
                 }
@@ -134,8 +144,11 @@ def _check_npm_deps(repo_path: str) -> list[dict]:
                     findings.append(
                         {
                             "title": "Deduplicate npm deps shared between root and web/",
-                            "description": f"{len(duplicates)} packages appear in both root and web/package.json: {names}. "
-                            f"Consider hoisting shared deps to the root or using a workspace.",
+                            "description": (
+                                f"{len(duplicates)} packages appear in both "
+                                f"root and web/package.json: {names}. "
+                                f"Consider hoisting shared deps to the root or using a workspace."
+                            ),
                             "priority": 3,
                             "scanner": "deps",
                         }
