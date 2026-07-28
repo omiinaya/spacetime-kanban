@@ -140,7 +140,10 @@ def find_test_gaps(repo_name: str, repo_path: str) -> list[dict]:
                 batch = untested[i : i + 5]
                 findings.append(
                     {
-                        "title": f"Add tests for {len(batch)} untested python module(s) in {repo_name}",
+                        "title": (
+                            f"Add tests for {len(batch)} untested python module(s)"
+                            f" in {repo_name}"
+                        ),
                         "description": "Add unit tests for the following untested modules:\n"
                         + "\n".join(f"  - {p}" for p in batch),
                         "priority": 3,
@@ -176,7 +179,10 @@ def find_missing_init(repo_name: str, repo_path: str) -> list[dict]:
             findings.append(
                 {
                     "title": f"Add __init__.py to {len(missing)} python package(s) in {repo_name}",
-                    "description": "The following directories contain Python files but lack __init__.py:\n"
+                    "description": (
+                        "The following directories contain Python files"
+                        " but lack __init__.py:\n"
+                    )
                     + "\n".join(f"  - {p}" for p in missing),
                     "priority": 3,
                     "repo": repo_name,
@@ -199,7 +205,7 @@ def find_stale_todos(repo_name: str, repo_path: str) -> list[dict]:
         return []
     if not result.stdout.strip():
         return []
-    lines = [l for l in result.stdout.strip().split("\n") if ":" in l]
+    lines = [entry for entry in result.stdout.strip().split("\n") if ":" in entry]
     total = 0
     file_hits = []
     for line in lines:
@@ -218,8 +224,11 @@ def find_stale_todos(repo_name: str, repo_path: str) -> list[dict]:
         findings.append(
             {
                 "title": f"Review {total} stale todo(s) in {repo_name}",
-                "description": f"Found {total} TODO/FIXME/HACK/XXX markers across {len(file_hits)} files:\n"
-                + "\n".join(f"  - {fp} ({c} markers)" for fp, c in file_hits[:10]),
+                "description": (
+                    f"Found {total} TODO/FIXME/HACK/XXX markers"
+                    f" across {len(file_hits)} files:\n"
+                    + "\n".join(f"  - {fp} ({c} markers)" for fp, c in file_hits[:10])
+                ),
                 "priority": 2,
                 "repo": repo_name,
             }
@@ -297,9 +306,15 @@ def find_large_files(repo_name: str, repo_path: str) -> list[dict]:
         batch = files[:5]
         findings.append(
             {
-                "title": f"Split {len(batch)} large source file(s) in {repo_name} ({len(batch)}/{len(batch)})",
-                "description": f"Found {len(files)} large source file(s) ≥300 lines. Recommend splitting:\n"
-                + "\n".join(f"  - {p} ({c} lines)" for p, c in batch),
+                "title": (
+                    f"Split {len(batch)} large source file(s)"
+                    f" in {repo_name} ({len(batch)}/{len(batch)})"
+                ),
+                "description": (
+                    f"Found {len(files)} large source file(s) ≥300 lines."
+                    f" Recommend splitting:\n"
+                    + "\n".join(f"  - {p} ({c} lines)" for p, c in batch)
+                ),
                 "priority": 2,
                 "repo": repo_name,
             }

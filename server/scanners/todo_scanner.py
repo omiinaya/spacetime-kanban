@@ -30,7 +30,7 @@ def scan_todos(repo_name: str, repo_path: str) -> list[dict]:
     if not result.stdout.strip():
         return []
 
-    lines = [l for l in result.stdout.strip().split("\n") if ":" in l]
+    lines = [line for line in result.stdout.strip().split("\n") if ":" in line]
     total = 0
     file_hits = []
     for line in lines:
@@ -60,10 +60,10 @@ def scan_todos(repo_name: str, repo_path: str) -> list[dict]:
                     text=True,
                     timeout=15,
                 )
-                for l in r.stdout.strip().split("\n"):
-                    if ":" in l:
+                for line in r.stdout.strip().split("\n"):
+                    if ":" in line:
                         with contextlib.suppress(ValueError, IndexError):
-                            tag_counts[tag] += int(l.rsplit(":", 1)[1])
+                            tag_counts[tag] += int(line.rsplit(":", 1)[1])
         except Exception:
             pass
 
@@ -124,8 +124,9 @@ def scan_todos(repo_name: str, repo_path: str) -> list[dict]:
                 {
                     "title": f"Review recently-added TODOs in {len(new_todo_files)} file(s)",
                     "description": (
-                        f"{len(new_todo_files)} file(s) added in the last year contain TODO markers "
-                        f"that may need review. First files: {', '.join(new_todo_files[:5])}"
+                        f"{len(new_todo_files)} file(s) added in the last year "
+                        f"contain TODO markers that may need review. "
+                        f"First files: {', '.join(new_todo_files[:5])}"
                     ),
                     "priority": 2,
                     "scanner": "todos",

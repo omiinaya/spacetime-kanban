@@ -82,8 +82,10 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
         findings.append(
             {
                 "title": f"Add README.md to {repo_name}",
-                "description": "This project has no README file. A README explains what the project does, "
-                "how to set it up, and how to contribute.",
+                "description": (
+                    "This project has no README file. A README explains "
+                    "what the project does, how to set it up, and how to contribute."
+                ),
                 "priority": 3,
                 "scanner": "docs_ci",
             }
@@ -92,8 +94,10 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
         findings.append(
             {
                 "title": f"Update README.md in {repo_name} (last updated {readme_age}d ago)",
-                "description": f"The README hasn't been updated in {readme_age} days. It may be out of date "
-                f"with the current codebase.",
+                "description": (
+                    f"The README hasn't been updated in {readme_age} days. "
+                    f"It may be out of date with the current codebase."
+                ),
                 "priority": 3,
                 "scanner": "docs_ci",
             }
@@ -108,8 +112,10 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
         findings.append(
             {
                 "title": f"Add LICENSE to {repo_name}",
-                "description": "This project has no license file. Without a license, others cannot legally use, "
-                "modify, or distribute the code.",
+                "description": (
+                    "This project has no license file. Without a license, "
+                    "others cannot legally use, modify, or distribute the code."
+                ),
                 "priority": 3,
                 "scanner": "docs_ci",
             }
@@ -120,8 +126,10 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
         findings.append(
             {
                 "title": f"Add .gitignore to {repo_name}",
-                "description": "This project has no .gitignore. Temporary files, secrets, and build artifacts "
-                "may be committed to the repository.",
+                "description": (
+                    "This project has no .gitignore. Temporary files, secrets, "
+                    "and build artifacts may be committed to the repository."
+                ),
                 "priority": 3,
                 "scanner": "docs_ci",
             }
@@ -142,8 +150,12 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
             findings.append(
                 {
                     "title": f"Add CI pipeline to {repo_name}",
-                    "description": f"This project has linter/formatter configs ({', '.join(found_linters[:3])}) "
-                    f"but no CI workflow (.github/workflows/). CI would auto-run checks on PRs.",
+                    "description": (
+                        f"This project has linter/formatter configs "
+                        f"({', '.join(found_linters[:3])}) "
+                        f"but no CI workflow (.github/workflows/). "
+                        f"CI would auto-run checks on PRs."
+                    ),
                     "priority": 3,
                     "scanner": "docs_ci",
                 }
@@ -154,7 +166,10 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
         findings.append(
             {
                 "title": f"Add CONTRIBUTING.md to {repo_name}",
-                "description": "A CONTRIBUTING guide helps others understand how to contribute to this project.",
+                "description": (
+                    "A CONTRIBUTING guide helps others understand "
+                    "how to contribute to this project."
+                ),
                 "priority": 3,
                 "scanner": "docs_ci",
             }
@@ -173,7 +188,10 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
             findings.append(
                 {
                     "title": f"Add PR template to {repo_name}",
-                    "description": "A pull request template standardizes PR descriptions and helps reviewers.",
+                    "description": (
+                        "A pull request template standardizes "
+                        "PR descriptions and helps reviewers."
+                    ),
                     "priority": 3,
                     "scanner": "docs_ci",
                 }
@@ -183,7 +201,10 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
             findings.append(
                 {
                     "title": f"Add issue template(s) to {repo_name}",
-                    "description": "Issue templates guide users to provide useful bug reports and feature requests.",
+                    "description": (
+                        "Issue templates guide users to provide "
+                        "useful bug reports and feature requests."
+                    ),
                     "priority": 3,
                     "scanner": "docs_ci",
                 }
@@ -201,8 +222,12 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                 findings.append(
                     {
                         "title": f"Add CHANGELOG.md to {repo_name}",
-                        "description": f"This project has {len(tag_count.stdout.strip().split(chr(10)))} tags but no CHANGELOG. "
-                        "A changelog helps users track what changed between releases.",
+                        "description": (
+                            f"This project has "
+                            f"{len(tag_count.stdout.strip().split(chr(10)))} tags "
+                            f"but no CHANGELOG. "
+                            f"A changelog helps users track what changed between releases."
+                        ),
                         "priority": 3,
                         "scanner": "docs_ci",
                     }

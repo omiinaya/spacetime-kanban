@@ -53,8 +53,14 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
 
                 findings.append(
                     {
-                        "title": f"Remove {total} unused import(s) across {len(files)} file(s) in {repo_name}",
-                        "description": f"Ruff found {total} unused import/variable violations:\\n\\n{file_summary}",
+                        "title": (
+                            f"Remove {total} unused import(s) "
+                            f"across {len(files)} file(s) in {repo_name}"
+                        ),
+                        "description": (
+                            f"Ruff found {total} unused import/"
+                            f"variable violations:\\n\\n{file_summary}"
+                        ),
                         "priority": 2,
                         "scanner": "unused_code",
                     }
@@ -77,15 +83,21 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
             )
             output = result.stdout + result.stderr
             dead_code_lines = [
-                l for l in output.split("\n") if "dead_code" in l or "unused import" in l
+                line
+                for line in output.split("\n")
+                if "dead_code" in line or "unused import" in line
             ]
             if dead_code_lines and len(dead_code_lines) > 2:  # Ignore boilerplate
                 findings.append(
                     {
                         "title": f"Fix {len(dead_code_lines)} dead_code warnings in {repo_name}",
-                        "description": f"Cargo check reported {len(dead_code_lines)} dead code or unused import warnings. "
-                        f"Run `cargo fix --allow-dirty` to auto-fix some of these.\n\n"
-                        f"First warnings:\n" + "\n".join(dead_code_lines[:8]),
+                        "description": (
+                            f"Cargo check reported "
+                            f"{len(dead_code_lines)} dead code or "
+                            f"unused import warnings. "
+                            f"Run `cargo fix --allow-dirty` to auto-fix some of these.\n\n"
+                            f"First warnings:\n" + "\n".join(dead_code_lines[:8])
+                        ),
                         "priority": 2,
                         "scanner": "unused_code",
                     }
@@ -114,8 +126,11 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
                     findings.append(
                         {
                             "title": f"Remove {count} unused exports in {repo_name}/web",
-                            "description": f"ts-prune found {count} unused exports in the web frontend. "
-                            f"Cleaning these up reduces bundle size and improves clarity.",
+                            "description": (
+                                f"ts-prune found {count} unused exports "
+                                f"in the web frontend. "
+                                f"Cleaning these up reduces bundle size and improves clarity."
+                            ),
                             "priority": 3,
                             "scanner": "unused_code",
                         }

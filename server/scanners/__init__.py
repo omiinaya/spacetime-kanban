@@ -31,7 +31,7 @@ def get_scanner_name(fn: Callable) -> str:
 
 
 # ── Import all scanner modules so their @register_scanner decorators run ──
-from . import (
+from . import (  # noqa: E402
     dep_scanner,
     layer_architecture,
     layer_docs,

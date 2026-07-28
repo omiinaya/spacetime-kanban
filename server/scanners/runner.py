@@ -24,7 +24,7 @@ server_dir = os.path.dirname(script_dir)
 if server_dir not in sys.path:
     sys.path.insert(0, server_dir)
 
-from scanners import SCANNERS, discover_repos, get_scanner_name
+from scanners import SCANNERS, discover_repos, get_scanner_name  # noqa: E402
 
 # ── Layer progression config ────────────────────────────────────────
 
@@ -283,9 +283,15 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
                         try:
                             webhook_url = os.environ.get("WEBHOOK_DEFAULT_URL", "")
                             if webhook_url:
+                                webhook_content = (
+                                    f"🔍 **Scanner: {scanner_name}**\\n"
+                                    f"Priority P{priority} task created:\\n"
+                                    f"**{title}**\\n"
+                                    f"repo: `{repo_name}`"
+                                )
                                 payload = json.dumps(
                                     {
-                                        "content": f"🔍 **Scanner: {scanner_name}**\\nPriority P{priority} task created:\\n**{title}**\\nrepo: `{repo_name}`"
+                                        "content": webhook_content,
                                     }
                                 ).encode()
                                 req = urllib.request.Request(

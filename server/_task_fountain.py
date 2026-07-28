@@ -106,7 +106,10 @@ def scan_test_gaps(repo_name: str, repo_path: str) -> list[dict]:
                 batch = untested[i : i + 5]
                 findings.append(
                     {
-                        "title": f"Add tests for {len(batch)} untested python module(s) in {repo_name}",
+                        "title": (
+                            f"Add tests for {len(batch)} untested python module(s)"
+                            f" in {repo_name}"
+                        ),
                         "description": "Add unit tests for:\n"
                         + "\n".join(f"  - {p}" for p in batch),
                         "priority": 3,
@@ -213,7 +216,10 @@ def scan_large_files(repo_name: str, repo_path: str) -> list[dict]:
         batch = files[:5]
         findings.append(
             {
-                "title": f"Split {len(batch)} large source file(s) in {repo_name} ({len(batch)}/{len(batch)})",
+                "title": (
+                    f"Split {len(batch)} large source file(s)"
+                    f" in {repo_name} ({len(batch)}/{len(batch)})"
+                ),
                 "description": "Large files ≥300 lines:\n"
                 + "\n".join(f"  - {p} ({c} lines)" for p, c in batch),
                 "priority": 2,
@@ -259,7 +265,7 @@ def scan_unwrap(repo_name: str, repo_path: str) -> list[dict]:
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return []
-    files = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
+    files = [entry.strip() for entry in result.stdout.strip().split("\n") if entry.strip()]
     if files:
         findings.append(
             {
@@ -309,7 +315,7 @@ def scan_bare_except(repo_name: str, repo_path: str) -> list[dict]:
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return []
-    files = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
+    files = [entry.strip() for entry in result.stdout.strip().split("\n") if entry.strip()]
     if files:
         findings.append(
             {
