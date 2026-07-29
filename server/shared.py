@@ -303,6 +303,7 @@ from models import (  # noqa: E402, F401
     BatchLabelsRequest,
     BlockRequest,
     BlockWithReasonRequest,
+    BulkActionRequest,
     BulkArchiveRequest,
     BulkReorderRequest,
     BulkRetryRequest,

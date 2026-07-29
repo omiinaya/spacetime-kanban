@@ -15,6 +15,7 @@ from shared import (
     BatchLabelsRequest,
     BlockRequest,
     BlockWithReasonRequest,
+    BulkActionRequest,
     BulkArchiveRequest,
     BulkReorderRequest,
     BulkRetryRequest,
@@ -621,6 +622,75 @@ async def bulk_archive_tasks(body: BulkArchiveRequest):
         except Exception as e:
             failed.append({"task_id": task_id, "error": str(e)[:100]})
     return {"status": "ok", "archived": archived, "failed": failed}
+
+
+@router.post("/api/tasks/bulk", dependencies=[Depends(verify_auth)])
+async def bulk_tasks(body: BulkActionRequest):
+    """Bulk task operations: claim, complete, block, unclaim, delete.
+
+    Replaces N sequential frontend calls with a single batched request.
+    Returns per-task results for partial-failure transparency.
+    """
+    results: list[dict] = []
+    for task_id in body.task_ids:
+        try:
+            if body.action == "claim":
+                await _call("claim_task", [task_id, body.agent_id])
+                rows = await _sql_param(
+                    "SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id
+                )
+                if rows:
+                    asyncio.create_task(_notify("claimed", rows[0]))
+                results.append({"task_id": task_id, "status": "claimed"})
+            elif body.action == "complete":
+                await _call("complete_task", [task_id, body.result_notes])
+                rows = await _sql_param(
+                    "SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id
+                )
+                if rows:
+                    asyncio.create_task(_notify("completed", rows[0], body.result_notes))
+                    asyncio.create_task(_sync_to_github(task_id, "completed", body.result_notes))
+                    asyncio.create_task(
+                        fire_event(
+                            EVENT_TASK_COMPLETED,
+                            {
+                                "task_id": task_id,
+                                "title": rows[0].get("title", "?")[:80],
+                                "repo": rows[0].get("repo", "?"),
+                                "result_notes": body.result_notes or "",
+                            },
+                        )
+                    )
+                results.append({"task_id": task_id, "status": "completed"})
+            elif body.action == "block":
+                await _call("block_task", [task_id, body.reason])
+                rows = await _sql_param(
+                    "SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id
+                )
+                _maybe_notify_blocked(task_id, rows, body.reason)
+                results.append({"task_id": task_id, "status": "blocked"})
+            elif body.action == "unclaim":
+                await _call("unclaim_task", [task_id])
+                rows = await _sql_param(
+                    "SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id
+                )
+                if rows:
+                    asyncio.create_task(_notify("unclaimed", rows[0]))
+                    asyncio.create_task(_sync_to_github(task_id, "unclaimed"))
+                results.append({"task_id": task_id, "status": "unclaimed"})
+            elif body.action == "delete":
+                rows = await _sql_param(
+                    "SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id
+                )
+                if rows:
+                    asyncio.create_task(_notify("deleted", rows[0]))
+                await _call("delete_task", [task_id])
+                results.append({"task_id": task_id, "status": "deleted"})
+            else:
+                results.append({"task_id": task_id, "status": "error", "error": f"Unknown action: {body.action}"})
+        except Exception as e:
+            results.append({"task_id": task_id, "status": "error", "error": str(e)[:200]})
+    return {"status": "ok", "results": results}
 
 
 @router.post("/api/tasks/{task_id}/max-attempts", dependencies=[Depends(verify_auth)])

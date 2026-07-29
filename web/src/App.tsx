@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban, LayoutDashboard, CalendarDays, Key, LifeBuoy, Database } from 'lucide-react'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ToastProvider } from './hooks/useToast'
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.1.0'
 
@@ -120,23 +121,25 @@ export default function App() {
             <div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
           </div>
         }>
-          <ErrorBoundary>
-            <Routes>
-              <Route path="/" element={<ErrorBoundary><BoardPage /></ErrorBoundary>} />
-              <Route path="/triage" element={<ErrorBoundary><TriagePage /></ErrorBoundary>} />
-              <Route path="/projects" element={<ErrorBoundary><ProjectsPage /></ErrorBoundary>} />
-              <Route path="/labels" element={<ErrorBoundary><LabelsPage /></ErrorBoundary>} />
-              <Route path="/issues" element={<ErrorBoundary><IssuesPage /></ErrorBoundary>} />
-              <Route path="/webhooks" element={<ErrorBoundary><WebhooksPage /></ErrorBoundary>} />
-              <Route path="/agents" element={<ErrorBoundary><AgentHealthPage /></ErrorBoundary>} />
-              <Route path="/logs" element={<ErrorBoundary><LogsPage /></ErrorBoundary>} />
-              <Route path="/analytics" element={<ErrorBoundary><AnalyticsPage /></ErrorBoundary>} />
-              <Route path="/cross-project" element={<ErrorBoundary><CrossProjectPage /></ErrorBoundary>} />
-              <Route path="/calendar" element={<ErrorBoundary><CalendarPage /></ErrorBoundary>} />
-              <Route path="/schema-migrations" element={<ErrorBoundary><SchemaMigrationsPage /></ErrorBoundary>} />
-              <Route path="/api-keys" element={<ErrorBoundary><ApiKeysPage /></ErrorBoundary>} />
-            </Routes>
-          </ErrorBoundary>
+          <ToastProvider>
+            <ErrorBoundary>
+              <Routes>
+                <Route path="/" element={<ErrorBoundary><BoardPage /></ErrorBoundary>} />
+                <Route path="/triage" element={<ErrorBoundary><TriagePage /></ErrorBoundary>} />
+                <Route path="/projects" element={<ErrorBoundary><ProjectsPage /></ErrorBoundary>} />
+                <Route path="/labels" element={<ErrorBoundary><LabelsPage /></ErrorBoundary>} />
+                <Route path="/issues" element={<ErrorBoundary><IssuesPage /></ErrorBoundary>} />
+                <Route path="/webhooks" element={<ErrorBoundary><WebhooksPage /></ErrorBoundary>} />
+                <Route path="/agents" element={<ErrorBoundary><AgentHealthPage /></ErrorBoundary>} />
+                <Route path="/logs" element={<ErrorBoundary><LogsPage /></ErrorBoundary>} />
+                <Route path="/analytics" element={<ErrorBoundary><AnalyticsPage /></ErrorBoundary>} />
+                <Route path="/cross-project" element={<ErrorBoundary><CrossProjectPage /></ErrorBoundary>} />
+                <Route path="/calendar" element={<ErrorBoundary><CalendarPage /></ErrorBoundary>} />
+                <Route path="/schema-migrations" element={<ErrorBoundary><SchemaMigrationsPage /></ErrorBoundary>} />
+                <Route path="/api-keys" element={<ErrorBoundary><ApiKeysPage /></ErrorBoundary>} />
+              </Routes>
+            </ErrorBoundary>
+          </ToastProvider>
         </Suspense>
       </main>
     </div>

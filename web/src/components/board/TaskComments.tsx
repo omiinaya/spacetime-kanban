@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Loader2, MessageSquare, Send } from 'lucide-react'
 import { api, type TaskComment } from '../../api'
+import { useToast } from '../../hooks/useToast'
 
 export function TaskComments({ taskId }: { taskId: string }) {
+  const { addToast } = useToast()
   const [comments, setComments] = useState<TaskComment[]>([])
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
@@ -34,7 +36,7 @@ export function TaskComments({ taskId }: { taskId: string }) {
         setNewComment('')
       }
     } catch (e: unknown) {
-      alert(`Failed to add comment: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Failed to add comment: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSending(false)
     }

@@ -263,6 +263,9 @@ export const api = {
     bulkArchive: (task_ids: string[]) =>
       apiPost<{ status: string; archived: number; failed: { task_id: string; error: string }[] }>(
         '/tasks/bulk-archive', { task_ids }),
+    bulk: (action: string, task_ids: string[], payload?: { agent_id?: string; reason?: string; result_notes?: string }) =>
+      apiPost<{ status: string; results: { task_id: string; status: string; error?: string }[] }>(
+        '/tasks/bulk', { action, task_ids, ...(payload || {}) }),
     seed: () => apiPost<{ status: string }>('/tasks/seed'),
     reorder: (task_id: string, position: number) =>
       apiPost<{ status: string; task_id: string; position: number }>('/tasks/reorder', { task_id, position }),

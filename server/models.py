@@ -297,6 +297,16 @@ class BulkArchiveRequest(BaseModel):
     task_ids: list[str]
 
 
+class BulkActionRequest(BaseModel):
+    """Bulk action on tasks: claim, complete, block, unclaim, delete."""
+
+    action: str
+    task_ids: list[str]
+    agent_id: str = "web-user"
+    reason: str = ""
+    result_notes: str = ""
+
+
 class WebhookCreateRequest(BaseModel):
     url: str
     type: str = "generic"

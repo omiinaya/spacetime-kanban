@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Loader2, AlertCircle, Plus, X, Tag, Palette } from 'lucide-react'
 import { api, KanbanLabel } from '../api'
+import { useToast } from '../hooks/useToast'
 import { CardGridSkeleton } from '../components/Skeleton'
 
 const PRESET_COLORS = [
@@ -10,6 +11,7 @@ const PRESET_COLORS = [
 ]
 
 export default function LabelsPage() {
+  const { addToast } = useToast()
   const [labels, setLabels] = useState<KanbanLabel[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +55,7 @@ export default function LabelsPage() {
       setShowCreate(false)
       await load()
     } catch (e: unknown) {
-      alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Create failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -67,7 +69,7 @@ export default function LabelsPage() {
       setEditingId(null)
       await load()
     } catch (e: unknown) {
-      alert(`Update failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Update failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -79,7 +81,7 @@ export default function LabelsPage() {
       await api.labels.delete(id)
       await load()
     } catch (e: unknown) {
-      alert(`Delete failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Delete failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

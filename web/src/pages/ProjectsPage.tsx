@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Loader2, AlertCircle, Plus, FolderKanban, ChevronUp, ChevronDown, Eye, EyeOff, Trash2, Save } from 'lucide-react'
 import { api, Project } from '../api'
+import { useToast } from '../hooks/useToast'
 import { CardGridSkeleton } from '../components/Skeleton'
 
 const PRIORITY_LABELS: Record<number, string> = {
@@ -25,6 +26,7 @@ const PRIORITY_BG: Record<number, string> = {
 }
 
 export default function ProjectsPage() {
+  const { addToast } = useToast()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -70,7 +72,7 @@ export default function ProjectsPage() {
       setShowCreate(false)
       await load()
     } catch (e: unknown) {
-      alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Create failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -82,7 +84,7 @@ export default function ProjectsPage() {
       await api.projects.update(p.id, { priority: newPrio })
       await load()
     } catch (e: unknown) {
-      alert(`Update failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Update failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -92,7 +94,7 @@ export default function ProjectsPage() {
       await api.projects.update(p.id, { priority: newPrio })
       await load()
     } catch (e: unknown) {
-      alert(`Update failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Update failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -101,7 +103,7 @@ export default function ProjectsPage() {
       await api.projects.update(p.id, { active: !p.active })
       await load()
     } catch (e: unknown) {
-      alert(`Update failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Update failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -111,7 +113,7 @@ export default function ProjectsPage() {
       await api.projects.delete(p.id)
       await load()
     } catch (e: unknown) {
-      alert(`Delete failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Delete failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

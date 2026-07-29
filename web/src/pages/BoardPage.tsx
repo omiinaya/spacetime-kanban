@@ -18,6 +18,7 @@ import { ShortcutsDialog, SavedViewsPills, SaveViewDialog } from '../components/
 import { useSavedViews } from '../hooks/useSavedViews'
 import { useTaskActions } from '../hooks/useTaskActions'
 import { useBoardToasts } from '../hooks/useBoardToasts'
+import { useToast } from '../hooks/useToast'
 import { useBoardShortcuts } from '../hooks/useBoardShortcuts'
 import { useColumnReorder } from '../hooks/useColumnReorder'
 
@@ -70,6 +71,7 @@ export default function BoardPage() {
   )
 
   const toasts = useBoardToasts(tasks)
+  const { addToast } = useToast()
 
   // ── Filtering (needed before actions that reference `filtered`) ──
   const sorted = useMemo(() =>
@@ -211,29 +213,33 @@ export default function BoardPage() {
     if (action === 'archive') {
       try {
         const res = await api.tasks.bulkArchive([...selectedIds])
-        alert(`Archived ${res.archived}/${selectedIds.size} tasks${res.failed.length ? ` — ${res.failed.length} failed` : ''}`)
+        addToast('✅', `Archived ${res.archived}/${selectedIds.size} tasks${res.failed.length ? ` — ${res.failed.length} failed` : ''}`)
       } catch (e: unknown) {
-        alert(`Archive failed: ${e instanceof Error ? e.message : String(e)}`)
+        addToast('❌', `Archive failed: ${e instanceof Error ? e.message : String(e)}`)
       }
       setBatchProcessing(false)
       setSelectedIds(new Set())
       return
     }
-    let done = 0
-    const total = selectedIds.size
-    for (const id of selectedIds) {
-      try {
-        if (action === 'claim') await api.tasks.claim(id, 'web-user')
-        else if (action === 'complete') await api.tasks.complete(id)
-        else if (action === 'block') await api.tasks.block(id, 'Batch blocked')
-        else if (action === 'unclaim') await api.tasks.unclaim(id)
-        else if (action === 'delete') await api.tasks.delete(id)
-        done++
-      } catch { /* skip failures */ }
+    // Use single bulk endpoint instead of N sequential calls
+    try {
+      const payload: Record<string, string> = {}
+      if (action === 'claim') payload.agent_id = 'web-user'
+      else if (action === 'block') payload.reason = 'Batch blocked'
+      else if (action === 'complete') payload.result_notes = 'Batch completed'
+      const res = await api.tasks.bulk(action, [...selectedIds], payload)
+      const done = res.results.filter(r => r.status !== 'error').length
+      const failed = res.results.filter(r => r.status === 'error')
+      if (failed.length > 0) {
+        addToast('⚠️', `${label}d ${done}/${selectedIds.size} tasks — ${failed.length} failed (${failed[0].error || 'unknown error'})`)
+      } else {
+        addToast('✅', `${label}d ${done}/${selectedIds.size} tasks`)
+      }
+    } catch (e: unknown) {
+      addToast('❌', `Batch ${action} failed: ${e instanceof Error ? e.message : String(e)}`)
     }
     setBatchProcessing(false)
     setSelectedIds(new Set())
-    alert(`${label}d ${done}/${total} tasks`)
   }
 
   const handleBatchLabels = async (assign: boolean) => {
@@ -248,7 +254,7 @@ export default function BoardPage() {
       setShowLabelPicker(false)
       setSelectedLabelIds(new Set())
     } catch (e: unknown) {
-      alert(`Failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Failed: ${e instanceof Error ? e.message : String(e)}`)
     }
     setBatchProcessing(false)
   }
