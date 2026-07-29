@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Loader2, Plus, Trash2, CheckSquare } from 'lucide-react'
 import { api, type ChecklistItem } from '../../api'
+import { useToast } from '../../hooks/useToast'
 
 export function TaskChecklist({ taskId }: { taskId: string }) {
+  const { addToast } = useToast()
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [newText, setNewText] = useState('')
@@ -35,7 +37,7 @@ export function TaskChecklist({ taskId }: { taskId: string }) {
         setNewText('')
       }
     } catch (e: unknown) {
-      alert(`Failed to add checklist item: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Failed to add checklist item: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -48,7 +50,7 @@ export function TaskChecklist({ taskId }: { taskId: string }) {
     } catch (e: unknown) {
       // Revert on failure
       setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i))
-      alert(`Failed to toggle: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Failed to toggle: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -58,7 +60,7 @@ export function TaskChecklist({ taskId }: { taskId: string }) {
     try {
       await api.checklist.remove(taskId, itemId)
     } catch (e: unknown) {
-      alert(`Failed to remove: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Failed to remove: ${e instanceof Error ? e.message : String(e)}`)
       // Reload on failure
       api.checklist.list(taskId).then(items => setChecklist(items))
     }

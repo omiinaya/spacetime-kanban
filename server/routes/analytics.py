@@ -14,55 +14,66 @@ router = APIRouter()
 async def analytics_overview():
     """High-level metrics: total, per-status, completed today/this week.
 
-    Uses shared httpx client (avoids connection pool overhead from
-    creating a new client per query). Removed the useless SELECT *
-    FROM task_logs that loaded 50K+ rows for nothing."""
-    tasks = await _sql("SELECT * FROM tasks")
-
+    Uses SQL-level aggregation instead of SELECT * + Python iteration,
+    reducing data transfer from thousands of rows to a handful of
+    aggregated values."""  # noqa: E501
     now = int(time.time() * 1000)
     day_ms = 86_400_000
     week_ms = 7 * day_ms
+    hour_ago = now - 3_600_000
 
+    # ── Total and per-status counts ─────────────────────────────────
+    status_rows = await _sql(
+        "SELECT status, COUNT(*) AS cnt FROM tasks GROUP BY status"
+    )
+    by_status: dict[str, int] = {}
     total = 0
-    by_status = {}
-    for t in tasks:
-        s = t.get("status", "unknown")
-        by_status[s] = by_status.get(s, 0) + 1
-        total += 1
+    for r in status_rows:
+        by_status[r["status"]] = r["cnt"]
+        total += r["cnt"]
 
-    completed_today = sum(
-        1 for t in tasks if t.get("status") == "done" and (now - t.get("updated_at", 0)) < day_ms
-    )
-    completed_week = sum(
-        1 for t in tasks if t.get("status") == "done" and (now - t.get("updated_at", 0)) < week_ms
-    )
     total_done = by_status.get("done", 0)
 
-    # Repo breakdown
-    repos = {}
-    for t in tasks:
-        r = t.get("repo") or "none"
-        if r not in repos:
-            repos[r] = {"total": 0, "done": 0, "inProgress": 0, "blocked": 0, "available": 0}
-        repos[r]["total"] += 1
-        s = t.get("status", "unknown")
-        if s in repos[r]:
-            repos[r][s] += 1
+    # ── Completed today / this week — filtered in SQL ───────────────
+    today_rows = await _sql_param(
+        "SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'done' AND updated_at > {since}",
+        since=str(now - day_ms),
+    )
+    completed_today = today_rows[0]["cnt"] if today_rows else 0
 
-    # Claim churn canary (last hour) — detects claim→fail→unclaim hot loops.
-    # 2026-07-17: worktree collision loop ran 500+ claim cycles per task while
-    # completed_today>0 made the board look "healthy". Ratio ~1-2 is normal.
-    hour_ago = now - 3_600_000
+    week_rows = await _sql_param(
+        "SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'done' AND updated_at > {since}",
+        since=str(now - week_ms),
+    )
+    completed_week = week_rows[0]["cnt"] if week_rows else 0
+
+    # ── Repo breakdown via GROUP BY ─────────────────────────────────
+    repo_rows = await _sql(
+        "SELECT repo, status, COUNT(*) AS cnt FROM tasks GROUP BY repo, status"
+    )
+    repos: dict[str, dict] = {}
+    for r in repo_rows:
+        repo = r.get("repo") or "none"
+        if repo not in repos:
+            repos[repo] = {"total": 0, "done": 0, "inProgress": 0, "blocked": 0, "available": 0}
+        status_name = r["status"]
+        repos[repo]["total"] += r["cnt"]
+        if status_name in repos[repo]:
+            repos[repo][status_name] += r["cnt"]
+
+    # ── Claim churn canary (last hour) — already filtered in SQL ────
     churn_logs = await _sql_param(
-        "SELECT * FROM task_logs WHERE timestamp > {hour_ago} AND (action = 'claimed')",
+        "SELECT * FROM task_logs WHERE timestamp > {hour_ago} AND action = 'claimed'",
         hour_ago=str(hour_ago),
     )
-    claims_last_hour = sum(1 for line in churn_logs if line.get("action") == "claimed")
-    # Count completions from task status (updated_at), not task_logs — the complete
-    # endpoint doesn't write to task_logs, so the old approach always returned 0
-    completions_last_hour = sum(
-        1 for t in tasks if t.get("status") == "done" and t.get("updated_at", 0) > hour_ago
+    claims_last_hour = len(churn_logs)
+
+    # Completions last hour — filtered in SQL
+    hour_rows = await _sql_param(
+        "SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'done' AND updated_at > {since}",
+        since=str(hour_ago),
     )
+    completions_last_hour = hour_rows[0]["cnt"] if hour_rows else 0
 
     return {
         "total": total,
@@ -145,12 +156,15 @@ async def analytics_throughput(days: int = 14):
 
 
 @router.get("/api/analytics/cycle-times")
-async def analytics_cycle_times():
+async def analytics_cycle_times(repo: str = ""):
     """Average time from created to done per repo.
 
     Filters server-side: task_logs has 460K+ rows (93% claim/unclaim churn);
     we only need created/completed (~1.3K rows). Unfiltered this endpoint
-    took ~38s and blocked the event loop parsing SATS rows."""
+    took ~38s and blocked the event loop parsing SATS rows.
+
+    Optional ?repo= parameter filters to a specific repo's tasks.
+    """
     logs = await _sql("SELECT * FROM task_logs WHERE action = 'created' OR action = 'completed'")
 
     # Group logs by task_id and find created vs completed timestamps
@@ -166,8 +180,14 @@ async def analytics_cycle_times():
         elif action == "completed":
             task_times[tid]["completed"] = ts
 
-    # Fetch task repos
-    tasks = await _sql("SELECT * FROM tasks")
+    # Fetch task repos — filtered if repo param given
+    if repo:
+        tasks = await _sql_param(
+            "SELECT id, repo FROM tasks WHERE repo = '{repo}'",
+            repo=repo,
+        )
+    else:
+        tasks = await _sql("SELECT id, repo FROM tasks")
     task_repo = {t["id"]: t.get("repo", "") for t in tasks}
 
     repo_cycles: dict[str, list[int]] = {}
@@ -266,12 +286,24 @@ async def analytics_burndown(repo: str = "", sprint: str = "", days: int = 14):
 
 
 @router.get("/api/analytics/agents")
-async def analytics_agents():
-    """Per-agent stats: tasks completed, stale rate."""
+async def analytics_agents(repo: str = ""):
+    """Per-agent stats: tasks completed, stale rate.
+
+    Optional ?repo= parameter filters to tasks in a specific repo.
+    """
     agents = await _sql("SELECT * FROM swarm_agents")
-    # Only completed/blocked actions are used — filter out the 460K-row
-    # claim/unclaim churn server-side (was ~37s unfiltered).
-    logs = await _sql("SELECT * FROM task_logs WHERE action = 'completed' OR action = 'blocked'")
+
+    # Filter logs by action and optionally by repo
+    if repo:
+        logs = await _sql_param(
+            "SELECT * FROM task_logs WHERE "
+            "(action = 'completed' OR action = 'blocked') AND repo = '{repo}'",
+            repo=repo,
+        )
+    else:
+        logs = await _sql(
+            "SELECT * FROM task_logs WHERE action = 'completed' OR action = 'blocked'"
+        )
 
     # Count completed tasks per agent from logs
     agent_completions: dict[str, int] = {}

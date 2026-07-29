@@ -366,6 +366,35 @@ async def test_analytics_overview(client, mock_all):
 
 
 @pytest.mark.asyncio
+async def test_analytics_overview_with_data(client, mock_all):
+    """Overview returns correct aggregations when tasks exist."""
+    # _sql calls: [status_group, repo_group]
+    mock_all["sql"].side_effect = [
+        [{"status": "blocked", "cnt": 1}, {"status": "done", "cnt": 1}],
+        [{"repo": "repo-a", "status": "blocked", "cnt": 1}, {"repo": "repo-b", "status": "done", "cnt": 1}],
+    ]
+    # _sql_param calls: [today_cnt, week_cnt, churn_logs, hour_cnt]
+    mock_all["param"].side_effect = [
+        [{"cnt": 0}],
+        [{"cnt": 0}],
+        [],
+        [{"cnt": 0}],
+    ]
+    resp = await client.get("/api/analytics/overview")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert data["by_status"] == {"blocked": 1, "done": 1}
+    assert data["completed_today"] == 0
+    assert data["completed_week"] == 0
+    assert data["total_done"] == 1
+    assert "repo-a" in data["repos"]
+    assert "repo-b" in data["repos"]
+    assert data["repos"]["repo-a"]["total"] == 1
+    assert data["repos"]["repo-b"]["done"] == 1
+
+
+@pytest.mark.asyncio
 async def test_analytics_claim_churn(client, mock_all):
     """Claim-churn endpoint flags hot-looping tasks, excludes completed ones."""
     import time as _time
@@ -1996,9 +2025,17 @@ async def test_get_logs_for_nonexistent_task(client, mock_all):
 @pytest.mark.asyncio
 async def test_analytics_overview_only_blocked(client, mock_all):
     """Analytics overview should not crash when all tasks are blocked."""
-    mock_all["sql"].return_value = [
-        _make_task("t1", "Blocked one", status="blocked"),
-        _make_task("t2", "Blocked two", status="blocked"),
+    # _sql calls: [status_group, repo_group]
+    mock_all["sql"].side_effect = [
+        [{"status": "blocked", "cnt": 2}],
+        [{"repo": "test-repo", "status": "blocked", "cnt": 2}],
+    ]
+    # _sql_param calls: [today_cnt, week_cnt, churn_logs, hour_cnt]
+    mock_all["param"].side_effect = [
+        [{"cnt": 0}],
+        [{"cnt": 0}],
+        [],
+        [{"cnt": 0}],
     ]
     resp = await client.get("/api/analytics/overview")
     assert resp.status_code == 200

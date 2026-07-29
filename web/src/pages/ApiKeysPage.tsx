@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { api, type ApiKeyItem, type ApiKeyItemFull } from '../api'
+import { useToast } from '../hooks/useToast'
 import { Key, Loader2, AlertCircle, Plus, Trash2, Copy, Check, X } from 'lucide-react'
 import { ListViewSkeleton } from '../components/Skeleton'
 
 export default function ApiKeysPage() {
+  const { addToast } = useToast()
   const [keys, setKeys] = useState<ApiKeyItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -37,7 +39,7 @@ export default function ApiKeysPage() {
       setNewKey({ name: '', permissions: 'read', scope: '*' })
       loadKeys()
     } catch (e: unknown) {
-      alert(`Failed to create key: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Failed to create key: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setCreating(false)
     }
@@ -49,7 +51,7 @@ export default function ApiKeysPage() {
       await api.apiKeys.revoke(keyId)
       loadKeys()
     } catch (e: unknown) {
-      alert(`Failed to revoke: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Failed to revoke: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

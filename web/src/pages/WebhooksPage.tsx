@@ -4,6 +4,7 @@ import {
   WebhookIcon, Plus, Loader2, AlertCircle, Trash2, Send,
   CheckCircle2, XCircle, X, Zap, Edit3, History, ChevronDown, ChevronUp
 } from 'lucide-react'
+import { useToast } from '../hooks/useToast'
 import { PageSkeleton } from '../components/Skeleton'
 
 const WEBHOOK_TYPES = ['discord', 'slack', 'telegram', 'generic']
@@ -18,6 +19,7 @@ const EVENT_COLORS: Record<string, string> = {
 }
 
 export default function WebhooksPage() {
+  const { addToast } = useToast()
   const [webhooks, setWebhooks] = useState<Webhook[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -63,7 +65,7 @@ export default function WebhooksPage() {
       setCreateEvents(['created', 'claimed', 'completed', 'blocked'])
       await load()
     } catch (e: unknown) {
-      alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Create failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -74,7 +76,7 @@ export default function WebhooksPage() {
       setTestResults(prev => { const r = { ...prev }; delete r[id]; return r })
       await load()
     } catch (e: unknown) {
-      alert(`Delete failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Delete failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -102,7 +104,7 @@ export default function WebhooksPage() {
       setEditingId(null)
       await load()
     } catch (e: unknown) {
-      alert(`Update failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Update failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
