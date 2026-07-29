@@ -61,7 +61,6 @@ export function useRealtimeTasks() {
       const data = await api.tasks.list()
       if (Array.isArray(data)) {
         // API returns snake_case, STDB uses camelCase — map fields
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API returns number timestamps, Task uses bigint; direct cast fails
         const mapped = (data as unknown as Array<Record<string, unknown>>).map(d => ({
           id: d.id,
           title: d.title,

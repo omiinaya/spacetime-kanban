@@ -238,11 +238,11 @@ vi.mock('../components/board/BulkActionBar', () => ({
 // ──────────────────────────────────────────────
 
 vi.mock('../components/board/BoardDialogs', () => ({
-  ShortcutsDialog: (_props: { onClose: () => void }) => (
+  ShortcutsDialog: () => (
     <div data-testid="shortcuts-dialog">Shortcuts</div>
   ),
   SavedViewsPills: () => <div data-testid="saved-views-pills">Saved Views</div>,
-  SaveViewDialog: (_props: { onClose: () => void }) => (
+  SaveViewDialog: () => (
     <div data-testid="save-view-dialog">Save View</div>
   ),
 }))
@@ -252,7 +252,7 @@ vi.mock('../components/board/BoardDialogs', () => ({
 // ──────────────────────────────────────────────
 
 vi.mock('../pages/DependencyGraph', () => ({
-  default: (_props: { onClose: () => void }) => (
+  default: () => (
     <div data-testid="dependency-graph">Dependency Graph</div>
   ),
 }))

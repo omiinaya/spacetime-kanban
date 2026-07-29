@@ -105,6 +105,13 @@ async def add_security_and_rate_headers(request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "0"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+        "font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'"
+    )
+    # Static rate-limit headers (actual enforcement via app config)
     response.headers["X-RateLimit-Limit"] = "200"
     response.headers["X-RateLimit-Remaining"] = "199"
     return response

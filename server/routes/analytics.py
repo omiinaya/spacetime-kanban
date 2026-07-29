@@ -1,7 +1,7 @@
 """Analytics endpoints for spacetimedb-kanban."""
 
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
 
@@ -131,14 +131,14 @@ async def analytics_throughput(days: int = 14):
         if age_days > days:
             continue
         # Use actual date string
-        dt = datetime.utcfromtimestamp(updated / 1000)
+        dt = datetime.fromtimestamp(updated / 1000, tz=UTC)
         date_str = dt.strftime("%b %d")
         daily[date_str] = daily.get(date_str, 0) + 1
 
     # Fill in missing days
     result = []
     for i in range(days, -1, -1):
-        dt = datetime.utcfromtimestamp((now - i * day_ms) / 1000)
+        dt = datetime.fromtimestamp((now - i * day_ms) / 1000, tz=UTC)
         date_str = dt.strftime("%b %d")
         result.append({"date": date_str, "completed": daily.get(date_str, 0)})
     return result
@@ -214,7 +214,7 @@ async def analytics_burndown(repo: str = "", sprint: str = "", days: int = 14):
     for i in range(days - 1, -1, -1):
         # End of day i days ago
         end_of_day = now - i * day_ms
-        dt = datetime.utcfromtimestamp(end_of_day / 1000)
+        dt = datetime.fromtimestamp(end_of_day / 1000, tz=UTC)
         date_str = dt.strftime("%Y-%m-%d")
         dates.append(date_str)
         day_ends.append(end_of_day)
@@ -345,16 +345,16 @@ async def analytics_calendar(year: int = 0, month: int = 0):
 
     now = int(time.time() * 1000)
     if not year:
-        year = datetime.utcfromtimestamp(now / 1000).year
+        year = datetime.fromtimestamp(now / 1000, tz=UTC).year
     if not month:
-        month = datetime.utcfromtimestamp(now / 1000).month
+        month = datetime.fromtimestamp(now / 1000, tz=UTC).month
 
     tasks = await _sql("SELECT * FROM tasks WHERE due_by IS NOT NULL AND due_by > 0")
 
     # Filter to tasks in the requested month
-    month_start = int(datetime(year, month, 1).timestamp() * 1000)
+    month_start = int(datetime(year, month, 1, tzinfo=UTC).timestamp() * 1000)
     _, last_day = cal_mod.monthrange(year, month)
-    month_end = int(datetime(year, month, last_day, 23, 59, 59).timestamp() * 1000)
+    month_end = int(datetime(year, month, last_day, 23, 59, 59, tzinfo=UTC).timestamp() * 1000)
 
     month_tasks = []
     for t in tasks:

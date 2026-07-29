@@ -468,17 +468,17 @@ These string-name contracts break silently if renamed. Check both `server/` and 
 
 | Contract | Location | Type |
 |----------|----------|------|
-| `GET /api/tasks` | `server/main.py` | API route |
-| `POST /api/tasks` | `server/main.py` | API route |
-| `GET /api/tasks/{task_id}` | `server/main.py` | API route |
-| `PATCH /api/tasks/{task_id}` | `server/main.py` | API route |
-| `POST /api/tasks/{task_id}/claim` | `server/main.py` | API route |
-| `POST /api/tasks/{task_id}/complete` | `server/main.py` | API route |
-| `POST /api/tasks/{task_id}/block` | `server/main.py` | API route |
-| `POST /api/tasks/{task_id}/unclaim` | `server/main.py` | API route |
-| `POST /api/tasks/{task_id}/dependency` | `server/main.py` | API route |
-| `POST /api/webhook/github` | `server/main.py` | GitHub webhook |
-| `status=available\|claimed\|blocked\|done` | `server/main.py` | Task state machine values |
+| `GET /api/tasks` | `server/routes/ (see routes/ directory)` | API route |
+| `POST /api/tasks` | `server/routes/ (see routes/ directory)` | API route |
+| `GET /api/tasks/{task_id}` | `server/routes/ (see routes/ directory)` | API route |
+| `PATCH /api/tasks/{task_id}` | `server/routes/ (see routes/ directory)` | API route |
+| `POST /api/tasks/{task_id}/claim` | `server/routes/ (see routes/ directory)` | API route |
+| `POST /api/tasks/{task_id}/complete` | `server/routes/ (see routes/ directory)` | API route |
+| `POST /api/tasks/{task_id}/block` | `server/routes/ (see routes/ directory)` | API route |
+| `POST /api/tasks/{task_id}/unclaim` | `server/routes/ (see routes/ directory)` | API route |
+| `POST /api/tasks/{task_id}/dependency` | `server/routes/ (see routes/ directory)` | API route |
+| `POST /api/webhook/github` | `server/routes/ (see routes/ directory)` | GitHub webhook |
+| `status=available\|claimed\|blocked\|done` | `server/routes/ (see routes/ directory)` | Task state machine values |
 | `repo` query param | `GET /api/tasks` | Filter parameter |
 | `agent_id` | Claim/complete operations | Identity string |
 | `hermes`, `claude-vscode`, `ciel` | Convention | Reserved agent IDs |

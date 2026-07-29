@@ -58,7 +58,7 @@
 ## Phase 10 — Autonomous Workflow ✅
 - [x] `kanban dispatch` CLI command — scans tasks, scores, auto-claims best match
 - [x] Skill-filtered dispatch — matches tasks against agent capabilities
-- [x] Auto-dispatch cron — runs every 30m, claims tasks with score >= 100
+- [x] Auto-dispatch cron — runs every 30s, claims tasks with score >= 100
 - [x] `--skills` flag on `kanban create` — set required skills at creation time
 - [x] Fix: STDB SQL unsupported ORDER BY/LIMIT in create_task endpoint
 - [x] Generic outbound webhook system — Discord, Slack, Telegram, generic JSON
@@ -261,7 +261,7 @@
 |----------|---|------------|
 | Core Features (task CRUD, state machine, swarm, labels, comments, checklists, ordering) | 96% | All phases implemented. Edge cases now have test coverage. |
 | Frontend UX | 93% | 12 pages, DnD, keyboard shortcuts, bulk ops, templates, filters, saved views, mobile-responsive. BoardPage decomposed into hooks, DependencyGraph null-safe, Calendar empty state added, WebSocket URL configurable via env var. |
-| Integrations (webhooks 4-provider, GitHub sync, MCP 37 tools, CLI) | 90% | All wired. MCP error handling fixed — `KanbanAPIError` exceptions propagate to MCP framework as proper `isError: true` responses instead of error dicts. |
+| Integrations (webhooks 4-provider, GitHub sync, MCP 36 tools, CLI) | 90% | All wired. MCP error handling fixed — `KanbanAPIError` exceptions propagate to MCP framework as proper `isError: true` responses instead of error dicts. |
 | **Test Coverage** | **88%** | **161 tests** (all mocked STDB) covering CRUD, auth, webhooks, labels, comments, checklists, error paths, analytics, state transitions, edge cases, and all endpoints. `server/tests/` has proper conftest.py with fixtures. CI runs tests as a required step. |
 | Code Organization & Maintainability | 95% | `main.py` (270 lines) fully delegates to `routes/` (13 modules). Models extracted to `models.py`. `shared.py` pure service layer. 13 empty section headers removed. Dead route handler removed. Ruff + mypy clean. |
 | STDB Best Practices | 95% | All `.iter().find()` full scans converted to indexed `.pk().find()`. Unused `ReducerError` (128 lines) deleted. `#[index(btree)]` added to `assignee`, `repo`, `status` fields. Delete-then-insert optimized with indexed lookups. `ensure_future`→`create_task` (15 instances). Cargo clippy clean — 0 warnings. |

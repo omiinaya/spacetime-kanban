@@ -17,5 +17,5 @@ export default [
       'react-hooks/exhaustive-deps': 'warn',
     },
   },
-  { ignores: ['dist/', 'node_modules/', 'playwright-report/', 'test-results/'] },
+  { ignores: ['dist/', 'node_modules/', 'playwright-report/', 'test-results/', 'coverage/', 'src/stdb/types/'] },
 ];

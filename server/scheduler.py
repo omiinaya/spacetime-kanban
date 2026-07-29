@@ -226,6 +226,12 @@ def _kill_worker(task_id: str) -> bool:
 # ── Scheduler loops ─────────────────────────────────────────────────
 
 
+def _read_meminfo() -> str:
+    """Read /proc/meminfo with explicit context manager (offloaded via to_thread)."""
+    with open("/proc/meminfo") as f:
+        return f.read()
+
+
 async def task_dispatcher(interval: int):
     """Claim available tasks and spawn workers.
 
@@ -252,8 +258,8 @@ async def task_dispatcher(interval: int):
 
             # Check memory pressure
             try:
-                with open("/proc/meminfo") as f:
-                    meminfo = f.read()
+                # Offload blocking open/read to thread pool
+                meminfo = await asyncio.to_thread(_read_meminfo)
                 total_kb = 0
                 avail_kb = 0
                 for line in meminfo.split("\n"):

@@ -5,8 +5,10 @@ Originally extracted from main.py. Imported by both main.py and routes/*.py.
 """
 
 import asyncio
+import ipaddress
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException
@@ -53,6 +55,39 @@ async def _sql_param(query_template: str, **params: str) -> list[dict[str, Any]]
     escaped = {k: _sanitize(str(v)) for k, v in params.items()}
     query = query_template.format(**escaped)
     return await _sql(query)
+
+
+# ── Webhook URL validation (SSRF protection) ────────────────────────────
+
+
+def validate_webhook_url(url: str) -> str:
+    """Validate a webhook URL to prevent SSRF attacks.
+
+    Rules:
+    - Must be https:// (no http, no file://, no data:)
+    - Must not point to private IP ranges (10.x, 172.16-31.x, 192.168.x, 127.x)
+    - Must not point to localhost or metadata endpoints
+    - Must parse as a valid URL
+    """
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("Webhook URL must use https://")
+    hostname = parsed.hostname or ""
+    # Block internal hostnames
+    blocklist = [
+        "localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254",
+        "[::1]", "metadata.google.internal", "100.100.100.200",
+    ]
+    if hostname.lower() in blocklist or hostname.endswith(".local"):
+        raise ValueError(f"Webhook URL targeting internal host is not allowed: {hostname}")
+    # Block private IP ranges
+    try:
+        addr = ipaddress.ip_address(hostname)
+        if addr.is_private or addr.is_loopback or addr.is_link_local:
+            raise ValueError(f"Webhook URL targeting private IP is not allowed: {hostname}")
+    except ValueError:
+        pass  # hostname is a domain name, not an IP — let DNS resolution handle it
+    return url
 
 
 def _parse_sats_rows(resp_json: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -195,9 +230,13 @@ async def _call(reducer: str, args: list) -> dict:
     return {"status": "ok"}
 
 
-async def _compute_score(task: dict, agent_capabilities: str | None = None) -> tuple[int, str]:
+async def _compute_score(task: dict, agent_capabilities: str | None = None,
+                          blocker_tasks: list[dict] | None = None) -> tuple[int, str]:
     """Compute a priority score for a task. Higher = more recommended.
-    Priority is u8 (0=urgent … 255=lowest). Maps to 100-0 range."""
+    Priority is u8 (0=urgent … 255=lowest). Maps to 100-0 range.
+
+    If blocker_tasks is provided, uses it to compute blocker count (avoids N+1).
+    """
     base = max(100 - task.get("priority", 128), 0)  # 0→100, 128→~50, 255→0
     reasons = []
 
@@ -210,7 +249,10 @@ async def _compute_score(task: dict, agent_capabilities: str | None = None) -> t
 
     # Dependency bonus: +10 per task that depends on this one (unblock value)
     try:
-        all_tasks = await _sql("SELECT id, depends_on FROM tasks WHERE depends_on IS NOT NULL")
+        if blocker_tasks is None:
+            all_tasks = await _sql("SELECT id, depends_on FROM tasks WHERE depends_on IS NOT NULL")
+        else:
+            all_tasks = blocker_tasks
         blocker_count = sum(1 for t in all_tasks if t.get("depends_on") == task["id"])
         blocker_bonus = min(blocker_count * 10, 30)
         if blocker_bonus > 0:

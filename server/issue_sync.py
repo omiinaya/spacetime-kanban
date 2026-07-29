@@ -6,7 +6,7 @@ Provides GitHub API helpers for creating, closing, and reopening issues.
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -143,7 +143,7 @@ def link_issue(task_id: str, repo: str, issue_number: int, issue_url: str, html_
         "issue_url": issue_url,
         "html_url": html_url,
         "status": "open",
-        "linked_at": int(datetime.utcnow().timestamp() * 1000),
+        "linked_at": int(datetime.now(tz=UTC).timestamp() * 1000),
     }
 
 

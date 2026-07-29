@@ -56,7 +56,7 @@ See [AGENTS.md](AGENTS.md) for the full agent API guide with state machine and c
 
 ## Cleanup — Legacy Cron Scripts
 
-The following scripts have been replaced by the server-side scheduler and are candidates for removal:
+The following scripts have been replaced by the server-side scheduler and are removed:
 
 - `server/watchdog.py` — replaced by `scheduler.stale_watcher` (120s loop)
 - `server/kanban_heartbeat.py` — replaced by agent heartbeat API + scheduler
