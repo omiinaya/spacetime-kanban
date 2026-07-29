@@ -223,22 +223,7 @@ async def spa_fallback(request, exc):
     return JSONResponse(status_code=404, content={"detail": "Not found"})
 
 
-# ── Dispatcher State Store ───────────────────────────────────────────
-# STDB-backed key-value store. Replaces JSON tracker files with proper
-# database persistence. Each key maps to a JSON-serialized value row
-# in the dispatcher_state STDB table.
-
-
-# ── Roadmap Import ─────────────────────────────────────────────────
-
-
-# ── Webhook Subscriptions ────────────────────────────────────────────
-
-
-# ── Issue Sync ────────────────────────────────────────────────────────
-
-
-# ── GitHub Webhook ───────────────────────────────────────────────────
+# ── Branch Validation Pattern ─────────────────────────────────────────
 
 BRANCH_PATTERN = re.compile(
     r"^(?:feature|fix|chore|refactor|docs|test)/"
