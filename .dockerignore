@@ -29,8 +29,6 @@ AGENTS.md
 CLAUDE.md
 CONTRIBUTING.md
 architecture.html
-improvements-plan.md
-NTS.md
 kanban
 .githooks/
 .github/
@@ -38,7 +36,6 @@ kanban
 .devcontainer/
 
 # Additional exclusions — common build/test artifacts
-.DS_Store
 *.egg-info/
 dist/
 build/
