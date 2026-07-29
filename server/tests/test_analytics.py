@@ -130,6 +130,7 @@ class TestAnalyticsOverview:
     async def test_sql_failure_returns_graceful_error(self):
         """If _sql raises, the exception propagates as HTTP 502."""
         from fastapi import HTTPException
+
         from routes.analytics import analytics_overview
 
         with patch("routes.analytics._sql", new_callable=AsyncMock) as mock:
