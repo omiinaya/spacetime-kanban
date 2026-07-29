@@ -125,8 +125,15 @@ class TestWebhooks:
 
     def test_format_generic_includes_extra(self):
         """Generic format should include extra when provided."""
-        task = {"id": "t3", "title": "Fix", "status": "blocked", "priority": 0, "repo": "r",
-                "assigned_to": "user", "score": 100}
+        task = {
+            "id": "t3",
+            "title": "Fix",
+            "status": "blocked",
+            "priority": 0,
+            "repo": "r",
+            "assigned_to": "user",
+            "score": 100,
+        }
         payload = _format_generic("blocked", task, extra="Dependency missing")
         assert payload["extra"] == "Dependency missing"
 
@@ -146,8 +153,15 @@ class TestWebhooks:
 
     def test_format_payload_unknown_type_falls_back_to_generic(self):
         """Unknown webhook type should fall back to generic formatter."""
-        task = {"id": "t", "title": "Test", "repo": "r", "status": "available",
-                "priority": 0, "assigned_to": None, "score": 0}
+        task = {
+            "id": "t",
+            "title": "Test",
+            "repo": "r",
+            "status": "available",
+            "priority": 0,
+            "assigned_to": None,
+            "score": 0,
+        }
         payload = _format_payload("unknown_type", "created", task)
         assert "event" in payload
         assert payload["event"] == "created"
@@ -361,12 +375,15 @@ class TestWebhooks:
             },
         ]
 
-        result = update_webhook("wh_abc", {
-            "url": "https://new.example.com",
-            "type": "discord",
-            "events": ["created", "completed"],
-            "label": "new label",
-        })
+        result = update_webhook(
+            "wh_abc",
+            {
+                "url": "https://new.example.com",
+                "type": "discord",
+                "events": ["created", "completed"],
+                "label": "new label",
+            },
+        )
 
         assert result is not None
         assert result["url"] == "https://new.example.com"
@@ -395,19 +412,34 @@ class TestWebhooks:
         """list_webhook_deliveries should return rows sorted by delivered_at desc."""
         mock_sql_param.return_value = [
             {
-                "id": "del_1", "webhook_id": "wh_abc", "event": "created",
-                "url": "https://example.com/hook", "status_code": 200,
-                "response_body": "OK", "success": True, "delivered_at": 3000,
+                "id": "del_1",
+                "webhook_id": "wh_abc",
+                "event": "created",
+                "url": "https://example.com/hook",
+                "status_code": 200,
+                "response_body": "OK",
+                "success": True,
+                "delivered_at": 3000,
             },
             {
-                "id": "del_2", "webhook_id": "wh_abc", "event": "completed",
-                "url": "https://example.com/hook", "status_code": 200,
-                "response_body": "OK", "success": True, "delivered_at": 1000,
+                "id": "del_2",
+                "webhook_id": "wh_abc",
+                "event": "completed",
+                "url": "https://example.com/hook",
+                "status_code": 200,
+                "response_body": "OK",
+                "success": True,
+                "delivered_at": 1000,
             },
             {
-                "id": "del_3", "webhook_id": "wh_abc", "event": "claimed",
-                "url": "https://example.com/hook", "status_code": 200,
-                "response_body": "OK", "success": True, "delivered_at": 2000,
+                "id": "del_3",
+                "webhook_id": "wh_abc",
+                "event": "claimed",
+                "url": "https://example.com/hook",
+                "status_code": 200,
+                "response_body": "OK",
+                "success": True,
+                "delivered_at": 2000,
             },
         ]
         result = list_webhook_deliveries("wh_abc")

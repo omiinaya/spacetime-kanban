@@ -1312,8 +1312,7 @@ def handle_lint_code(ctx: WorkerContext) -> tuple[bool, str]:
             fixed = result.stdout.strip()
             if fixed:
                 filtered = [
-                    line for line in fixed.split("\n")
-                    if line.strip() and "Fixed" not in line
+                    line for line in fixed.split("\n") if line.strip() and "Fixed" not in line
                 ]
                 count = len(filtered)
                 results.append(f"Python: {count} issue(s) fixed")

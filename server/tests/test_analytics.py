@@ -57,10 +57,15 @@ class TestAnalyticsOverview:
 
         result = await analytics_overview()
         expected = {
-            "total", "by_status", "repos",
-            "completed_today", "completed_week",
-            "total_done", "claims_last_hour",
-            "completions_last_hour", "claim_complete_ratio",
+            "total",
+            "by_status",
+            "repos",
+            "completed_today",
+            "completed_week",
+            "total_done",
+            "claims_last_hour",
+            "completions_last_hour",
+            "claim_complete_ratio",
         }
         for field in expected:
             assert field in result, f"missing field: {field}"

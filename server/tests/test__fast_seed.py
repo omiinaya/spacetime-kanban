@@ -7,9 +7,11 @@ def test_module_importable():
 
 def test_main_function():
     from server._fast_seed import main
+
     assert callable(main)
 
 
 def test_create_task_exists():
     from server._fast_seed import create_task
+
     assert callable(create_task)

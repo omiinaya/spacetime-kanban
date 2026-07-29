@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -52,22 +52,21 @@ jobs:
   test-python:
     runs-on: ubuntu-latest
     needs: [lint-python, format-python]
+    defaults:
+      run:
+        working-directory: server
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
-      - name: Install system deps
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libpcap-dev 2>/dev/null || true
       - name: Install Python deps
         run: |
           pip install --upgrade pip
-          pip install -r server/requirements.txt pytest pytest-asyncio httpx pytest-timeout
+          pip install -r requirements.txt pytest pytest-asyncio httpx pytest-timeout
       - name: Run tests
-        run: python -m pytest server/tests/ -v -x --tb=short -k "not e2e"
-        env:
-          PYTHONPATH: ${{ github.workspace }}/server
+        run: python -m pytest tests/ -v -x --tb=short -k "not e2e"
 
   test-typescript:
     runs-on: ubuntu-latest

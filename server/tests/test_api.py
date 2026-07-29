@@ -1808,9 +1808,7 @@ async def test_record_migration_all_fields(client, mock_all):
     assert data["status"] == "recorded"
     assert data["version"] == "2026-07-20-01-add-labels"
     # Verify the reducer was called with all fields
-    migration_calls = [
-        c for c in mock_all["call"].call_args_list if c[0][0] == "record_migration"
-    ]
+    migration_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "record_migration"]
     assert len(migration_calls) == 1
     args = migration_calls[0][0][1]
     assert args[0] == "2026-07-20-01-add-labels"
@@ -1859,9 +1857,7 @@ async def test_record_schema_migration_alias(client, mock_all):
     assert resp.status_code == 201
     data = resp.json()
     assert data["status"] == "recorded"
-    migration_calls = [
-        c for c in mock_all["call"].call_args_list if c[0][0] == "record_migration"
-    ]
+    migration_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "record_migration"]
     assert len(migration_calls) >= 1
     args = migration_calls[-1][0][1]
     assert "v2.3.0" in args
@@ -1931,9 +1927,7 @@ async def test_get_nonexistent_agent_404(client, mock_all):
 async def test_create_duplicate_task_title_repo(client, mock_all):
     """Creating a task with the same title+repo as an existing non-done task
     returns status='exists' with the existing task's ID (dedup)."""
-    mock_all["param"].return_value = [
-        {"id": "task_1", "status": "available"}
-    ]
+    mock_all["param"].return_value = [{"id": "task_1", "status": "available"}]
     mock_all["call"].return_value = {"status": "ok"}
     resp = await client.post(
         "/api/tasks",
@@ -2067,9 +2061,7 @@ async def test_search_special_characters(client, mock_all):
         _make_task("t2", "Auth module", "Authentication and authorization"),
     ]
     # SQL injection attempt in the search string
-    resp = await client.get(
-        "/api/tasks", params={"search": "' OR 1=1; DROP TABLE tasks --"}
-    )
+    resp = await client.get("/api/tasks", params={"search": "' OR 1=1; DROP TABLE tasks --"})
     assert resp.status_code == 200
     data = resp.json()
     # Should not crash, should return filtered results (empty in this case)

@@ -189,8 +189,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                 {
                     "title": f"Add PR template to {repo_name}",
                     "description": (
-                        "A pull request template standardizes "
-                        "PR descriptions and helps reviewers."
+                        "A pull request template standardizes PR descriptions and helps reviewers."
                     ),
                     "priority": 3,
                     "scanner": "docs_ci",

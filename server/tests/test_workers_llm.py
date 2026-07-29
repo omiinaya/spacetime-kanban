@@ -63,9 +63,7 @@ class TestHasGitChanges:
 
     @patch("workers.llm.subprocess.run")
     def test_with_changes(self, mock_run):
-        mock_run.return_value = MagicMock(
-            stdout="file1.py\nfile2.rs\n", returncode=0
-        )
+        mock_run.return_value = MagicMock(stdout="file1.py\nfile2.rs\n", returncode=0)
         result = _has_git_changes("/fake/repo")
         assert result == ["file1.py", "file2.rs"]
 
@@ -121,8 +119,10 @@ class TestRunLlmWorker:
         }
         # Override repo_path to return our temp dir
         with patch.object(
-            WorkerContext, "repo_path",
-            new_callable=PropertyMock, return_value=str(repo_dir),
+            WorkerContext,
+            "repo_path",
+            new_callable=PropertyMock,
+            return_value=str(repo_dir),
         ):
             yield ctx
 
@@ -175,7 +175,11 @@ class TestRunLlmWorker:
     @patch("workers.base.WorkerContext.add_log")  # Prevent real API calls
     @patch("workers.llm.subprocess.Popen")
     def test_already_done_no_changes(
-        self, mock_popen, mock_add_log, mock_git_changes, worker_context,
+        self,
+        mock_popen,
+        mock_add_log,
+        mock_git_changes,
+        worker_context,
     ):
         """'task is complete' + 'already implemented' = success (no work needed)."""
         mock_proc = MagicMock()

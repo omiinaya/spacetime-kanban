@@ -56,9 +56,7 @@ class TestApiGet:
     def test_http_error_returns_none(self, mock_urlopen):
         from urllib.error import HTTPError
 
-        mock_urlopen.side_effect = HTTPError(
-            "http://test", 503, "Service Unavailable", {}, None
-        )
+        mock_urlopen.side_effect = HTTPError("http://test", 503, "Service Unavailable", {}, None)
         result = api_get("/api/tasks")
         assert result is None
 
@@ -170,7 +168,10 @@ class TestWorkerContext:
     @patch("workers.base.os.path.isdir", return_value=True)
     @patch("workers.base.os.path.expanduser", return_value="/home/user/tmp")
     def test_repo_path_with_existing_dir(
-        self, mock_expanduser, mock_isdir, mock_api_get,
+        self,
+        mock_expanduser,
+        mock_isdir,
+        mock_api_get,
     ):
         """repo_path returns the path when the repo directory exists."""
         mock_api_get.return_value = {"id": "task_123", "title": "Test", "repo": "test-project"}

@@ -92,15 +92,14 @@ class TestSchedulerLowBacklog:
     @patch("server.scheduler_low_backlog._get_actionable_available_count")
     @patch("server.scheduler_low_backlog._trigger_scanner")
     @patch("time.time")
-    async def test_triggers_scanner_when_critical(
-        self, mock_time, mock_trigger, mock_count
-    ):
+    async def test_triggers_scanner_when_critical(self, mock_time, mock_trigger, mock_count):
         """When actionable count is below CRITICAL_BACKLOG_THRESHOLD and done > 5, trigger."""
         mock_time.return_value = 1000000
         mock_count.return_value = CRITICAL_BACKLOG_THRESHOLD - 1  # 2 or less
         mock_trigger.return_value = {"scanner_repo1": {"created": 3}}
 
         import server.scheduler_low_backlog as slb
+
         slb._last_trigger_ms = 0
 
         result = await check_backlog_and_trigger({"total_done": 50})
@@ -111,15 +110,14 @@ class TestSchedulerLowBacklog:
     @patch("server.scheduler_low_backlog._get_actionable_available_count")
     @patch("server.scheduler_low_backlog._trigger_scanner")
     @patch("time.time")
-    async def test_triggers_scanner_when_low(
-        self, mock_time, mock_trigger, mock_count
-    ):
+    async def test_triggers_scanner_when_low(self, mock_time, mock_trigger, mock_count):
         """When actionable count is between critical and low threshold, trigger scanner."""
         mock_time.return_value = 1000000
         mock_count.return_value = LOW_BACKLOG_THRESHOLD  # exactly at threshold
         mock_trigger.return_value = {"scanner_repo1": {"created": 5}}
 
         import server.scheduler_low_backlog as slb
+
         slb._last_trigger_ms = 0
 
         result = await check_backlog_and_trigger({"total_done": 50})
@@ -141,6 +139,7 @@ class TestSchedulerLowBacklog:
         mock_improve.return_value = 2
 
         import server.scheduler_low_backlog as slb
+
         slb._last_trigger_ms = 0
 
         result = await check_backlog_and_trigger({"total_done": 50})
@@ -178,6 +177,7 @@ class TestSchedulerLowBacklog:
         mock_trigger.return_value = {"r1": {"created": 2}}
 
         import server.scheduler_low_backlog as slb
+
         slb._last_trigger_ms = 0
 
         result = await check_backlog_and_trigger()  # No overview provided
@@ -188,14 +188,13 @@ class TestSchedulerLowBacklog:
     @patch("server.scheduler_low_backlog._get_actionable_available_count")
     @patch("server.scheduler_low_backlog._trigger_scanner")
     @patch("time.time")
-    async def test_does_not_trigger_when_done_too_low(
-        self, mock_time, mock_trigger, mock_count
-    ):
+    async def test_does_not_trigger_when_done_too_low(self, mock_time, mock_trigger, mock_count):
         """Should not trigger when total_done <= 5 even if actionable is 0."""
         mock_time.return_value = 1000000
         mock_count.return_value = 0
 
         import server.scheduler_low_backlog as slb
+
         slb._last_trigger_ms = 0
 
         result = await check_backlog_and_trigger({"total_done": 3})
