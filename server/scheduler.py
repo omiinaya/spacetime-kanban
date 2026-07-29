@@ -570,6 +570,7 @@ async def metrics_collector(interval: int):
                     "in_progress": overview.get("by_status", {}).get("inProgress", 0),
                     "blocked": overview.get("by_status", {}).get("blocked", 0),
                     "done": overview.get("total_done", 0),
+                    "completions_last_hour": overview.get("completions_last_hour", 0),
                     "claims_last_hour": overview.get("claims_last_hour", 0),
                     "claim_complete_ratio": overview.get("claim_complete_ratio", 0),
                 },
