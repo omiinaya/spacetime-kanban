@@ -19,11 +19,6 @@ from shared import (
 router = APIRouter()
 
 
-@router.get("/api/health")
-async def health():
-    return {"status": "ok"}
-
-
 @router.post("/api/roadmap/import", dependencies=[Depends(verify_auth)])
 async def import_roadmap(body: RoadmapImportRequest):
     """Parse ROADMAP.md content and bulk-create kanban tasks."""
@@ -152,48 +147,35 @@ async def cross_project_aggregation():
     return list(repos.values())
 
 
+# ── Schema Migrations ────────────────────────────────────────────────────
+
+
+def _row_to_migration(r: dict) -> MigrationOut:
+    return MigrationOut(
+        version=r["version"],
+        description=r.get("description", ""),
+        applied_at=r.get("applied_at", 0),
+        applied_by=r.get("applied_by", ""),
+        checksum=r.get("checksum"),
+    )
+
+
 @router.get("/api/migrations", response_model=list[MigrationOut])
 async def list_migrations():
-    """List applied schema migrations."""
-    rows = await _sql("SELECT * FROM schema_migrations")
-    rows = sorted(rows, key=lambda r: r.get("applied_at", 0))
-    return [
-        MigrationOut(
-            version=r["version"],
-            description=r.get("description", ""),
-            applied_at=r.get("applied_at", 0),
-            applied_by=r.get("applied_by", ""),
-            checksum=r.get("checksum"),
-        )
-        for r in rows
-    ]
+    """List applied schema migrations ordered by applied_at."""
+    rows = await _sql("SELECT * FROM schema_migrations ORDER BY applied_at DESC")
+    return [_row_to_migration(r) for r in rows]
 
 
 @router.get("/api/schema-migrations", response_model=list[MigrationOut])
 async def list_schema_migrations():
-    """Alias: list all schema migrations from the schema_migrations table."""
-    rows = await _sql("SELECT * FROM schema_migrations ORDER BY applied_at DESC")
-    return [
-        MigrationOut(
-            version=r["version"],
-            description=r.get("description", ""),
-            applied_at=r.get("applied_at", 0),
-            applied_by=r.get("applied_by", ""),
-            checksum=r.get("checksum"),
-        )
-        for r in rows
-    ]
-
-
-@router.post("/api/schema-migrations", status_code=201, dependencies=[Depends(verify_auth)])
-async def record_schema_migration(body: MigrationCreate):
-    """Alias: record a schema migration via /api/schema-migrations path."""
-    return await record_migration(body)
+    """Alias: list schema migrations (canonical path for frontend)."""
+    return await list_migrations()
 
 
 @router.post("/api/migrations", status_code=201, dependencies=[Depends(verify_auth)])
 async def record_migration(body: MigrationCreate):
-    """Record a schema migration."""
+    """Record a schema migration (also available at /api/schema-migrations)."""
     await _call(
         "record_migration",
         [
@@ -204,3 +186,9 @@ async def record_migration(body: MigrationCreate):
         ],
     )
     return {"status": "recorded", "version": body.version}
+
+
+@router.post("/api/schema-migrations", status_code=201, dependencies=[Depends(verify_auth)])
+async def record_schema_migration(body: MigrationCreate):
+    """Alias: record a schema migration via /api/schema-migrations path."""
+    return await record_migration(body)
