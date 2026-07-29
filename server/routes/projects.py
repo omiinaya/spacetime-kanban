@@ -116,6 +116,9 @@ async def suggest_by_project(limit: int = 10):
             return [{"notice": "reducer returned ok — no data"}]
         return result
     except HTTPException:
+        import logging
+
+        logging.getLogger("projects").exception("suggest_by_project reducer failed")
         pass
     # Fallback: compute via API
     rows = await _sql("SELECT * FROM tasks")
