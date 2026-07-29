@@ -141,8 +141,7 @@ def find_test_gaps(repo_name: str, repo_path: str) -> list[dict]:
                 findings.append(
                     {
                         "title": (
-                            f"Add tests for {len(batch)} untested python module(s)"
-                            f" in {repo_name}"
+                            f"Add tests for {len(batch)} untested python module(s) in {repo_name}"
                         ),
                         "description": "Add unit tests for the following untested modules:\n"
                         + "\n".join(f"  - {p}" for p in batch),
@@ -180,8 +179,7 @@ def find_missing_init(repo_name: str, repo_path: str) -> list[dict]:
                 {
                     "title": f"Add __init__.py to {len(missing)} python package(s) in {repo_name}",
                     "description": (
-                        "The following directories contain Python files"
-                        " but lack __init__.py:\n"
+                        "The following directories contain Python files but lack __init__.py:\n"
                     )
                     + "\n".join(f"  - {p}" for p in missing),
                     "priority": 3,
@@ -312,8 +310,7 @@ def find_large_files(repo_name: str, repo_path: str) -> list[dict]:
                 ),
                 "description": (
                     f"Found {len(files)} large source file(s) ≥300 lines."
-                    f" Recommend splitting:\n"
-                    + "\n".join(f"  - {p} ({c} lines)" for p, c in batch)
+                    f" Recommend splitting:\n" + "\n".join(f"  - {p} ({c} lines)" for p, c in batch)
                 ),
                 "priority": 2,
                 "repo": repo_name,

@@ -196,8 +196,7 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
             findings.append(
                 {
                     "title": (
-                        f"Replace unwrap() calls with error handling "
-                        f"in {file_name} ({repo_name})"
+                        f"Replace unwrap() calls with error handling in {file_name} ({repo_name})"
                     ),
                     "description": (
                         f"Found Rust files with excessive `.unwrap()` calls. These crash "

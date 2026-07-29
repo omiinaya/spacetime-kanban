@@ -24,11 +24,14 @@ class TestWebhookDispatcher:
 
     def test_format_message_task_blocked(self):
         """_format_message for EVENT_TASK_BLOCKED should contain the reason."""
-        msg = _format_message(EVENT_TASK_BLOCKED, {
-            "title": "Fix auth",
-            "reason": "Missing API key",
-            "repo": "sample-repo-q",
-        })
+        msg = _format_message(
+            EVENT_TASK_BLOCKED,
+            {
+                "title": "Fix auth",
+                "reason": "Missing API key",
+                "repo": "sample-repo-q",
+            },
+        )
         assert "Blocked" in msg
         assert "Fix auth" in msg
         assert "Missing API key" in msg
@@ -36,32 +39,41 @@ class TestWebhookDispatcher:
 
     def test_format_message_task_completed(self):
         """_format_message for EVENT_TASK_COMPLETED should contain the title."""
-        msg = _format_message(EVENT_TASK_COMPLETED, {
-            "title": "Add login",
-            "repo": "spacetime-web",
-        })
+        msg = _format_message(
+            EVENT_TASK_COMPLETED,
+            {
+                "title": "Add login",
+                "repo": "spacetime-web",
+            },
+        )
         assert "Completed" in msg
         assert "Add login" in msg
         assert "spacetime-web" in msg
 
     def test_format_message_task_deleted(self):
         """_format_message for EVENT_TASK_DELETED should mention deletion."""
-        msg = _format_message(EVENT_TASK_DELETED, {
-            "title": "Old task",
-            "repo": "test-repo",
-        })
+        msg = _format_message(
+            EVENT_TASK_DELETED,
+            {
+                "title": "Old task",
+                "repo": "test-repo",
+            },
+        )
         assert "Deleted" in msg
         assert "Old task" in msg
 
     def test_format_message_board_dead(self):
         """_format_message for EVENT_BOARD_DEAD should include stats."""
-        msg = _format_message(EVENT_BOARD_DEAD, {
-            "in_progress": 3,
-            "available": 5,
-            "blocked": 2,
-            "completions_last_hour": 0,
-            "claims_last_hour": 7,
-        })
+        msg = _format_message(
+            EVENT_BOARD_DEAD,
+            {
+                "in_progress": 3,
+                "available": 5,
+                "blocked": 2,
+                "completions_last_hour": 0,
+                "claims_last_hour": 7,
+            },
+        )
         assert "Board Dead" in msg
         assert "Available: 5" in msg
         assert "In Progress: 3" in msg
@@ -70,11 +82,14 @@ class TestWebhookDispatcher:
 
     def test_format_message_board_stalled(self):
         """_format_message for EVENT_BOARD_STALLED should include ratio."""
-        msg = _format_message(EVENT_BOARD_STALLED, {
-            "claim_complete_ratio": 25,
-            "claims_last_hour": 50,
-            "completions_last_hour": 2,
-        })
+        msg = _format_message(
+            EVENT_BOARD_STALLED,
+            {
+                "claim_complete_ratio": 25,
+                "claims_last_hour": 50,
+                "completions_last_hour": 2,
+            },
+        )
         assert "Board Stalled" in msg
         assert "25:1" in msg
         assert "50 claims" in msg
@@ -82,25 +97,31 @@ class TestWebhookDispatcher:
 
     def test_format_message_worker_stale(self):
         """_format_message for EVENT_WORKER_STALE should include age."""
-        msg = _format_message(EVENT_WORKER_STALE, {
-            "task_id": "task_abc123",
-            "age_minutes": 42.5,
-        })
+        msg = _format_message(
+            EVENT_WORKER_STALE,
+            {
+                "task_id": "task_abc123",
+                "age_minutes": 42.5,
+            },
+        )
         assert "Stale Worker" in msg
         assert "task_abc123" in msg
         assert "42" in msg  # age rounded to 42m
 
     def test_format_message_metrics_snapshot(self):
         """_format_message for EVENT_METRICS_SNAPSHOT should include all counts."""
-        msg = _format_message(EVENT_METRICS_SNAPSHOT, {
-            "total": 100,
-            "available": 30,
-            "in_progress": 10,
-            "blocked": 5,
-            "done": 55,
-            "claims_last_hour": 8,
-            "completions_last_hour": 6,
-        })
+        msg = _format_message(
+            EVENT_METRICS_SNAPSHOT,
+            {
+                "total": 100,
+                "available": 30,
+                "in_progress": 10,
+                "blocked": 5,
+                "done": 55,
+                "claims_last_hour": 8,
+                "completions_last_hour": 6,
+            },
+        )
         assert "Board Snapshot" in msg
         assert "Total: 100" in msg
         assert "Available: 30" in msg
@@ -109,18 +130,26 @@ class TestWebhookDispatcher:
 
     def test_format_message_claimed(self):
         """_format_message for EVENT_TASK_CLAIMED should identifier unknown events by key."""
-        msg = _format_message(EVENT_TASK_CLAIMED, {
-            "title": "My Task",
-            "repo": "my-repo",
-        })
+        msg = _format_message(
+            EVENT_TASK_CLAIMED,
+            {
+                "title": "My Task",
+                "repo": "my-repo",
+            },
+        )
         # The claimed event goes through the fallback if not in special handlers
         assert "task.claimed" in msg or "My Task" in msg
 
     def test_format_telegram_claimed_with_agent(self):
         """_format_telegram for claimed action should include agent."""
-        msg = _format_message(EVENT_TASK_CLAIMED, {
-            "title": "My Task", "repo": "my-repo", "assigned_to": "agent-x",
-        })
+        msg = _format_message(
+            EVENT_TASK_CLAIMED,
+            {
+                "title": "My Task",
+                "repo": "my-repo",
+                "assigned_to": "agent-x",
+            },
+        )
         assert "claimed" in msg.lower() or "Task" in msg
 
     def test_format_message_unknown_event_fallback(self):
@@ -132,11 +161,14 @@ class TestWebhookDispatcher:
     def test_format_message_truncates_long_titles(self):
         """Long titles should be truncated to 80 chars."""
         long_title = "A" * 200
-        msg = _format_message(EVENT_TASK_BLOCKED, {
-            "title": long_title,
-            "reason": "test",
-            "repo": "repo",
-        })
+        msg = _format_message(
+            EVENT_TASK_BLOCKED,
+            {
+                "title": long_title,
+                "reason": "test",
+                "repo": "repo",
+            },
+        )
         # Should contain exactly 80 A's
         assert "A" * 80 in msg
         assert "A" * 81 not in msg

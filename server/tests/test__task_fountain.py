@@ -7,4 +7,5 @@ def test_module_importable():
 
 def test_run_function():
     from server._task_fountain import run
+
     assert callable(run)

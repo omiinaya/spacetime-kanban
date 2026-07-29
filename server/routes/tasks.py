@@ -687,10 +687,13 @@ async def bulk_tasks(body: BulkActionRequest):
                 await _call("delete_task", [task_id])
                 results.append({"task_id": task_id, "status": "deleted"})
             else:
-                results.append({
-                    "task_id": task_id, "status": "error",
-                    "error": f"Unknown action: {body.action}",
-                })
+                results.append(
+                    {
+                        "task_id": task_id,
+                        "status": "error",
+                        "error": f"Unknown action: {body.action}",
+                    }
+                )
         except Exception as e:
             results.append({"task_id": task_id, "status": "error", "error": str(e)[:200]})
     return {"status": "ok", "results": results}

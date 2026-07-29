@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-ARG STDB_VERSION=2.7.0
+ARG STDB_VERSION=2.6.1
 RUN curl -fsSL "https://github.com/spacetimedb/spacetimedb/releases/download/v${STDB_VERSION}/spacetime-linux-x86_64.tar.gz" \
     | tar xz -C /usr/local/bin/ && \
     chmod +x /usr/local/bin/spacetime

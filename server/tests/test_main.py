@@ -32,8 +32,7 @@ class TestMain:
         from server.main import app
 
         middleware_types = [
-            m.cls for m in app.user_middleware
-            if m.cls.__name__ == "CORSMiddleware"
+            m.cls for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"
         ]
         assert len(middleware_types) == 1
 
@@ -42,8 +41,7 @@ class TestMain:
         from server.main import app
 
         middleware_types = [
-            m.cls for m in app.user_middleware
-            if m.cls.__name__ == "GZipMiddleware"
+            m.cls for m in app.user_middleware if m.cls.__name__ == "GZipMiddleware"
         ]
         assert len(middleware_types) == 1
 
@@ -78,9 +76,9 @@ class TestMain:
         assert any("/health" in p for p in route_paths), "Health endpoint not found"
 
         # Check SPA catch-all
-        assert any(
-            p in ("/", "") for p in route_paths
-        ) or "/" in str(route_paths), "Root endpoint not found"
+        assert any(p in ("/", "") for p in route_paths) or "/" in str(route_paths), (
+            "Root endpoint not found"
+        )
 
         # Check API routes are registered via routers
         api_paths = [p for p in route_paths if p.startswith("/api/")]
@@ -249,9 +247,7 @@ class TestMain:
             # We'll just test the mechanism exists
             pass
 
-    @pytest.mark.skip(
-        reason="Lifespan retry loop is hard to mock deterministically"
-    )
+    @pytest.mark.skip(reason="Lifespan retry loop is hard to mock deterministically")
     @pytest.mark.asyncio
     async def test_lifespan_retries_on_connection_error(self):
         """On startup, if STDB is unreachable, lifespan should retry."""

@@ -75,8 +75,13 @@ def validate_webhook_url(url: str) -> str:
     hostname = parsed.hostname or ""
     # Block internal hostnames
     blocklist = [
-        "localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254",  # noqa: S104
-        "[::1]", "metadata.google.internal", "100.100.100.200",
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "169.254.169.254",  # noqa: S104
+        "[::1]",
+        "metadata.google.internal",
+        "100.100.100.200",
     ]
     if hostname.lower() in blocklist or hostname.endswith(".local"):
         raise ValueError(f"Webhook URL targeting internal host is not allowed: {hostname}")
@@ -230,8 +235,9 @@ async def _call(reducer: str, args: list) -> dict:
     return {"status": "ok"}
 
 
-async def _compute_score(task: dict, agent_capabilities: str | None = None,
-                          blocker_tasks: list[dict] | None = None) -> tuple[int, str]:
+async def _compute_score(
+    task: dict, agent_capabilities: str | None = None, blocker_tasks: list[dict] | None = None
+) -> tuple[int, str]:
     """Compute a priority score for a task. Higher = more recommended.
     Priority is u8 (0=urgent … 255=lowest). Maps to 100-0 range.
 

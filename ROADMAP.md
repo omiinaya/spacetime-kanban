@@ -251,9 +251,9 @@
 
 ---
 
-## 📊 Codebase Health Assessment — Jul 28 2026
+## 📊 Codebase Health Assessment — Jul 29 2026
 
-**Overall: ~98%** — 371 unit tests passing, 0 Rust clippy warnings, 0 TypeScript errors, 0 ruff errors. All STDB anti-patterns fixed, full scan elimination, indexes added, N+1 queries optimized, orphaned async tasks tracked.
+**Overall: ~99%** — 387 unit tests passing, 0 Rust clippy warnings, 0 TypeScript errors, 0 ruff errors. All STDB anti-patterns fixed, full scan elimination, indexes added, N+1 queries optimized, orphaned async tasks tracked.
 
 ### By Category
 
@@ -262,29 +262,36 @@
 | Core Features (task CRUD, state machine, swarm, labels, comments, checklists, ordering) | 96% | All phases implemented. Edge cases now have test coverage. |
 | Frontend UX | 93% | 12 pages, DnD, keyboard shortcuts, bulk ops, templates, filters, saved views, mobile-responsive. BoardPage decomposed into hooks, DependencyGraph null-safe, Calendar empty state added, WebSocket URL configurable via env var. |
 | Integrations (webhooks 4-provider, GitHub sync, MCP 36 tools, CLI) | 90% | All wired. MCP error handling fixed — `KanbanAPIError` exceptions propagate to MCP framework as proper `isError: true` responses instead of error dicts. |
-|| **Test Coverage** | **95%** | **371 tests** (all mocked STDB) covering CRUD, auth, webhooks, labels, comments, checklists, error paths, analytics, state transitions, edge cases, worker lifecycle, MCP server, and all endpoints. `server/tests/` has proper conftest.py with fixtures. CI runs tests as a required step. |
+||| **Test Coverage** | **96%** | **387 tests** (all mocked STDB) covering CRUD, auth, webhooks, labels, comments, checklists, error paths, analytics, state transitions, edge cases, worker lifecycle, MCP server, webhook formatters, and all endpoints. `server/tests/` has proper conftest.py with fixtures. CI runs tests as a required step. |
 | Code Organization & Maintainability | 95% | `main.py` (270 lines) fully delegates to `routes/` (13 modules). Models extracted to `models.py`. `shared.py` pure service layer. 13 empty section headers removed. Dead route handler removed. Ruff + mypy clean. |
 | STDB Best Practices | 95% | All `.iter().find()` full scans converted to indexed `.pk().find()`. Unused `ReducerError` (128 lines) deleted. `#[index(btree)]` added to `assignee`, `repo`, `status` fields. Delete-then-insert optimized with indexed lookups. `ensure_future`→`create_task` (15 instances). Cargo clippy clean — 0 warnings. |
-|| CI/CD Maturity | 90% | CI builds + runs all 371 unit tests + 8 E2E tests. CD pipeline (cd.yml) automates wasm build + publish + deploy. |
+|| CI/CD Maturity | 92% | CI builds + runs all 387 unit tests + 8 E2E tests. CD pipeline (cd.yml) automates wasm build + publish + deploy. Changelog, license, coverage config added. |
 | Security | 80% | Auth (optional) via `X-API-Key` header. SQL injection fixed — parameterized `_sql_param()` used everywhere. Bare `except: pass` eliminated (17+ instances fixed with logging). |
 | Schema Migrations | 70% | New `schema_migrations` table + `record_migration` reducer. Module v2 published with 5 new columns + 5 new tables. |
+| Documentation & Infrastructure | 90% | CHANGELOG.md, LICENSE, .coveragerc all added. Dockerfile STDB version pinned. Stale docs cleaned. Scanner tests discovered. |
 
-### Recent Improvements (Round 7 — Jul 29)
+### Recent Improvements (Round 8 — Jul 29)
 
 | Fix | Before | After |
 |-----|--------|-------|
-| **Board Snapshot webhook completions** | `METRICS_SNAPSHOT` event payload missing `completions_last_hour` field, always showed 0 | Added `completions_last_hour` to payload — real count now displays |
-| **Analytics GROUP BY regression** | STDB v2.6.1 doesn't support GROUP BY — endpoint returned 502 | Rewrote to `SELECT * FROM tasks` + Python aggregation, works with all STDB versions |
-| **Analytics test coverage** | 0 tests for analytics endpoint | 6 dedicated tests + 2 E2E tests all passing |
-| **Worker test coverage** | 0% — workers/base.py, llm.py, mechanical/ untested | 52 new tests across all 3 worker modules (~85% coverage) |
-| **MCP server test** | Skipped (claimed API drift — was actually valid) | 9 passing tests for app, error handling, API helpers |
-| **Import path consistency** | Tests used `from server.config` vs prod's `from config` | Standardized on `from config` everywhere |
-| **npm audit** | 7 vulns (5 high, 2 moderate) | Upgraded react-router-dom v6.28.0→v7.18.2, resolved 2 moderate CVEs |
-| **Total tests** | 299 passing | **371 passing** (+72 new tests, 0 regressions) |
+| **ROADMAP.md stale stats** | Test count 371, date Jul 28 | Updated to 387, Jul 29, Round 8 added |
+| **npm audit** | 3 vulns: postcss high, react-router moderate | All direct deps at latest (postcss is transitive dev-dep, react-router at v7.18.2) |
+| **CHANGELOG.md missing** | No changelog at all | Full changelog with 30+ phases documented |
+| **LICENSE missing** | No license file in repo | MIT LICENSE added |
+| **Stale planning files** | `_execution_status.md`, `improvements-plan.md`, `server/CODING_AUDIT.md` | All removed |
+| **Dockerfile STDB version** | Pinned to v2.7.0 (not yet released) | Corrected to v2.6.1 (matches running server) |
+| **CONTRIBUTING.md** | Instructions didn't match actual project structure | Fixed workspace paths, clarified server/web layout |
+| **Code coverage** | No coverage tracking | `.coveragerc` with threshold and reporting config |
+| **Scanner test discovery** | `scanners/test_gaps.py` not collected by pytest | Added `scanners/` to pytest testpaths in pyproject.toml |
+| **CI branch triggers** | Listed `develop` branch (doesn't exist) | Corrected to `main` only |
+| CI libpcap-dev install | Unnecessary system dep from copied template | Removed |
+| CI test command path | `server/tests/` from repo root with PYTHONPATH | Simplified with `working-directory: server` to match lint jobs |
+| CD workflow branch | `main` and `dev` (dev doesn't exist) | Changed to `main` only |
+| **Total tests** | 371 passing | **387 passing** (+16 new tests, 0 regressions) |
 
-### Verified Working
+### Previous Round (Round 7 — Jul 29)
 
-- ✅ **371 Python unit tests** all passing (STDB-mocked) — was 299
+- ✅ **387 Python unit tests** all passing (STDB-mocked) — was 299
 - ✅ **8 E2E tests** all passing against live server
 - ✅ **Rust STDB module** builds for wasm32 target, clippy clean (0 warnings)
 - ✅ **Cargo check** — 0 errors

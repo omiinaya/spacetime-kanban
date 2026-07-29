@@ -137,6 +137,7 @@ def add_webhook(
 ) -> dict:
     """Register a new webhook subscription in STDB."""
     from shared import validate_webhook_url
+
     validate_webhook_url(url)
     wh_id = f"wh_{uuid.uuid4().hex[:12]}"
     events_str = ",".join(events or ["created", "claimed", "unclaimed", "completed", "blocked"])

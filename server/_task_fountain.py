@@ -107,8 +107,7 @@ def scan_test_gaps(repo_name: str, repo_path: str) -> list[dict]:
                 findings.append(
                     {
                         "title": (
-                            f"Add tests for {len(batch)} untested python module(s)"
-                            f" in {repo_name}"
+                            f"Add tests for {len(batch)} untested python module(s) in {repo_name}"
                         ),
                         "description": "Add unit tests for:\n"
                         + "\n".join(f"  - {p}" for p in batch),

@@ -17,6 +17,7 @@ class TestRegistration:
 
     def test_register_decorator(self):
         """register() adds a handler pattern to HANDLERS."""
+
         # Register a test handler
         @register(r"test pattern")
         def test_handler(ctx):
@@ -24,8 +25,7 @@ class TestRegistration:
 
         # Verify it was registered
         matches = [
-            (p, f) for p, f in HANDLERS
-            if hasattr(f, "__name__") and f.__name__ == "test_handler"
+            (p, f) for p, f in HANDLERS if hasattr(f, "__name__") and f.__name__ == "test_handler"
         ]
         assert len(matches) == 1
         pattern, fn = matches[0]
@@ -34,6 +34,7 @@ class TestRegistration:
 
     def test_case_insensitive(self):
         """Patterns are case-insensitive."""
+
         @register(r"case insensitive")
         def ci_handler(ctx):
             return True, "OK"
@@ -53,6 +54,7 @@ class TestMatchHandler:
 
     def test_first_match_wins(self):
         """First registered pattern takes priority."""
+
         @register(r"first")
         def first_fn(ctx):
             return True, "first"
@@ -80,8 +82,10 @@ class TestHandlers:
 
         ctx = WorkerContext("task_123")
         with patch.object(
-            WorkerContext, "repo_path",
-            new_callable=MagicMock, return_value=str(repo_dir),
+            WorkerContext,
+            "repo_path",
+            new_callable=MagicMock,
+            return_value=str(repo_dir),
         ):
             ctx.task = {
                 "id": "task_123",

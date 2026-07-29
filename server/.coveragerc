@@ -1,0 +1,18 @@
+[run]
+source = .
+omit = .venv/*, venv/*, __pycache__/*, tests/*, scanners/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    return NotImplemented
+    @overload
+ignore_errors = True
+precision = 2
+show_missing = True
+
+fail_under = 70.00

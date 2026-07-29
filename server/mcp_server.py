@@ -22,6 +22,7 @@ app = Server("spacetimedb-kanban")
 
 class KanbanAPIError(Exception):
     """Raised when the kanban API returns an HTTP error or is unreachable."""
+
     def __init__(self, message: str, status_code: int = 0):
         self.status_code = status_code
         super().__init__(message)
@@ -29,7 +30,7 @@ class KanbanAPIError(Exception):
 
 def api_get(path: str) -> list | dict:
     """GET from the kanban API. Raises KanbanAPIError on failure."""
-    url = urljoin(API_BASE, quote(path, safe='/:?=&'))
+    url = urljoin(API_BASE, quote(path, safe="/:?=&"))
     try:
         resp = urllib.request.urlopen(url, timeout=15)
         return json.loads(resp.read().decode())
@@ -42,7 +43,7 @@ def api_get(path: str) -> list | dict:
 
 def api_post(path: str, body: dict | None = None) -> dict:
     """POST to the kanban API. Raises KanbanAPIError on failure."""
-    url = urljoin(API_BASE, quote(path, safe='/:?=&'))
+    url = urljoin(API_BASE, quote(path, safe="/:?=&"))
     data = json.dumps(body or {}).encode() if body else None
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
@@ -59,7 +60,7 @@ def api_post(path: str, body: dict | None = None) -> dict:
 
 def api_patch(path: str, body: dict) -> dict:
     """PATCH the kanban API. Raises KanbanAPIError on failure."""
-    url = urljoin(API_BASE, quote(path, safe='/:?=&'))
+    url = urljoin(API_BASE, quote(path, safe="/:?=&"))
     data = json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, method="PATCH")
     req.add_header("Content-Type", "application/json")
@@ -75,7 +76,7 @@ def api_patch(path: str, body: dict) -> dict:
 
 def api_put(path: str, body: dict) -> dict:
     """PUT to the kanban API. Raises KanbanAPIError on failure."""
-    url = urljoin(API_BASE, quote(path, safe='/:?=&'))
+    url = urljoin(API_BASE, quote(path, safe="/:?=&"))
     data = json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, method="PUT")
     req.add_header("Content-Type", "application/json")
@@ -91,7 +92,7 @@ def api_put(path: str, body: dict) -> dict:
 
 def api_delete(path: str) -> dict:
     """DELETE from the kanban API. Raises KanbanAPIError on failure."""
-    url = urljoin(API_BASE, quote(path, safe='/:?=&'))
+    url = urljoin(API_BASE, quote(path, safe="/:?=&"))
     req = urllib.request.Request(url, method="DELETE")
     try:
         resp = urllib.request.urlopen(req, timeout=15)
@@ -104,6 +105,7 @@ def api_delete(path: str) -> dict:
 
 
 # ── Tool: list_tasks ─────────────────────────────────────────────────
+
 
 @app.list_tools()
 async def list_tools() -> list[Tool]:
@@ -132,10 +134,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_get_task",
-            description=(
-                "Get full task details including activity logs"
-                " and downstream blockers."
-            ),
+            description=("Get full task details including activity logs and downstream blockers."),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -179,8 +178,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "required_skills": {
                         "type": "string",
-                        "description": "Comma-separated skills"
-                        " (e.g. 'rust,python,typescript')",
+                        "description": "Comma-separated skills (e.g. 'rust,python,typescript')",
                         "default": "",
                     },
                     "created_by": {
@@ -228,10 +226,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_claim",
-            description=(
-                "Claim a task. Assigns it to an agent"
-                " and sets status to 'claimed'."
-            ),
+            description=("Claim a task. Assigns it to an agent and sets status to 'claimed'."),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -360,10 +355,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_set_dependency",
-            description=(
-                "Set which task this task depends on"
-                " (or clear the dependency)."
-            ),
+            description=("Set which task this task depends on (or clear the dependency)."),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -373,8 +365,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "depends_on": {
                         "type": "string",
-                        "description": "Task ID this depends on,"
-                        " or empty string to clear",
+                        "description": "Task ID this depends on, or empty string to clear",
                         "default": "",
                     },
                 },
@@ -383,10 +374,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_set_skills",
-            description=(
-                "Set required skills on a task"
-                " (comma-separated tags)."
-            ),
+            description=("Set required skills on a task (comma-separated tags)."),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -396,8 +384,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "skills": {
                         "type": "string",
-                        "description": "Comma-separated skills,"
-                        " e.g. 'rust,python'",
+                        "description": "Comma-separated skills, e.g. 'rust,python'",
                     },
                 },
                 "required": ["task_id", "skills"],
@@ -415,8 +402,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "agent_id": {
                         "type": "string",
-                        "description": "Agent to tailor suggestions for"
-                        " (matches capabilities)",
+                        "description": "Agent to tailor suggestions for (matches capabilities)",
                         "default": "",
                     },
                     "limit": {
@@ -429,10 +415,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_list_agents",
-            description=(
-                "List all registered swarm agents"
-                " with their status and capabilities."
-            ),
+            description=("List all registered swarm agents with their status and capabilities."),
             inputSchema={
                 "type": "object",
                 "properties": {},
@@ -525,8 +508,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="kanban_list_projects",
             description=(
-                "List all registered projects with their priority,"
-                " colour, and active status."
+                "List all registered projects with their priority, colour, and active status."
             ),
             inputSchema={
                 "type": "object",
@@ -536,8 +518,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="kanban_add_project",
             description=(
-                "Register a new project/repo with a priority level"
-                " for weighted task suggestion."
+                "Register a new project/repo with a priority level for weighted task suggestion."
             ),
             inputSchema={
                 "type": "object",
@@ -565,14 +546,12 @@ async def list_tools() -> list[Tool]:
                     },
                     "priority": {
                         "type": "integer",
-                        "description": "Priority 0-3"
-                        " (0=most important, 3=least)",
+                        "description": "Priority 0-3 (0=most important, 3=least)",
                         "default": 2,
                     },
                     "active": {
                         "type": "boolean",
-                        "description": "Whether to include this"
-                        " project in scoring",
+                        "description": "Whether to include this project in scoring",
                         "default": True,
                     },
                 },
@@ -581,10 +560,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_update_project",
-            description=(
-                "Update a project's priority, name, colour,"
-                " or active status."
-            ),
+            description=("Update a project's priority, name, colour, or active status."),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -614,8 +590,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "active": {
                         "type": "boolean",
-                        "description": "Whether this project"
-                        " is active in scoring",
+                        "description": "Whether this project is active in scoring",
                         "default": True,
                     },
                 },
@@ -655,10 +630,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_add_log",
-            description=(
-                "Add an activity log entry to a task."
-                " Useful for tracking progress."
-            ),
+            description=("Add an activity log entry to a task. Useful for tracking progress."),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -724,10 +696,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_issue_create",
-            description=(
-                "Create a GitHub issue from a kanban task"
-                " and auto-link them."
-            ),
+            description=("Create a GitHub issue from a kanban task and auto-link them."),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -756,10 +725,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="kanban_issue_status",
-            description=(
-                "Get the GitHub issue link status"
-                " for a kanban task."
-            ),
+            description=("Get the GitHub issue link status for a kanban task."),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -912,6 +878,7 @@ async def list_tools() -> list[Tool]:
 
 
 # ── Tool call handler ─────────────────────────────────────────────────
+
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
@@ -1128,39 +1095,51 @@ def _handle_list_agents(args: dict) -> dict:
 
 
 def _handle_register_agent(args: dict) -> dict:
-    return api_post("/api/agents/register", {
-        "agent_id": _get_str(args, "agent_id"),
-        "host": _get_str(args, "host"),
-        "capabilities": _get_str(args, "capabilities"),
-        "repo_focus": _get_str(args, "repo_focus"),
-    })
+    return api_post(
+        "/api/agents/register",
+        {
+            "agent_id": _get_str(args, "agent_id"),
+            "host": _get_str(args, "host"),
+            "capabilities": _get_str(args, "capabilities"),
+            "repo_focus": _get_str(args, "repo_focus"),
+        },
+    )
 
 
 def _handle_heartbeat(args: dict) -> dict:
     agent_id = _get_str(args, "agent_id")
-    return api_post(f"/api/agents/{agent_id}/heartbeat", {
-        "agent_id": agent_id,
-        "status": _get_str(args, "status", "online"),
-        "current_task_id": _get_str(args, "current_task_id"),
-    })
+    return api_post(
+        f"/api/agents/{agent_id}/heartbeat",
+        {
+            "agent_id": agent_id,
+            "status": _get_str(args, "status", "online"),
+            "current_task_id": _get_str(args, "current_task_id"),
+        },
+    )
 
 
 def _handle_set_capabilities(args: dict) -> dict:
     agent_id = _get_str(args, "agent_id")
-    return api_put(f"/api/agents/{agent_id}/capabilities", {
-        "capabilities": _get_str(args, "capabilities"),
-        "repo_focus": _get_str(args, "repo_focus"),
-    })
+    return api_put(
+        f"/api/agents/{agent_id}/capabilities",
+        {
+            "capabilities": _get_str(args, "capabilities"),
+            "repo_focus": _get_str(args, "repo_focus"),
+        },
+    )
 
 
 def _handle_add_log(args: dict) -> dict:
     task_id = _get_str(args, "task_id")
-    return api_post(f"/api/tasks/{task_id}/log", {
-        "task_id": task_id,
-        "action": _get_str(args, "action"),
-        "agent_id": _get_str(args, "agent_id", "hermes"),
-        "notes": _get_str(args, "notes"),
-    })
+    return api_post(
+        f"/api/tasks/{task_id}/log",
+        {
+            "task_id": task_id,
+            "action": _get_str(args, "action"),
+            "agent_id": _get_str(args, "agent_id", "hermes"),
+            "notes": _get_str(args, "notes"),
+        },
+    )
 
 
 def _handle_get_logs(args: dict) -> dict:
@@ -1177,20 +1156,26 @@ def _handle_issue_link(args: dict) -> dict:
     task_id = _get_str(args, "task_id")
     repo = _get_str(args, "repo")
     issue_number = _get_int(args, "issue_number")
-    return api_post("/api/issues/link", {
-        "task_id": task_id,
-        "repo": repo,
-        "issue_number": issue_number,
-    })
+    return api_post(
+        "/api/issues/link",
+        {
+            "task_id": task_id,
+            "repo": repo,
+            "issue_number": issue_number,
+        },
+    )
 
 
 def _handle_issue_create(args: dict) -> dict:
-    return api_post("/api/issues/create", {
-        "task_id": _get_str(args, "task_id"),
-        "repo": _get_str(args, "repo"),
-        "labels": _get_str(args, "labels"),
-        "assignee": _get_str(args, "assignee"),
-    })
+    return api_post(
+        "/api/issues/create",
+        {
+            "task_id": _get_str(args, "task_id"),
+            "repo": _get_str(args, "repo"),
+            "labels": _get_str(args, "labels"),
+            "assignee": _get_str(args, "assignee"),
+        },
+    )
 
 
 def _handle_issue_status(args: dict) -> dict:
@@ -1212,10 +1197,13 @@ def _handle_add_comment(args: dict) -> dict:
     task_id = _get_str(args, "task_id")
     body = _get_str(args, "body")
     author = _get_str(args, "author", "hermes")
-    return api_post(f"/api/tasks/{task_id}/comments", {
-        "body": body,
-        "author": author,
-    })
+    return api_post(
+        f"/api/tasks/{task_id}/comments",
+        {
+            "body": body,
+            "author": author,
+        },
+    )
 
 
 def _handle_list_comments(args: dict) -> dict:
@@ -1277,14 +1265,17 @@ def _handle_list_projects(args: dict) -> dict:
 
 
 def _handle_add_project(args: dict) -> dict:
-    return api_post("/api/projects", {
-        "id": _get_str(args, "id"),
-        "name": _get_str(args, "name"),
-        "description": _get_str(args, "description"),
-        "color": _get_str(args, "color", "#0ea5e9"),
-        "priority": _get_int(args, "priority", 2),
-        "active": bool(args.get("active", True)),
-    })
+    return api_post(
+        "/api/projects",
+        {
+            "id": _get_str(args, "id"),
+            "name": _get_str(args, "name"),
+            "description": _get_str(args, "description"),
+            "color": _get_str(args, "color", "#0ea5e9"),
+            "priority": _get_int(args, "priority", 2),
+            "active": bool(args.get("active", True)),
+        },
+    )
 
 
 def _handle_update_project(args: dict) -> dict:
@@ -1316,6 +1307,7 @@ def _handle_suggest_by_project(args: dict) -> dict:
 
 
 # ── Main entry point ──────────────────────────────────────────────────
+
 
 def main():
     """Run the MCP server over stdio."""
