@@ -1,6 +1,6 @@
 """Tests for server/config.py."""
 
-from server.config import settings
+from config import settings
 
 
 class TestSettings:
