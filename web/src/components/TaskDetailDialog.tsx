@@ -70,8 +70,9 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
           className="text-[10px] px-1.5 py-1 rounded bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
         >{saving ? '...' : '✓'}</button>
         <button onClick={() => { setEditing(false); setValue(epochMsToDateInput(dueBy)) }}
+          aria-label="Cancel"
           className="text-[10px] px-1.5 py-1 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors"
-        >✕</button>
+        ><span aria-hidden="true">✕</span></button>
       </div>
     )
   }
@@ -91,14 +92,16 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
     <div className="flex items-center gap-1">
       <span className={`text-xs ${overdue ? 'text-red-400 font-medium' : 'text-[var(--color-muted-foreground)]'}`}
         title={new Date(dueBy).toLocaleString()}>
-        📅 {new Date(dueBy).toLocaleDateString()}
+        <span aria-hidden="true">📅</span> {new Date(dueBy).toLocaleDateString()}
       </span>
       <button onClick={() => { setEditing(true); setValue(epochMsToDateInput(dueBy)) }}
+        aria-label="Edit due date"
         className="text-[10px] text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
-      >✏️</button>
+      ><span aria-hidden="true">✏️</span></button>
       <button onClick={handleClear} disabled={saving}
+        aria-label="Clear due date"
         className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
-      >✕</button>
+      ><span aria-hidden="true">✕</span></button>
     </div>
   )
 }
@@ -183,16 +186,16 @@ export function TaskDetailDialog({
   }
 
   if (!task) return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose} role="dialog" aria-modal="true">
       <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-6" onClick={e => e.stopPropagation()}>
         <p className="text-sm text-[var(--color-muted)]">Task not found. It may have been deleted.</p>
-        <button onClick={onClose} className="mt-3 text-sm px-3 py-1.5 rounded bg-[var(--color-primary)] text-white">Close</button>
+        <button onClick={onClose} aria-label="Close dialog" className="mt-3 text-sm px-3 py-1.5 rounded bg-[var(--color-primary)] text-white">Close</button>
       </div>
     </div>
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 sm:pt-16 pb-8 overflow-y-auto bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 sm:pt-16 pb-8 overflow-y-auto bg-black/50" onClick={onClose} role="dialog" aria-modal="true">
       <div className="w-full max-w-2xl bg-[var(--color-card)] rounded-xl border border-[var(--color-border)]" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-start justify-between gap-4 p-4 sm:p-6 border-b border-[var(--color-border)]">
@@ -216,7 +219,7 @@ export function TaskDetailDialog({
             </div>
             <h2 className="text-base sm:text-lg font-semibold leading-snug">{task.title}</h2>
           </div>
-          <button onClick={onClose} className="flex-shrink-0 p-1 rounded hover:bg-white/10 transition-colors">
+          <button onClick={onClose} aria-label="Close dialog" className="flex-shrink-0 p-1 rounded hover:bg-white/10 transition-colors">
             <X className="w-4 h-4 text-[var(--color-muted)]" />
           </button>
         </div>
@@ -331,6 +334,7 @@ export function TaskDetailDialog({
                     : 'bg-emerald-500/20 text-emerald-400'
                 }`}>{issueLink.status}</span>
                 <a href={issueLink.html_url} target="_blank" rel="noopener noreferrer"
+                  aria-label="Open in new tab"
                   className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
@@ -411,7 +415,7 @@ export function TaskDetailDialog({
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {logs.map((log: LogEntry) => (
                   <div key={log.id} className="flex items-start gap-2 py-1.5 border-b border-[var(--color-border)] last:border-0">
-                    <span className="text-sm shrink-0">{actionIcons[log.action] || '📋'}</span>
+                    <span aria-hidden="true" className="text-sm shrink-0">{actionIcons[log.action] || '📋'}</span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-medium capitalize">{log.action.replace(/_/g, ' ')}</span>

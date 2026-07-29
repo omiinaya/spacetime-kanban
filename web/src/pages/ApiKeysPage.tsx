@@ -77,7 +77,7 @@ export default function ApiKeysPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20" role="alert">
           <AlertCircle className="w-4 h-4" /> {error}
         </div>
       )}
@@ -88,6 +88,7 @@ export default function ApiKeysPage() {
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium text-emerald-400">✅ API Key Created</p>
             <button onClick={() => setCreatedKey(null)}
+              aria-label="Dismiss"
               className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
             ><X className="w-4 h-4" /></button>
           </div>

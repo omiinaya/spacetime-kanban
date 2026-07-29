@@ -152,7 +152,7 @@ export default function TriagePage() {
       )}
 
       {error && (
-        <div className="text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+        <div className="text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20" role="alert">
           Failed to load blocked tasks: {error}
         </div>
       )}

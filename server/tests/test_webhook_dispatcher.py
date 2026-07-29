@@ -212,7 +212,9 @@ class TestWebhookDispatcher:
 
     @patch("server.webhook_dispatcher.settings")
     @patch("server.webhook_dispatcher._get_webhook_client")
-    async def test_fire_event_handles_exception_during_delivery(self, mock_get_client, mock_settings):
+    async def test_fire_event_handles_exception_during_delivery(
+        self, mock_get_client, mock_settings
+    ):
         """Network exceptions during delivery should be caught and retried."""
         mock_settings.webhook_default_url = "https://hooks.example.com/webhook"
         mock_settings.webhook_max_retries = 2

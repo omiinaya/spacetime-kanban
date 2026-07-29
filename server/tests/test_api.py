@@ -371,7 +371,8 @@ async def test_analytics_overview_with_data(client, mock_all):
     # _sql calls: [status_group, repo_group]
     mock_all["sql"].side_effect = [
         [{"status": "blocked", "cnt": 1}, {"status": "done", "cnt": 1}],
-        [{"repo": "repo-a", "status": "blocked", "cnt": 1}, {"repo": "repo-b", "status": "done", "cnt": 1}],
+        [{"repo": "repo-a", "status": "blocked", "cnt": 1},
+         {"repo": "repo-b", "status": "done", "cnt": 1}],
     ]
     # _sql_param calls: [today_cnt, week_cnt, churn_logs, hour_cnt]
     mock_all["param"].side_effect = [

@@ -108,7 +108,7 @@ export default function CalendarPage() {
       </div>
 
       {loading ? <CalendarSkeleton /> : error ? (
-        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20" role="alert">
           <AlertCircle className="w-4 h-4" /> {error}
         </div>
       ) : tasks.length === 0 ? (
@@ -199,7 +199,7 @@ export default function CalendarPage() {
 
           {/* Task detail panel */}
           {selectedTask && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelectedTask(null)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelectedTask(null)} role="dialog" aria-modal="true">
               <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-6 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -213,8 +213,8 @@ export default function CalendarPage() {
                       <span className="text-xs px-1.5 py-0.5 rounded bg-white/8 text-[var(--color-muted)]">{selectedTask.repo}</span>
                     )}
                   </div>
-                  <button onClick={() => setSelectedTask(null)} className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
-                    ✕
+                  <button onClick={() => setSelectedTask(null)} aria-label="Close dialog" className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
+                    <span aria-hidden="true">✕</span>
                   </button>
                 </div>
                 <h3 className="text-sm font-semibold mb-2">{selectedTask.title}</h3>

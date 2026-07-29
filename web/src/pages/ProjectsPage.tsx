@@ -143,7 +143,7 @@ export default function ProjectsPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 p-3 mb-4 rounded bg-red-500/10 text-red-400 text-sm">
+        <div className="flex items-center gap-2 p-3 mb-4 rounded bg-red-500/10 text-red-400 text-sm" role="alert">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {error}
         </div>

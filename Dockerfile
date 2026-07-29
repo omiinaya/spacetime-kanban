@@ -53,5 +53,15 @@ COPY --from=module-builder /tmp/module.wasm server/spacetimedb/module.wasm
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
+# Create non-root user
+RUN addgroup --system kanban && adduser --system --ingroup kanban kanban && \
+    chown -R kanban:kanban /app
+
+USER kanban
+
 EXPOSE 8727
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8727/health')" || exit 1
+
 ENTRYPOINT ["docker-entrypoint.sh"]

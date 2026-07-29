@@ -189,7 +189,7 @@ export default function LogsPage() {
                         selectedActions.has(a) ? 'text-white' : 'text-[var(--color-muted-foreground)]'
                       }`}
                     >
-                      <span className="text-sm">{ACTION_ICONS[a] || '📋'}</span>
+                      <span aria-hidden="true" className="text-sm">{ACTION_ICONS[a] || '📋'}</span>
                       <span className="capitalize">{a.replace(/_/g, ' ')}</span>
                       {selectedActions.has(a) && <span className="ml-auto text-[var(--color-primary)]">✓</span>}
                     </button>
@@ -241,7 +241,7 @@ export default function LogsPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20" role="alert">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {error}
         </div>
@@ -264,7 +264,7 @@ export default function LogsPage() {
                   isHighlighted ? 'bg-white/[0.04] ring-1 ring-[var(--color-ring)]' : 'hover:bg-white/[0.02]'
                 }`}
               >
-                <span className="text-lg shrink-0 mt-0.5">{ACTION_ICONS[log.action] || '📋'}</span>
+                <span aria-hidden="true" className="text-lg shrink-0 mt-0.5">{ACTION_ICONS[log.action] || '📋'}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${actionColor}`}>
@@ -335,7 +335,7 @@ export default function LogsPage() {
                       })
                     }}
                   >
-                    <span className="text-sm">{ACTION_ICONS[action] || '📋'}</span>
+                    <span aria-hidden="true" className="text-sm">{ACTION_ICONS[action] || '📋'}</span>
                     <span className="capitalize">{action.replace(/_/g, ' ')}</span>
                     <span className="font-semibold">{count}</span>
                     <span className="opacity-60">({pct}%)</span>

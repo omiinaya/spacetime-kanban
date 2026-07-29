@@ -109,7 +109,7 @@ export default function LabelsPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20" role="alert">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {error}
         </div>
@@ -117,11 +117,11 @@ export default function LabelsPage() {
 
       {/* Create Dialog */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
           <div className="w-full max-w-md bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold flex items-center gap-2"><Tag className="w-4 h-4" /> New Label</h3>
-              <button onClick={() => setShowCreate(false)} className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
+              <button onClick={() => setShowCreate(false)} aria-label="Close dialog" className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
                 <X className="w-4 h-4" />
               </button>
             </div>

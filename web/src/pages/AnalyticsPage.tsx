@@ -74,7 +74,7 @@ export default function AnalyticsPage() {
 
   if (error) return (
     <div className="p-8">
-      <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+      <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20" role="alert">
         <AlertCircle className="w-4 h-4" /> Analytics error: {error}
       </div>
     </div>

@@ -3,11 +3,11 @@ import type { SavedFilterView } from '../../hooks/useSavedViews'
 
 export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose} role="dialog" aria-modal="true">
       <div className="w-full max-w-md bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-6 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold flex items-center gap-2"><Keyboard className="w-4 h-4" /> Keyboard Shortcuts</h3>
-          <button onClick={onClose} className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
+          <button onClick={onClose} aria-label="Close shortcuts" className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -57,6 +57,7 @@ export function SavedViewsPills({ savedViews, onLoad, onDelete }: {
             onClick={() => onDelete(view.id)}
             className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
             title="Delete view"
+            aria-label="Delete view"
           ><X className="w-2 h-2" /></button>
         </div>
       ))}

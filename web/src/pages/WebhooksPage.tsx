@@ -156,7 +156,7 @@ export default function WebhooksPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20" role="alert">
           <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
         </div>
       )}

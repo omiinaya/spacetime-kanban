@@ -1,6 +1,6 @@
 export function CardSkeleton() {
   return (
-    <div className="bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] p-3 space-y-2 animate-pulse">
+    <div className="bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] p-3 space-y-2 animate-pulse" aria-busy="true">
       <div className="flex items-start justify-between gap-2">
         <div className="h-4 w-16 rounded bg-white/10" />
         <div className="h-4 w-20 rounded bg-white/10" />
@@ -21,7 +21,7 @@ export function CardSkeleton() {
 
 export function CompactCardSkeleton() {
   return (
-    <div className="bg-[var(--color-card)] rounded border-l-4 border-l-slate-400 border border-[var(--color-border)] py-1.5 px-2 animate-pulse flex items-center gap-2">
+    <div className="bg-[var(--color-card)] rounded border-l-4 border-l-slate-400 border border-[var(--color-border)] py-1.5 px-2 animate-pulse flex items-center gap-2" aria-busy="true">
       <div className="h-4 w-3/4 rounded bg-white/10" />
       <div className="h-3 w-12 rounded bg-white/10" />
     </div>
@@ -30,7 +30,7 @@ export function CompactCardSkeleton() {
 
 export function TableRowSkeleton() {
   return (
-    <tr className="animate-pulse border-b border-[var(--color-border)]">
+    <tr className="animate-pulse border-b border-[var(--color-border)]" aria-busy="true">
       <td className="py-2.5 px-3"><div className="h-4 w-6 rounded bg-white/10" /></td>
       <td className="py-2.5 px-3"><div className="h-4 w-14 rounded bg-white/10" /></td>
       <td className="py-2.5 px-3"><div className="h-4 w-3/4 rounded bg-white/10" /></td>
@@ -45,7 +45,7 @@ export function TableRowSkeleton() {
 
 export function ColumnSkeleton({ count = 5 }: { count?: number }) {
   return (
-    <div className="space-y-3 animate-pulse">
+    <div className="space-y-3 animate-pulse" aria-busy="true">
       <div className="flex items-center justify-between">
         <div className="h-4 w-24 rounded bg-white/10" />
         <div className="h-5 w-8 rounded-full bg-white/10" />
@@ -59,7 +59,7 @@ export function ColumnSkeleton({ count = 5 }: { count?: number }) {
 
 export function ListViewSkeleton() {
   return (
-    <div className="space-y-4 animate-pulse">
+    <div className="space-y-4 animate-pulse" aria-busy="true">
       {/* Toolbar skeleton */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -96,7 +96,7 @@ export function ListViewSkeleton() {
 
 export function KanbanBoardSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-busy="true">
       <div className="flex items-center justify-between gap-3">
         <div className="h-6 w-40 rounded bg-white/10 animate-pulse" />
         <div className="flex items-center gap-2">
@@ -117,7 +117,7 @@ export function KanbanBoardSkeleton() {
 /** Generic full-page skeleton — header + body bars. */
 export function PageSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-6 animate-pulse">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-6 animate-pulse" aria-busy="true">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="h-6 w-44 rounded bg-white/10" />
@@ -139,7 +139,7 @@ export function PageSkeleton({ rows = 6 }: { rows?: number }) {
 /** Skeleton for analytics page — stat cards + chart areas. */
 export function AnalyticsSkeleton() {
   return (
-    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-6 animate-pulse">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-6 animate-pulse" aria-busy="true">
       <div className="flex items-center justify-between">
         <div className="h-6 w-32 rounded bg-white/10" />
         <div className="h-7 w-16 rounded bg-white/10" />
@@ -181,7 +181,7 @@ export function AnalyticsSkeleton() {
 /** Skeleton for card-grid pages (labels, projects). */
 export function CardGridSkeleton({ cards = 6 }: { cards?: number }) {
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6 animate-pulse">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 animate-pulse" aria-busy="true">
       <div className="flex items-center justify-between">
         <div className="h-6 w-36 rounded bg-white/10" />
         <div className="h-8 w-28 rounded bg-white/10" />
@@ -208,7 +208,7 @@ export function CardGridSkeleton({ cards = 6 }: { cards?: number }) {
 /** Skeleton for agent health page. */
 export function AgentListSkeleton() {
   return (
-    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-6 animate-pulse">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-6 animate-pulse" aria-busy="true">
       <div className="flex items-center justify-between">
         <div className="h-6 w-32 rounded bg-white/10" />
         <div className="h-7 w-20 rounded bg-white/10" />
@@ -246,7 +246,7 @@ export function AgentListSkeleton() {
 /** Skeleton for calendar page — month grid. */
 export function CalendarSkeleton() {
   return (
-    <div className="p-3 sm:p-4 md:p-6 lg:p-8 animate-pulse">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 animate-pulse" aria-busy="true">
       <div className="flex items-center justify-between mb-6">
         <div className="h-6 w-28 rounded bg-white/10" />
         <div className="flex items-center gap-2">

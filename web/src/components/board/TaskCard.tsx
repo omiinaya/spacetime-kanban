@@ -35,7 +35,7 @@ function DependencyBadge({ depId }: { depId: string | undefined }) {
   if (!depId) return null
   return (
     <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/15 text-amber-400/80" title={`Depends on: ${depId}`}>
-      ⬆
+      <span aria-hidden="true">⬆</span>
     </span>
   )
 }
@@ -108,7 +108,7 @@ export default function TaskCard({
               <span className={`text-[10px] px-1 py-0.5 rounded font-medium flex-shrink-0 ${
                 overdue ? 'bg-red-500/20 text-red-400' : 'bg-white/8 text-[var(--color-muted)]'
               }`} title={new Date(Number(task.dueBy)).toLocaleString()}>
-                📅 {new Date(Number(task.dueBy)).toLocaleDateString()}
+                <span aria-hidden="true">📅</span> {new Date(Number(task.dueBy)).toLocaleDateString()}
               </span>
             )
           })()}
@@ -217,7 +217,7 @@ export default function TaskCard({
             <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
               overdue ? 'bg-red-500/20 text-red-400' : 'bg-white/8 text-[var(--color-muted)]'
             }`} title={new Date(Number(task.dueBy)).toLocaleString()}>
-              📅 {new Date(Number(task.dueBy)).toLocaleDateString()}
+              <span aria-hidden="true">📅</span> {new Date(Number(task.dueBy)).toLocaleDateString()}
             </span>
           )
         })()}

@@ -74,7 +74,7 @@ export default function IssuesPage() {
 
       {/* Content */}
       {loading && !error ? <ListViewSkeleton /> : error ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="flex flex-col items-center justify-center py-16 text-center" role="alert">
           <p className="text-sm text-red-400 mb-2">Failed to load issue links</p>
           <p className="text-xs text-[var(--color-muted)] mb-3">{error}</p>
           <button onClick={fetchLinks}
@@ -124,6 +124,7 @@ export default function IssuesPage() {
                   {new Date(link.linked_at).toLocaleDateString()}
                 </span>
                 <a href={link.html_url} target="_blank" rel="noopener noreferrer"
+                  aria-label="Open in new tab"
                   className="p-1 rounded hover:bg-white/10 text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />

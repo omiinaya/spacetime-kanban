@@ -84,13 +84,13 @@ export default function SchemaMigrationsPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+        <div className="flex items-center gap-2 text-sm p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20" role="alert">
           <AlertCircle className="w-4 h-4" /> {error}
         </div>
       )}
 
       {saveMsg && (
-        <div className={`text-sm p-3 rounded-lg border ${saveMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'}`}>
+        <div className={`text-sm p-3 rounded-lg border ${saveMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'}`} role="alert">
           {saveMsg}
         </div>
       )}

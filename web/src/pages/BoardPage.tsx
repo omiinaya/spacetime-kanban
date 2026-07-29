@@ -6,6 +6,7 @@ import { useRealtimeTasks, type TaskStatus } from '../hooks/useRealtimeTasks'
 import KanbanColumn from '../components/KanbanColumn'
 import { KanbanBoardSkeleton, ListViewSkeleton } from '../components/Skeleton'
 import ListView from '../components/ListView'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import DependencyGraph from './DependencyGraph'
 import { STATUS_COLUMNS, STATUS_LABELS } from '../components/constants'
 import { CreateTaskDialog } from '../components/CreateTaskDialog'
@@ -536,11 +537,13 @@ export default function BoardPage() {
 
       {/* Dependency Graph Overlay */}
       {showGraph && (
-        <DependencyGraph
-          tasks={filtered}
-          onSelectTask={(id) => { setDetailTaskId(id); setShowGraph(false) }}
-          onClose={() => setShowGraph(false)}
-        />
+        <ErrorBoundary>
+          <DependencyGraph
+            tasks={filtered}
+            onSelectTask={(id) => { setDetailTaskId(id); setShowGraph(false) }}
+            onClose={() => setShowGraph(false)}
+          />
+        </ErrorBoundary>
       )}
 
       {showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}

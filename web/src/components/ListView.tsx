@@ -202,7 +202,7 @@ export default function ListView({
                       <span className="text-sm font-medium truncate">{task.title}</span>
                       {task.dependsOn && (
                         <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/15 text-amber-400/80 shrink-0" title="Has dependency">
-                          ⬆
+                          <span aria-hidden="true">⬆</span>
                         </span>
                       )}
                       {task.requiredSkills && (

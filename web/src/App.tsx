@@ -48,7 +48,7 @@ export default function App() {
           <span className="font-semibold text-sm">Kanban</span>
         </div>
       </div>
-      <nav className="flex-1 p-2 space-y-1">
+      <nav aria-label="Sidebar navigation" className="flex-1 p-2 space-y-1">
         {navItems.map((item) => {
           const active = location.pathname === item.path
           return (
@@ -96,7 +96,7 @@ export default function App() {
         }`}
       >
         <div className="flex justify-end p-2">
-          <button onClick={() => setMobileOpen(false)} className="p-1 text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
+          <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="p-1 text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -107,7 +107,7 @@ export default function App() {
       <main className="flex-1 min-w-0 overflow-auto">
         {/* Mobile header with hamburger */}
         <div className="sticky top-0 z-30 lg:hidden bg-[var(--color-background)] border-b border-[var(--color-border)] px-3 py-2 flex items-center gap-3">
-          <button onClick={() => setMobileOpen(true)} className="p-1 text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
+          <button onClick={() => setMobileOpen(true)} aria-label="Open menu" className="p-1 text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
@@ -117,7 +117,7 @@ export default function App() {
         </div>
 
         <Suspense fallback={
-          <div className="flex items-center justify-center h-64">
+          <div className="flex items-center justify-center h-64" aria-busy="true">
             <div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
           </div>
         }>
