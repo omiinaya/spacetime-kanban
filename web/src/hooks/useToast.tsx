@@ -43,14 +43,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ addToast }}>
       {children}
       {/* Toast container — renders above everything */}
-      <div className="fixed top-4 right-4 z-[100] space-y-2 max-w-sm pointer-events-none">
+      <div className="fixed top-4 right-4 z-[100] space-y-2 max-w-sm pointer-events-none" role="status" aria-live="polite">
         {toasts.map(t => (
           <div key={t.id}
             onClick={() => removeToast(t.id)}
             role="alert"
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-card)] border border-[var(--color-border)] shadow-lg text-sm pointer-events-auto transition-all cursor-pointer"
           >
-            <span className="text-lg">{t.emoji}</span>
+            <span aria-hidden="true" className="text-lg">{t.emoji}</span>
             <span className="truncate text-[var(--color-foreground)]">{t.text}</span>
           </div>
         ))}

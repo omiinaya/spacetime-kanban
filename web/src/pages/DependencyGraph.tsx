@@ -133,15 +133,15 @@ export default function DependencyGraph({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/70" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/70" onClick={onClose} role="dialog" aria-modal="true">
       <div className="flex items-center justify-between p-3 bg-[var(--color-card)] border-b border-[var(--color-border)]" onClick={e => e.stopPropagation()}>
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <span className="text-lg">🗺️</span> Dependency Graph
+          <span aria-hidden="true" className="text-lg">🗺️</span> Dependency Graph
           <span className="text-xs font-normal text-[var(--color-muted)]">({tasks.length} tasks)</span>
         </h2>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-[var(--color-muted)] hidden sm:inline">Scroll to zoom · Drag to pan</span>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-white/10 transition-colors">
+          <button onClick={onClose} aria-label="Close dependency graph" className="p-1.5 rounded hover:bg-white/10 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>

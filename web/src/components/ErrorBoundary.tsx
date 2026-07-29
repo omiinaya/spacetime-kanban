@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       // Default fallback UI with dark theme
       return (
-        <div className="flex items-center justify-center min-h-[200px] p-8">
+        <div className="flex items-center justify-center min-h-[200px] p-8" role="alert">
           <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-6 max-w-md w-full text-center space-y-4">
             {/* Error icon */}
             <div className="flex justify-center">

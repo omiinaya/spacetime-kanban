@@ -36,3 +36,26 @@ kanban
 .github/
 .gitmessage
 .devcontainer/
+
+# Additional exclusions — common build/test artifacts
+.DS_Store
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+*.log
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+coverage/
+.coverage
+*.db
+*.sqlite3
+*.pyo
+*.pyd
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

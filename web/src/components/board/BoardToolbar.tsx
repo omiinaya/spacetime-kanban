@@ -145,7 +145,7 @@ export function BoardToolbar({
         </div>
         <button onClick={onShowGraph}
           className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-violet-500/15 text-violet-400 hover:bg-violet-500/30 transition-colors"
-        ><span className="text-sm">🗺️</span> Graph</button>
+        ><span aria-hidden="true" className="text-sm">🗺️</span> Graph</button>
         <button onClick={onSeed}
           className="text-xs px-2.5 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors hidden sm:inline-block"
         >Seed</button>

@@ -20,7 +20,7 @@ export function SuggestionsPanel({ suggestions, onClaim }: {
         <div className="space-y-1.5">
           {suggestions.map((s, i) => (
             <div key={i} className="flex items-start gap-2 p-2 rounded bg-white/[0.03] hover:bg-white/[0.06] transition-colors cursor-pointer" onClick={() => onClaim(s.task.id)}>
-              <span className="text-lg mt-0.5">{['🥇', '🥈', '🥉'][i] || '📋'}</span>
+              <span aria-hidden="true" className="text-lg mt-0.5">{['🥇', '🥈', '🥉'][i] || '📋'}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium truncate">{s.task.title}</span>
