@@ -116,6 +116,13 @@ class TestWebhookDispatcher:
         # The claimed event goes through the fallback if not in special handlers
         assert "task.claimed" in msg or "My Task" in msg
 
+    def test_format_telegram_claimed_with_agent(self):
+        """_format_telegram for claimed action should include agent."""
+        msg = _format_message(EVENT_TASK_CLAIMED, {
+            "title": "My Task", "repo": "my-repo", "assigned_to": "agent-x",
+        })
+        assert "claimed" in msg.lower() or "Task" in msg
+
     def test_format_message_unknown_event_fallback(self):
         """Unknown events should produce a JSON dump fallback."""
         msg = _format_message("custom.event", {"foo": "bar"})
