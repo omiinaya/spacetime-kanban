@@ -23,7 +23,10 @@ class TestRegistration:
             return True, "Test handler ran"
 
         # Verify it was registered
-        matches = [(p, f) for p, f in HANDLERS if hasattr(f, "__name__") and f.__name__ == "test_handler"]
+        matches = [
+            (p, f) for p, f in HANDLERS
+            if hasattr(f, "__name__") and f.__name__ == "test_handler"
+        ]
         assert len(matches) == 1
         pattern, fn = matches[0]
         assert pattern.search("test pattern") is not None
@@ -76,14 +79,17 @@ class TestHandlers:
         stdb_dir.mkdir(parents=True)
 
         ctx = WorkerContext("task_123")
-        with patch.object(WorkerContext, "repo_path", new_callable=MagicMock, return_value=str(repo_dir)):
+        with patch.object(
+            WorkerContext, "repo_path",
+            new_callable=MagicMock, return_value=str(repo_dir),
+        ):
             ctx.task = {
                 "id": "task_123",
                 "title": "Fix something",
                 "repo": "test-repo",
             }
 
-            for pattern_text, handler in HANDLERS:
+            for _pattern_text, handler in HANDLERS:
                 # Check the handler follows the contract
                 # We can't easily test them all without mocking lots of subprocess calls,
                 # but we can at least verify function signatures
@@ -119,11 +125,22 @@ class TestHandlerPatternMatching:
             ("fix clippy error in auth module", "fix\\s+clippy\\s+(warning|error|lint)"),
             ("fix clippy lint", "fix\\s+clippy\\s+(warning|error|lint)"),
             ("remove unused import", "remove\\s+(unused\\s+)?import"),
-            ("remove imports from main.rs", "remove\\s+(unused\\s+)?import"),
-            ("extract auth into separate module", "extract\\s+.*\\s+into\\s+(sub.module|separate|module)"),
-            ("extract helpers into sub-module", "extract\\s+.*\\s+into\\s+(sub.module|separate|module)"),
+            (
+                "remove imports from main.rs",
+                r"remove\s+(unused\s+)?import",
+            ),
+            (
+                "extract auth into separate module",
+                r"extract\s+.*\s+into\s+(sub.module|separate|module)",
+            ),
+            (
+                "extract helpers into sub-module",
+                r"extract\s+.*\s+into\s+(sub.module|separate|module)",
+            ),
         ],
     )
     def test_handler_matches_title(self, title, expected_pattern):
         handler = match_handler(title)
-        assert handler is not None, f"No handler matched '{title}' (expected pattern: {expected_pattern})"
+        assert handler is not None, (
+            f"No handler matched '{title}' (expected pattern: {expected_pattern})"
+        )

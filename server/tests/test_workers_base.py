@@ -2,9 +2,7 @@
 
 import os
 import sys
-from unittest.mock import MagicMock, PropertyMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -169,11 +167,15 @@ class TestWorkerContext:
         assert ctx.task is None
 
     @patch("workers.base.api_get")
-    def test_repo_path_with_existing_dir(self, mock_api_get):
-        mock_api_get.return_value = {"id": "task_123", "title": "Test", "repo": "/tmp"}
+    @patch("workers.base.os.path.isdir", return_value=True)
+    @patch("workers.base.os.path.expanduser", return_value="/home/user/tmp")
+    def test_repo_path_with_existing_dir(
+        self, mock_expanduser, mock_isdir, mock_api_get,
+    ):
+        """repo_path returns the path when the repo directory exists."""
+        mock_api_get.return_value = {"id": "task_123", "title": "Test", "repo": "test-project"}
         ctx = WorkerContext("task_123")
-        ctx.task = {"id": "task_123", "title": "Test", "repo": "tmp"}
-        # /tmp always exists
+        ctx.task = {"id": "task_123", "title": "Test", "repo": "test-project"}
         path = ctx.repo_path
         assert path is not None
         assert "tmp" in path

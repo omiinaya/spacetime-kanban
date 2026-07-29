@@ -2,7 +2,7 @@
 
 import os
 import sys
-from unittest.mock import MagicMock, PropertyMock, call, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -120,7 +120,10 @@ class TestRunLlmWorker:
             "description": "",
         }
         # Override repo_path to return our temp dir
-        with patch.object(WorkerContext, "repo_path", new_callable=PropertyMock, return_value=str(repo_dir)):
+        with patch.object(
+            WorkerContext, "repo_path",
+            new_callable=PropertyMock, return_value=str(repo_dir),
+        ):
             yield ctx
 
     @patch("workers.llm._has_git_changes", return_value=["file1.py"])
@@ -171,8 +174,10 @@ class TestRunLlmWorker:
     @patch("workers.llm._has_git_changes", return_value=[])
     @patch("workers.base.WorkerContext.add_log")  # Prevent real API calls
     @patch("workers.llm.subprocess.Popen")
-    def test_already_done_no_changes(self, mock_popen, mock_add_log, mock_git_changes, worker_context):
-        """'task is complete' + 'already implemented' with no file changes = success (no work needed)."""
+    def test_already_done_no_changes(
+        self, mock_popen, mock_add_log, mock_git_changes, worker_context,
+    ):
+        """'task is complete' + 'already implemented' = success (no work needed)."""
         mock_proc = MagicMock()
         mock_proc.communicate.return_value = (
             "The task is complete. The feature was already implemented. Nothing to do.",
