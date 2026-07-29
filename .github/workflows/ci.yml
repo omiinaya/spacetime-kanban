@@ -51,17 +51,23 @@ jobs:
 
   test-python:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
+    needs: [lint-python, format-python]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
-      - run: pip install -r requirements.txt pytest pytest-asyncio httpx
-      - run: python -m pytest tests/ -v -x --tb=short
+      - name: Install system deps
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libpcap-dev 2>/dev/null || true
+      - name: Install Python deps
+        run: |
+          pip install --upgrade pip
+          pip install -r server/requirements.txt pytest pytest-asyncio httpx pytest-timeout
+      - name: Run tests
+        run: python -m pytest server/tests/ -v -x --tb=short
+        env:
+          PYTHONPATH: ${{ github.workspace }}/server
 
   test-typescript:
     runs-on: ubuntu-latest

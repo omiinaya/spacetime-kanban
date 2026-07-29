@@ -75,7 +75,7 @@ def validate_webhook_url(url: str) -> str:
     hostname = parsed.hostname or ""
     # Block internal hostnames
     blocklist = [
-        "localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254",
+        "localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254",  # noqa: S104
         "[::1]", "metadata.google.internal", "100.100.100.200",
     ]
     if hostname.lower() in blocklist or hostname.endswith(".local"):

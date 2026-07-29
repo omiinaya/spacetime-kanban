@@ -76,8 +76,8 @@ async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
             )
             if agent_rows:
                 agent_caps = agent_rows[0].get("capabilities")
-        except Exception:
-            pass
+        except Exception:  # noqa: S110
+            pass  # optional capability fetch
 
     results = []
     # Batch fetch dependencies ONCE to avoid N+1 queries inside _compute_score
@@ -180,8 +180,8 @@ async def clear_all_tasks():
             try:
                 await _call("delete_task", [tid])
                 deleted += 1
-            except Exception:
-                pass
+            except Exception:  # noqa: S110
+                pass  # continue on delete failure
     return {"status": "cleared", "deleted": deleted}
 
 

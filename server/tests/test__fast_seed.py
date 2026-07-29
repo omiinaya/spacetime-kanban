@@ -1,12 +1,15 @@
 """Tests for server/_fast_seed.py."""
 
-from server._fast_seed import *  # noqa: F401, F403
+
+def test_module_importable():
+    import server._fast_seed  # noqa: F401
 
 
-class TestFastSeed:
-    """Test suite for _fast_seed.py."""
+def test_main_function():
+    from server._fast_seed import main
+    assert callable(main)
 
-    # TODO: implement tests
-    def test__fast_seed_basic(self):
-        """Basic sanity test."""
-        assert True
+
+def test_create_task_exists():
+    from server._fast_seed import create_task
+    assert callable(create_task)
