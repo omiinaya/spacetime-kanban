@@ -141,7 +141,7 @@ def _spawn_worker(task_id: str, title: str, repo: str) -> bool:
         else:
             return False
 
-        proc = subprocess.Popen(
+        proc = subprocess.Popen(  # noqa: S603 — controlled worker spawn with configured command
             cmd,
             cwd=os.path.dirname(server_dir),
             stdout=subprocess.DEVNULL,

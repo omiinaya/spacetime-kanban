@@ -112,8 +112,8 @@ async def _generate_improvement_tasks() -> int:
             tasks = await _api_get(f"/api/tasks?status={status}&limit=500")
             if tasks:
                 existing_titles.update(t["title"].strip().lower() for t in tasks if t.get("title"))
-    except Exception:
-        pass
+    except Exception:  # noqa: S110
+        pass  # seed tasks — fire and forget
 
     created = 0
     improvement_files = ["IMPROVEMENTS.md", "PERFORMANCE.md", "SCHEMA_EVOLUTION_POLICY.md"]
@@ -131,8 +131,8 @@ async def _generate_improvement_tasks() -> int:
             try:
                 with open(imp_path, encoding="utf-8", errors="replace") as f:
                     content = f.read()
-            except Exception:
-                continue
+            except Exception:  # noqa: S112
+                continue  # skip unreadable files
 
             # Parse markdown headings as potential task titles
             import re
@@ -179,8 +179,8 @@ async def _generate_improvement_tasks() -> int:
                     and "badge" in readme.lower()
                     or "[![ci" in readme.lower()
                 )
-            except Exception:
-                pass
+            except Exception:  # noqa: S110
+                pass  # optional readme scan
 
         title = f"Add CI badge to README for {repo_name}"
         norm = title.strip().lower()

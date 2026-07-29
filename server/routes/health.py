@@ -70,7 +70,7 @@ async def system_health():
         }
     except ImportError:
         pass  # shared module not available
-    except Exception:
+    except Exception:  # noqa: S110
         pass  # query failure — keep board as {}
 
     return result

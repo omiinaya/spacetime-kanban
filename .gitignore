@@ -40,3 +40,7 @@ server/spacetimedb/src/AUDIT_REPORT.md
 
 # mypy cache
 .mypy_cache/
+
+# Generated improvement artifacts
+improvements-plan.md
+*.audit.md

@@ -4,7 +4,14 @@ use spacetimedb::{ReducerContext, Table};
 
 use crate::tables::*;
 
-// ── Thread-local Counters ───────────────────────────────────────────
+// ── Counter Helper ──────────────────────────────────────────────────
+// NOTE: These counters are NOT safe for retried reducer executions on
+// the SAME frame (same timestamp). In practice, STDB only re-executes
+// reducers that were valid but whose enclosing transaction was rolled
+// back due to internal retry. Since each retry happens on a fresh
+// timestamp, counters stay safe. We keep them for ordering guarantees
+// within a single call only — ID uniqueness is guaranteed by the
+// timestamp + sender prefix combination.
 
 thread_local! {
     pub(crate) static LOG_COUNTER: Cell<u64> = const { Cell::new(0) };
@@ -70,8 +77,8 @@ pub(crate) fn delete_logs_for_task(ctx: &ReducerContext, task_id: &str) {
     let logs: Vec<TaskLog> = ctx
         .db
         .task_logs()
-        .iter()
-        .filter(|l| l.task_id == task_id)
+        .task_id()
+        .filter(task_id)
         .collect();
     for log in logs {
         ctx.db.task_logs().delete(log);

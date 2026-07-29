@@ -11,7 +11,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Framework :: FastAPI",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
@@ -26,18 +25,29 @@ dependencies = [
 
 [build-system]
 requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "S"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/*" = ["S101"]
+"tests/*" = ["S101", "S110"]
+# Utility/seed scripts — intentional file:// reads and subprocess calls
+"_fast_seed.py" = ["S310", "S603", "S607"]
+"_task_fountain.py" = ["S310", "S603", "S607", "S110", "S112"]
+# Scanner tools — run as CLI tools with intentional subprocess usage
+"scanners/*" = ["S603", "S607", "S110", "S112", "S310"]
+# MCP server — reads files via file:// scheme for stdio transport
+"mcp_server.py" = ["S310"]
+# Server intentionally binds 0.0.0.0 for container deployment
+"main.py" = ["S104"]
+# Worker modules — subprocess-heavy by design; uses full paths in practice
+"workers/*" = ["S603", "S607", "S110", "S112", "S310"]
 
 [tool.ruff.format]
 quote-style = "double"

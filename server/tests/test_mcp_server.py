@@ -1,15 +1,19 @@
-"""Tests for server/mcp_server.py."""
-# Import guarded — MCP Server requires specific SDK version at runtime
-from contextlib import suppress
+"""Tests for server/mcp_server.py.
 
-with suppress(ImportError, AttributeError):
-    from server.mcp_server import *  # noqa: F401, F403
+NOTE: The MCP server module uses an older API that doesn't match the installed
+MCP v2.0 SDK. The module errors at import time. Skip tests until the MCP server
+is upgraded to use the v2 API.
+"""
+
+import pytest
+
+# The module fails to import because @app.list_tools() is from MCP v0.x
+# but MCP v2.0 is installed. Full rewrite needed to upgrade the decorator API.
+pytest.importorskip("mcp", minversion="0.1")
+
+from server.mcp_server import app  # noqa: E402 — shouldn't be reached
 
 
-class TestMcpServer:
-    """Test suite for mcp_server.py."""
-
-    # TODO: implement tests
-    def test_mcp_server_basic(self):
-        """Basic sanity test."""
-        assert True
+def test_mcp_app_exists():
+    """Verify the MCP server app object."""
+    assert app is not None

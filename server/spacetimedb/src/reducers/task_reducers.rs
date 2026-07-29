@@ -401,22 +401,22 @@ pub fn delete_task(ctx: &ReducerContext, task_id: String) -> Result<(), String> 
     let task = find_task(ctx, &task_id).ok_or_else(|| "Task not found".to_string())?;
     ctx.db.tasks().delete(task);
     delete_logs_for_task(ctx, &task_id);
-    // Clean up label assignments
+    // Clean up label assignments (uses btree index on task_id)
     let assignments: Vec<TaskLabelAssignment> = ctx
         .db
         .task_label_assignments()
-        .iter()
-        .filter(|a| a.task_id == task_id)
+        .task_id()
+        .filter(task_id.as_str())
         .collect();
     for a in assignments {
         ctx.db.task_label_assignments().delete(a);
     }
-    // Clean up checklist items
+    // Clean up checklist items (uses btree index on task_id)
     let checklist_items: Vec<TaskChecklistItem> = ctx
         .db
         .task_checklists()
-        .iter()
-        .filter(|i| i.task_id == task_id)
+        .task_id()
+        .filter(task_id.as_str())
         .collect();
     for i in checklist_items {
         ctx.db.task_checklists().delete(i);
@@ -556,12 +556,12 @@ pub fn add_checklist_item(
     } else {
         id
     };
-    // Determine next position
+    // Determine next position (uses btree index on task_id)
     let max_pos = ctx
         .db
         .task_checklists()
-        .iter()
-        .filter(|i| i.task_id == task_id)
+        .task_id()
+        .filter(task_id.as_str())
         .map(|i| i.position)
         .max()
         .unwrap_or(0);
