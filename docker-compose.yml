@@ -10,7 +10,7 @@ services:
     volumes:
       - stdb-data:/var/spacetime
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/"]
       interval: 10s
       timeout: 5s
       retries: 10

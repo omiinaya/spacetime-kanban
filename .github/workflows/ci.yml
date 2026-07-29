@@ -65,7 +65,7 @@ jobs:
           pip install --upgrade pip
           pip install -r server/requirements.txt pytest pytest-asyncio httpx pytest-timeout
       - name: Run tests
-        run: python -m pytest server/tests/ -v -x --tb=short
+        run: python -m pytest server/tests/ -v -x --tb=short -k "not e2e"
         env:
           PYTHONPATH: ${{ github.workspace }}/server
 

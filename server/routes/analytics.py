@@ -14,66 +14,53 @@ router = APIRouter()
 async def analytics_overview():
     """High-level metrics: total, per-status, completed today/this week.
 
-    Uses SQL-level aggregation instead of SELECT * + Python iteration,
-    reducing data transfer from thousands of rows to a handful of
-    aggregated values."""  # noqa: E501
+    Fetches all tasks and aggregates in Python because STDB v2.x doesn't
+    support GROUP BY. The task count (~18K rows @ ~200 bytes each = ~3.6MB
+    total transfer) is manageable for this cache-friendly endpoint.
+    """  # noqa: E501
     now = int(time.time() * 1000)
     day_ms = 86_400_000
     week_ms = 7 * day_ms
     hour_ago = now - 3_600_000
 
-    # ── Total and per-status counts ─────────────────────────────────
-    status_rows = await _sql(
-        "SELECT status, COUNT(*) AS cnt FROM tasks GROUP BY status"
-    )
+    # ── Fetch all tasks once, aggregate in Python ────────────────────
+    all_tasks = await _sql("SELECT * FROM tasks")
+
     by_status: dict[str, int] = {}
-    total = 0
-    for r in status_rows:
-        by_status[r["status"]] = r["cnt"]
-        total += r["cnt"]
-
-    total_done = by_status.get("done", 0)
-
-    # ── Completed today / this week — filtered in SQL ───────────────
-    today_rows = await _sql_param(
-        "SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'done' AND updated_at > {since}",
-        since=str(now - day_ms),
-    )
-    completed_today = today_rows[0]["cnt"] if today_rows else 0
-
-    week_rows = await _sql_param(
-        "SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'done' AND updated_at > {since}",
-        since=str(now - week_ms),
-    )
-    completed_week = week_rows[0]["cnt"] if week_rows else 0
-
-    # ── Repo breakdown via GROUP BY ─────────────────────────────────
-    repo_rows = await _sql(
-        "SELECT repo, status, COUNT(*) AS cnt FROM tasks GROUP BY repo, status"
-    )
     repos: dict[str, dict] = {}
-    for r in repo_rows:
-        repo = r.get("repo") or "none"
+    completed_today = 0
+    completed_week = 0
+    completions_last_hour = 0
+
+    for t in all_tasks:
+        status = t.get("status", "unknown")
+        by_status[status] = by_status.get(status, 0) + 1
+
+        repo = t.get("repo") or "none"
         if repo not in repos:
             repos[repo] = {"total": 0, "done": 0, "inProgress": 0, "blocked": 0, "available": 0}
-        status_name = r["status"]
-        repos[repo]["total"] += r["cnt"]
-        if status_name in repos[repo]:
-            repos[repo][status_name] += r["cnt"]
+        repos[repo]["total"] += 1
+        if status in repos[repo]:
+            repos[repo][status] += 1
 
-    # ── Claim churn canary (last hour) — already filtered in SQL ────
+        if status == "done":
+            updated = t.get("updated_at", 0)
+            if updated > now - day_ms:
+                completed_today += 1
+            if updated > now - week_ms:
+                completed_week += 1
+            if updated > hour_ago:
+                completions_last_hour += 1
+
+    total = len(all_tasks)
+    total_done = by_status.get("done", 0)
+
+    # ── Claim churn canary (last hour) — filtered in SQL ─────────────
     churn_logs = await _sql_param(
         "SELECT * FROM task_logs WHERE timestamp > {hour_ago} AND action = 'claimed'",
         hour_ago=str(hour_ago),
     )
     claims_last_hour = len(churn_logs)
-
-    # Completions last hour — filtered in SQL
-    hour_rows = await _sql_param(
-        "SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'done' AND updated_at > {since}",
-        since=str(hour_ago),
-    )
-    completions_last_hour = hour_rows[0]["cnt"] if hour_rows else 0
 
     return {
         "total": total,
