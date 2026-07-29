@@ -10,8 +10,12 @@ import pytest
 
 sys.path.insert(0, ".")
 
-from mcp_server import app, api_get, api_post  # noqa: E402
-from mcp_server import KanbanAPIError  # noqa: E402
+from mcp_server import (  # noqa: E402
+    KanbanAPIError,  # noqa: E402
+    api_get,
+    api_post,
+    app,
+)
 
 
 def test_mcp_app_exists():

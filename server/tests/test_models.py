@@ -3,13 +3,11 @@
 import pytest
 from pydantic import ValidationError
 from server.models import (
-    TaskCreate,
-    TaskUpdate,
-    TaskOut,
-    ProjectCreate,
-    ProjectOut,
-    WebhookCreateRequest,
     ClaimRequest,
+    TaskCreate,
+    TaskOut,
+    TaskUpdate,
+    WebhookCreateRequest,
 )
 
 
