@@ -79,8 +79,13 @@ async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
             pass
 
     results = []
+    # Batch fetch dependencies ONCE to avoid N+1 queries inside _compute_score
+    try:
+        blocker_tasks = await _sql("SELECT id, depends_on FROM tasks WHERE depends_on IS NOT NULL")
+    except Exception:
+        blocker_tasks = None
     for r in rows:
-        score, reason = await _compute_score(r, agent_caps)
+        score, reason = await _compute_score(r, agent_caps, blocker_tasks)
         task_out = _row_to_task(r)
         results.append(SuggestResult(task=task_out, score=score, reason=reason))
 

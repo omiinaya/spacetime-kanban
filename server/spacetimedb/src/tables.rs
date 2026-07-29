@@ -127,6 +127,7 @@ pub struct Task {
 pub struct TaskLog {
     #[primary_key]
     pub id: String,
+    #[index(btree)]
     pub task_id: String,
     pub action: String,
     pub agent_id: Option<String>,
@@ -215,7 +216,9 @@ pub struct KanbanLabel {
 pub struct TaskLabelAssignment {
     #[primary_key]
     pub id: String,              // composite: "task_id:label_id"
+    #[index(btree)]
     pub task_id: String,
+    #[index(btree)]
     pub label_id: String,
 }
 
@@ -237,6 +240,7 @@ pub struct DispatcherStateRow {
 pub struct WebhookDelivery {
     #[primary_key]
     pub id: String,
+    #[index(btree)]
     pub webhook_id: String,
     pub event: String,
     pub url: String,
@@ -266,6 +270,7 @@ pub struct TaskComment {
 pub struct TaskChecklistItem {
     #[primary_key]
     pub id: String,
+    #[index(btree)]
     pub task_id: String,
     pub text: String,
     pub completed: bool,

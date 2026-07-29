@@ -30,8 +30,10 @@ function layoutGraph(tasks: Task[]) {
   }
   for (const t of tasks) {
     if (t.dependsOn && byId.has(t.dependsOn)) {
-      outgoing.get(t.dependsOn)?.push(t.id) ?? []
-      incoming.get(t.id)?.push(t.dependsOn) ?? []
+      const outList = outgoing.get(t.dependsOn)
+      if (outList) outList.push(t.id)
+      const inList = incoming.get(t.id)
+      if (inList) inList.push(t.dependsOn)
     }
   }
 
@@ -109,8 +111,9 @@ export default function DependencyGraph({
   onClose: () => void
 }) {
   const graph = useMemo(() => layoutGraph(tasks), [tasks])
+  const vb = useMemo(() => computeViewBox(graph?.positions ?? new Map()), [graph])
+  if (!graph) return null
   const { positions, outgoing, byId } = graph
-  const vb = useMemo(() => computeViewBox(positions), [positions])
 
   const edges: { from: string; to: string; x1: number; y1: number; x2: number; y2: number; mx: number; my: number }[] = []
   for (const [id, deps] of outgoing) {

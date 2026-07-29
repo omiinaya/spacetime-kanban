@@ -6,7 +6,7 @@ Supports Discord embeds, Slack messages, Telegram, and generic JSON POST.
 
 import uuid
 from contextlib import suppress
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -136,6 +136,8 @@ def add_webhook(
     url: str, wh_type: str = "generic", events: list[str] | None = None, label: str = ""
 ) -> dict:
     """Register a new webhook subscription in STDB."""
+    from shared import validate_webhook_url
+    validate_webhook_url(url)
     wh_id = f"wh_{uuid.uuid4().hex[:12]}"
     events_str = ",".join(events or ["created", "claimed", "unclaimed", "completed", "blocked"])
     label = label or f"{wh_type}:{url[:40]}"
@@ -148,7 +150,7 @@ def add_webhook(
         "type": wh_type,
         "events": events_str.split(","),
         "label": label,
-        "created_at": int(datetime.utcnow().timestamp() * 1000),
+        "created_at": int(datetime.now(tz=UTC).timestamp() * 1000),
     }
 
 
@@ -216,7 +218,7 @@ def _format_discord(action: str, task: dict, extra: str = "") -> dict:
                     {"name": "Task", "value": f"`{task_id}`", "inline": True},
                     {"name": "Repo", "value": repo or "—", "inline": True},
                 ],
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.now(tz=UTC).isoformat() + "Z",
             }
         ]
     }
@@ -255,7 +257,7 @@ def _format_slack(action: str, task: dict, extra: str = "") -> dict:
     return {
         "text": f"{emoji} *{action.title()}* — {title}",
         "attachments": [
-            {"color": "#5865F2", "fields": fields, "ts": int(datetime.utcnow().timestamp())}
+            {"color": "#5865F2", "fields": fields, "ts": int(datetime.now(tz=UTC).timestamp())}
         ],
     }
 
@@ -287,7 +289,7 @@ def _format_generic(action: str, task: dict, extra: str = "") -> dict:
     """Format as generic JSON event."""
     return {
         "event": action,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(tz=UTC).isoformat() + "Z",
         "task": {
             "id": task.get("id"),
             "title": task.get("title"),

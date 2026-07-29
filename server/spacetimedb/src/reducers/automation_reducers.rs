@@ -141,7 +141,7 @@ pub fn trigger_task_templates(ctx: &ReducerContext) -> Result<(), String> {
             depends_on: None,
             required_skills: template.required_skills.clone(),
             score: 0,
-            position: Some(now as u32),
+            position: Some((now / 1000) as u32),
             fail_count: 0,
             max_attempts: 3,
             fail_reason: None,
