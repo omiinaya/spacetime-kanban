@@ -62,6 +62,6 @@ USER kanban
 EXPOSE 8727
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8727/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8727/api/health')" || exit 1
 
 ENTRYPOINT ["docker-entrypoint.sh"]

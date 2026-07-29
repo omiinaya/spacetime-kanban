@@ -368,18 +368,15 @@ async def test_analytics_overview(client, mock_all):
 @pytest.mark.asyncio
 async def test_analytics_overview_with_data(client, mock_all):
     """Overview returns correct aggregations when tasks exist."""
-    # _sql calls: [status_group, repo_group]
-    mock_all["sql"].side_effect = [
-        [{"status": "blocked", "cnt": 1}, {"status": "done", "cnt": 1}],
-        [{"repo": "repo-a", "status": "blocked", "cnt": 1},
-         {"repo": "repo-b", "status": "done", "cnt": 1}],
+    # Now does a single _sql("SELECT * FROM tasks") call
+    mock_all["sql"].side_effect = None
+    mock_all["sql"].return_value = [
+        {"id": "t1", "status": "blocked", "repo": "repo-a", "updated_at": 1000},
+        {"id": "t2", "status": "done", "repo": "repo-b", "updated_at": 1000},
     ]
-    # _sql_param calls: [today_cnt, week_cnt, churn_logs, hour_cnt]
+    # _sql_param calls: [churn_logs]
     mock_all["param"].side_effect = [
-        [{"cnt": 0}],
-        [{"cnt": 0}],
         [],
-        [{"cnt": 0}],
     ]
     resp = await client.get("/api/analytics/overview")
     assert resp.status_code == 200
@@ -2026,17 +2023,13 @@ async def test_get_logs_for_nonexistent_task(client, mock_all):
 @pytest.mark.asyncio
 async def test_analytics_overview_only_blocked(client, mock_all):
     """Analytics overview should not crash when all tasks are blocked."""
-    # _sql calls: [status_group, repo_group]
-    mock_all["sql"].side_effect = [
-        [{"status": "blocked", "cnt": 2}],
-        [{"repo": "test-repo", "status": "blocked", "cnt": 2}],
+    mock_all["sql"].side_effect = None
+    mock_all["sql"].return_value = [
+        {"id": "t1", "status": "blocked", "repo": "test-repo", "updated_at": 1000},
+        {"id": "t2", "status": "blocked", "repo": "test-repo", "updated_at": 2000},
     ]
-    # _sql_param calls: [today_cnt, week_cnt, churn_logs, hour_cnt]
     mock_all["param"].side_effect = [
-        [{"cnt": 0}],
-        [{"cnt": 0}],
         [],
-        [{"cnt": 0}],
     ]
     resp = await client.get("/api/analytics/overview")
     assert resp.status_code == 200
