@@ -321,6 +321,9 @@ async def github_webhook(request: Request):
                 asyncio.create_task(_notify("completed", t, notes))
                 return {"status": "completed", "task_id": task_id}
         except HTTPException:
+            import logging
+
+            logging.getLogger("github").warning("GitHub webhook handler failed", exc_info=True)
             pass
         return {"status": "ignored", "reason": "task not found or not actionable"}
 

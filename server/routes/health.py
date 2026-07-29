@@ -70,7 +70,10 @@ async def system_health():
         }
     except ImportError:
         pass  # shared module not available
-    except Exception:  # noqa: S110
+    except Exception:
+        import logging
+
+        logging.getLogger("health").exception("Board query failed")
         pass  # query failure — keep board as {}
 
     return result

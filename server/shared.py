@@ -77,7 +77,7 @@ def validate_webhook_url(url: str) -> str:
     blocklist = [
         "localhost",
         "127.0.0.1",
-        "0.0.0.0",
+        "0.0.0.0",  # noqa: S104
         "169.254.169.254",  # noqa: S104
         "[::1]",
         "metadata.google.internal",

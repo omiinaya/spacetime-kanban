@@ -3,14 +3,14 @@ repos:
     hooks:
       - id: ruff-lint
         name: Ruff lint
-        entry: ruff check --fix
+        entry: bash -c 'cd server && ruff check "$@"' --
         language: system
         types: [python]
         stages: [pre-commit]
 
       - id: ruff-format
         name: Ruff format
-        entry: ruff format
+        entry: bash -c 'cd server && ruff format "$@"' --
         language: system
         types: [python]
         stages: [pre-commit]
@@ -31,7 +31,7 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
 
-      - id: check-branch-refs
+      - id: check-debug-artifacts
         name: Check debug artifacts
         entry: bash -c 'if git diff --cached --name-only | grep -qE "\.only\b|console\.log|dbg!"; then echo "⚠️  Found debug artifacts (.only, console.log, dbg!)"; exit 1; fi'
         language: system
