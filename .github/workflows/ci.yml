@@ -79,6 +79,7 @@ jobs:
 
   build-frontend:
     runs-on: ubuntu-latest
+    needs: [lint-typescript, test-typescript]
     defaults:
       run:
         working-directory: web

@@ -86,19 +86,17 @@ test.describe('Key Pages', () => {
       ).toBeVisible({ timeout: 30000 })
     })
 
-    test('displays stat cards when data loads', async ({ page }) => {
+    test('displays stat cards when data loads or shows loading state', async ({ page }) => {
       await page.goto('/analytics')
-      // Check for stat card labels — these render once data arrives
-      // If API returns data, cards are visible otherwise we see loading or error
-      await page.waitForTimeout(3000)
-      const statCards = page.locator('text=Total Tasks').or(
+      // Wait for either stat cards OR loading state to appear
+      const statCardsOrLoading = page.locator('text=Total Tasks').or(
         page.locator('text=Completed').or(
           page.locator('text=Available').or(
-            page.locator('text=Agents')
+            page.locator('text=Loading analytics')
           )
         )
       )
-      // This may not be visible if API fails, but shouldn't crash
+      await expect(statCardsOrLoading).toBeVisible({ timeout: 15000 })
     })
   })
 
