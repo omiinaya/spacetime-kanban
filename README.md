@@ -21,14 +21,14 @@ FastAPI REST server (:8727) — HTTP bridge + scheduler loops + static frontend
 ```bash
 # Publish the STDB module
 cd server/spacetimedb
-spacetime publish spacetimedb-kanban --delete-data=never -y
+spacetime publish spacetimedb-kanban -y
 
 # Start the API server (serves API + frontend)
 cd ..
 python3 main.py
 ```
 
-> **Note:** Use `--delete-data=always` only when migrating STDB enum types or schema-breaking changes. For routine development, `--delete-data=never` preserves your data.
+> **Important:** Never use `--delete-data` when publishing — data loss is permanent. If you encounter auth issues, fix them by getting a server-issued token. See `ROADMAP.md` for details.
 
 The server runs under the hermes-agent systemd service in production. For local dev, just run `python3 main.py` from `server/`.
 
