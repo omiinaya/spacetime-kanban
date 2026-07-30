@@ -124,7 +124,7 @@ export default function LogsPage() {
   const hasActiveFilters = selectedActions.size > 0 || agentFilter || searchQuery || dateRange > 0
 
   // Extract unique agents from loaded logs for the dropdown
-  const allAgents = [...new Set(logs.map(l => l.agent_id).filter(Boolean) as string[])].sort()
+  const allAgents = [...new Set(logs.map(l => l.agent_id).filter((s): s is string => Boolean(s)))].sort()
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">

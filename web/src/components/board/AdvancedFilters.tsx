@@ -58,7 +58,7 @@ export function AdvancedFilters({
         <div className="space-y-1">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Assignee</p>
           <div className="flex flex-wrap gap-1.5">
-            {['unassigned', ...new Set(tasks.map(t => t.assignedTo).filter(Boolean) as string[])].map(a => {
+            {['unassigned', ...new Set(tasks.map(t => t.assignedTo).filter((s): s is string => Boolean(s)))].map(a => {
               const active = filterAssignees.has(a)
               return (
                 <button key={a}
