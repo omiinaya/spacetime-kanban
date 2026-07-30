@@ -88,6 +88,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                 ),
                 "priority": 3,
                 "scanner": "docs_ci",
+                "skip_verify": True,
             }
         )
     elif readme_age > 90:
@@ -100,6 +101,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                 ),
                 "priority": 3,
                 "scanner": "docs_ci",
+                "skip_verify": True,
             }
         )
 
@@ -118,6 +120,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                 ),
                 "priority": 3,
                 "scanner": "docs_ci",
+                "skip_verify": True,
             }
         )
 
@@ -132,6 +135,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                 ),
                 "priority": 3,
                 "scanner": "docs_ci",
+                "skip_verify": True,
             }
         )
 
@@ -158,6 +162,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                     ),
                     "priority": 3,
                     "scanner": "docs_ci",
+                    "skip_verify": True,
                 }
             )
 
@@ -172,6 +177,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                 ),
                 "priority": 3,
                 "scanner": "docs_ci",
+                "skip_verify": True,
             }
         )
 
@@ -193,6 +199,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                     ),
                     "priority": 3,
                     "scanner": "docs_ci",
+                    "skip_verify": True,
                 }
             )
 
@@ -206,6 +213,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                     ),
                     "priority": 3,
                     "scanner": "docs_ci",
+                    "skip_verify": True,
                 }
             )
 
@@ -229,6 +237,7 @@ def scan_docs_ci(repo_name: str, repo_path: str) -> list[dict]:
                         ),
                         "priority": 3,
                         "scanner": "docs_ci",
+                        "skip_verify": True,
                     }
                 )
         except Exception:

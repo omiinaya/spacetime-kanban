@@ -100,6 +100,7 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
                         ),
                         "priority": 2,
                         "scanner": "unused_code",
+                        "skip_verify": True,
                     }
                 )
         except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -133,6 +134,7 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
                             ),
                             "priority": 3,
                             "scanner": "unused_code",
+                            "skip_verify": True,
                         }
                     )
         except Exception:

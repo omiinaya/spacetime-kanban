@@ -6,7 +6,7 @@ Auto-registers Hermes in the swarm on startup.
 
 Transport: stdio (for Hermes native MCP client).
 
-Uses MCP SDK v2 MCPServer API with Tool.from_function().
+Uses MCP SDK FastMCP API (v1.23.x+).
 """
 
 import json

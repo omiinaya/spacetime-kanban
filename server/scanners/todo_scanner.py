@@ -91,6 +91,7 @@ def scan_todos(repo_name: str, repo_path: str) -> list[dict]:
                 "description": "\n".join(desc_parts),
                 "priority": 2,
                 "scanner": "todos",
+                "skip_verify": True,
             }
         )
 
@@ -130,6 +131,7 @@ def scan_todos(repo_name: str, repo_path: str) -> list[dict]:
                     ),
                     "priority": 2,
                     "scanner": "todos",
+                    "skip_verify": True,
                 }
             )
     except Exception:

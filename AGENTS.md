@@ -200,6 +200,36 @@ Use globally unique agent IDs:
 4. **Stay in your lane** — stick to tasks assigned to you; respect others' claims
 5. **Update branch field** early so the other agent knows where you're working
 
+## Scanner System
+
+Improvement scanners run automatically every 1800s via the scheduler's `repo_scanner` loop.
+They create kanban tasks for code quality issues. Key behaviors:
+
+- **Per-repo batching** — findings are grouped per repo, not per file. Instead of 8 separate
+  unwrap() tasks, you get 1 task listing all files.
+- **Find-only scanners** — unwraps, bare excepts, stale TODOs, large files, missing
+  `__init__.py`, test gaps, and dep review tasks have `skip_verify=True`. They're
+  created once and never re-opened by the verifier, preventing infinite loops.
+- **Auto-fix scanners** — unused imports (ruff), STDB indexes, and CI pipeline tasks
+  do NOT have `skip_verify=True`. The mechanical worker actually fixes them, so
+  re-verification checks that the fix persists.
+- **Layer progression** — L0=stdb_index, L1=todos/deps/unused_code/test_gaps,
+  L2=architecture, L3=docs_ci, L4=prod_readiness. L3+ scanners always run
+  regardless of lower-layer completion.
+- **Task fountain** (`_task_fountain.py`) runs every 60s as a fast board-health check.
+  Only creates generic seed tasks when available tasks drop below 3.
+  Dedup checks ALL statuses (available, inProgress, blocked, done).
+
+### Scanner layers
+
+| Layer | Scanners | skip_verify | Can auto-fix? |
+|-------|----------|-------------|---------------|
+| L0 | stdb_index | No | Yes (adds #[index(btree)]) |
+| L1 | todos, deps, unused_code, test_gaps | Mostly Yes | No (report only) |
+| L2 | architecture | Yes | No (report only) |
+| L3 | docs_ci | Yes | Partially (file stubs) |
+| L4 | prod_readiness | Yes | No (human judgment) |
+
 ## Branch Convention (Enforced)
 
 Every branch MUST reference a kanban task ID. This lets both agents see which task maps to which branch and prevents orphaned branches.

@@ -67,6 +67,7 @@ def _check_cargo_deps(repo_name: str, repo_path: str) -> list[dict]:
                         ),
                         "priority": 3,
                         "scanner": "deps",
+                        "skip_verify": True,
                     }
                 )
 
@@ -84,6 +85,7 @@ def _check_cargo_deps(repo_name: str, repo_path: str) -> list[dict]:
                     ),
                     "priority": 3,
                     "scanner": "deps",
+                    "skip_verify": True,
                 }
             )
 
@@ -125,6 +127,7 @@ def _check_npm_deps(repo_path: str) -> list[dict]:
                     ),
                     "priority": 3,
                     "scanner": "deps",
+                    "skip_verify": True,
                 }
             )
 
@@ -151,6 +154,7 @@ def _check_npm_deps(repo_path: str) -> list[dict]:
                             ),
                             "priority": 3,
                             "scanner": "deps",
+                            "skip_verify": True,
                         }
                     )
             except Exception:
