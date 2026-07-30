@@ -157,7 +157,7 @@ def _check_npm_deps(repo_path: str) -> list[dict]:
                             "skip_verify": True,
                         }
                     )
-            except Exception:
+            except (OSError, json.JSONDecodeError):
                 pass
 
     return findings

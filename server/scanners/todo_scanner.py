@@ -64,7 +64,7 @@ def scan_todos(repo_name: str, repo_path: str) -> list[dict]:
                     if ":" in line:
                         with contextlib.suppress(ValueError, IndexError):
                             tag_counts[tag] += int(line.rsplit(":", 1)[1])
-        except Exception:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             pass
 
         tag_summary = ", ".join(f"{k}={v}" for k, v in tag_counts.items() if v > 0)
