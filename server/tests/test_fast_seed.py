@@ -1,4 +1,5 @@
 """Tests for _fast_seed.py — standalone task seeder."""
+
 import json
 import subprocess
 import urllib.error
@@ -59,7 +60,7 @@ class TestApiGet:
         with patch("_fast_seed.urllib.request.urlopen", return_value=mock_resp) as m:
             api_get("/api/tasks?status=available")
             req = m.call_args[0][0]
-            full_url = req.full_url if hasattr(req, 'full_url') else req.get_full_url()
+            full_url = req.full_url if hasattr(req, "full_url") else req.get_full_url()
             assert "/api/tasks?status=available" in full_url
 
 
@@ -95,14 +96,15 @@ class TestApiPost:
             api_post("/api/tasks", {"title": "T"})
             req = m.call_args[0][0]
             # Header is stored as 'Content-type' by urllib Request
-            assert req.type == "application/json" or req.headers.get("Content-type") == "application/json"
+            assert (
+                req.type == "application/json"
+                or req.headers.get("Content-type") == "application/json"
+            )
             assert req.method == "POST"
 
     def test_http_error_returns_none(self):
         """api_post returns None on HTTPError (logs but doesn't crash)."""
-        err = urllib.error.HTTPError(
-            "/api/tasks", 409, "Conflict", {}, None
-        )
+        err = urllib.error.HTTPError("/api/tasks", 409, "Conflict", {}, None)
         err.read = lambda: b'{"detail": "dup"}'
         with patch("_fast_seed.urllib.request.urlopen", side_effect=err):
             result = api_post("/api/tasks", {"title": "Dup"})
@@ -151,6 +153,7 @@ class TestCreateTask:
 class TestFetchExistingTitles:
     def test_collects_from_all_four_statuses(self):
         """Fetches titles from all 4 status endpoints."""
+
         def side_effect(path):
             if "status=available" in path:
                 return [{"title": " Avail Task "}]
@@ -161,6 +164,7 @@ class TestFetchExistingTitles:
             elif "status=done" in path:
                 return [{"title": "Done Task"}, {"title": "  "}]
             return []
+
         with patch("_fast_seed.api_get", side_effect=side_effect):
             titles = fetch_existing_titles()
             # "  " should be stripped and empty → skipped
@@ -173,10 +177,12 @@ class TestFetchExistingTitles:
 
     def test_handles_empty_and_whitespace_titles(self):
         """Only non-whitespace titles are collected."""
+
         def side_effect(path):
             if "status=available" in path:
                 return [{"title": "Real"}, {"title": ""}, {"title": "   "}]
             return []
+
         with patch("_fast_seed.api_get", side_effect=side_effect):
             titles = fetch_existing_titles()
             assert titles == {"real"}
@@ -222,14 +228,19 @@ class TestFindTestGaps:
     def test_untested_modules_batched(self):
         """Batches untested modules into groups of 5."""
         struct = {
-            "/tmp/repo/server": (["tests", "sub"], ["app.py", "routes.py", "utils.py", "db.py", "models.py", "config.py", "admin.py"]),
+            "/tmp/repo/server": (
+                ["tests", "sub"],
+                ["app.py", "routes.py", "utils.py", "db.py", "models.py", "config.py", "admin.py"],
+            ),
             "/tmp/repo/server/tests": ([], []),
             "/tmp/repo/server/sub": ([], ["helper.py"]),
         }
         with ExitStack() as stack:
             stack.enter_context(patch("os.path.isdir", return_value=True))
             stack.enter_context(patch("os.listdir", return_value=["test_app.py"]))
-            stack.enter_context(patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top)))
+            stack.enter_context(
+                patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top))
+            )
             findings = find_test_gaps("my-repo", "/tmp/repo")
             # 7 untested (all except app.py) → batched into 5 + 2
             assert len(findings) == 2
@@ -245,7 +256,9 @@ class TestFindTestGaps:
         with ExitStack() as stack:
             stack.enter_context(patch("os.path.isdir", return_value=True))
             stack.enter_context(patch("os.listdir", return_value=["test_app.py"]))
-            stack.enter_context(patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top)))
+            stack.enter_context(
+                patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top))
+            )
             assert find_test_gaps("my-repo", "/tmp/repo") == []
 
     def test_skips_hidden_and_venv(self):
@@ -261,7 +274,9 @@ class TestFindTestGaps:
         with ExitStack() as stack:
             stack.enter_context(patch("os.path.isdir", return_value=True))
             stack.enter_context(patch("os.listdir", return_value=[]))
-            stack.enter_context(patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top)))
+            stack.enter_context(
+                patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top))
+            )
             findings = find_test_gaps("my-repo", "/tmp/repo")
             # app.py (server) test_app.py doesn't exist → untested
             # mod.py (src) test_mod.py doesn't exist → untested
@@ -278,7 +293,9 @@ class TestFindTestGaps:
         with ExitStack() as stack:
             stack.enter_context(patch("os.path.isdir", return_value=True))
             stack.enter_context(patch("os.listdir", return_value=[]))
-            stack.enter_context(patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top)))
+            stack.enter_context(
+                patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top))
+            )
             findings = find_test_gaps("my-repo", "/tmp/repo")
             assert len(findings) == 1  # only app.py is untested
             assert "1" in findings[0]["title"]
@@ -300,7 +317,9 @@ class TestFindMissingInit:
         }
         with ExitStack() as stack:
             stack.enter_context(patch("os.path.isdir", return_value=True))
-            stack.enter_context(patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top)))
+            stack.enter_context(
+                patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top))
+            )
             findings = find_missing_init("r", "/p")
             assert len(findings) == 1
             assert "__init__.py" in findings[0]["title"]
@@ -313,7 +332,9 @@ class TestFindMissingInit:
         }
         with ExitStack() as stack:
             stack.enter_context(patch("os.path.isdir", return_value=True))
-            stack.enter_context(patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top)))
+            stack.enter_context(
+                patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top))
+            )
             assert find_missing_init("r", "/p") == []
 
     def test_skips_root_dir_itself(self):
@@ -324,7 +345,9 @@ class TestFindMissingInit:
         }
         with ExitStack() as stack:
             stack.enter_context(patch("os.path.isdir", return_value=True))
-            stack.enter_context(patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top)))
+            stack.enter_context(
+                patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top))
+            )
             findings = find_missing_init("r", "/p")
             assert len(findings) == 1
             assert "sub" in findings[0]["description"]
@@ -337,7 +360,9 @@ class TestFindMissingInit:
         }
         with ExitStack() as stack:
             stack.enter_context(patch("os.path.isdir", return_value=True))
-            stack.enter_context(patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top)))
+            stack.enter_context(
+                patch("os.walk", side_effect=lambda top, **kw: _walk_structure(struct, top))
+            )
             findings = find_missing_init("r", "/p")
             # src has helper.py but no __init__.py
             assert len(findings) == 1
@@ -456,8 +481,10 @@ class TestFindMissingProjectFiles:
 
     def test_one_kept_two_missing_lists_by_name(self):
         """When < 3 missing (only 1 or 2), title lists names individually."""
+
         def isfile(path):
             return "LICENSE" in path or "CONTRIBUTING.md" in path  # 2 found, 2 missing
+
         with patch("os.path.isfile", side_effect=isfile):
             findings = find_missing_project_files("r", "/p")
             assert len(findings) == 1
@@ -465,8 +492,10 @@ class TestFindMissingProjectFiles:
 
     def test_three_missing_uses_count(self):
         """When >= 3 missing, title uses count format."""
+
         def isfile(path):
             return "LICENSE" in path  # only 1 found, 3 missing
+
         with patch("os.path.isfile", side_effect=isfile):
             findings = find_missing_project_files("r", "/p")
             assert len(findings) == 1
@@ -480,8 +509,11 @@ class TestCreateTasksExisting:
     def test_skip_non_git_repo(self):
         """Returns 0 when repo has no .git directory."""
         with ExitStack() as stack:
-            stack.enter_context(patch("_fast_seed.os.path.isdir", side_effect=lambda p: ".git" not in p))
+            stack.enter_context(
+                patch("_fast_seed.os.path.isdir", side_effect=lambda p: ".git" not in p)
+            )
             from _fast_seed import create_tasks_existing
+
             count = create_tasks_existing("nonexistent", set())
             assert count == 0
 
@@ -490,15 +522,26 @@ class TestCreateTasksExisting:
         with ExitStack() as stack:
             stack.enter_context(patch("_fast_seed.os.path.isdir", return_value=True))
             # Mock all 5 scanner functions directly
-            stack.enter_context(patch("_fast_seed.find_test_gaps", return_value=[
-                {"title": "Add tests for 2 modules", "description": "desc", "priority": 3, "repo": "my-repo"},
-            ]))
+            stack.enter_context(
+                patch(
+                    "_fast_seed.find_test_gaps",
+                    return_value=[
+                        {
+                            "title": "Add tests for 2 modules",
+                            "description": "desc",
+                            "priority": 3,
+                            "repo": "my-repo",
+                        },
+                    ],
+                )
+            )
             stack.enter_context(patch("_fast_seed.find_missing_init", return_value=[]))
             stack.enter_context(patch("_fast_seed.find_stale_todos", return_value=[]))
             stack.enter_context(patch("_fast_seed.find_large_files", return_value=[]))
             stack.enter_context(patch("_fast_seed.find_missing_project_files", return_value=[]))
             stack.enter_context(patch("_fast_seed.create_task", return_value=True))
             from _fast_seed import create_tasks_existing
+
             existing = set()
             count = create_tasks_existing("my-repo", existing)
             assert count == 1
@@ -509,14 +552,25 @@ class TestCreateTasksExisting:
         with ExitStack() as stack:
             stack.enter_context(patch("_fast_seed.os.path.isdir", return_value=True))
             stack.enter_context(patch("_fast_seed.create_task", return_value=True))
-            stack.enter_context(patch("_fast_seed.find_test_gaps", return_value=[
-                {"title": "Existing task", "description": "desc", "priority": 3, "repo": "r"},
-            ]))
+            stack.enter_context(
+                patch(
+                    "_fast_seed.find_test_gaps",
+                    return_value=[
+                        {
+                            "title": "Existing task",
+                            "description": "desc",
+                            "priority": 3,
+                            "repo": "r",
+                        },
+                    ],
+                )
+            )
             stack.enter_context(patch("_fast_seed.find_missing_init", return_value=[]))
             stack.enter_context(patch("_fast_seed.find_stale_todos", return_value=[]))
             stack.enter_context(patch("_fast_seed.find_large_files", return_value=[]))
             stack.enter_context(patch("_fast_seed.find_missing_project_files", return_value=[]))
             from _fast_seed import create_tasks_existing
+
             count = create_tasks_existing("r", {"existing task"})
             assert count == 0
 
@@ -531,6 +585,7 @@ class TestCreateTasksExisting:
             stack.enter_context(patch("_fast_seed.find_large_files", return_value=[]))
             stack.enter_context(patch("_fast_seed.find_missing_project_files", return_value=[]))
             from _fast_seed import create_tasks_existing
+
             count = create_tasks_existing("r", set())
             assert count == 0  # test_gaps crashed, no other scanners returned findings
 
@@ -546,10 +601,19 @@ class TestMain:
             stack.enter_context(patch("_fast_seed.os.path.isdir", return_value=True))
             stack.enter_context(patch("_fast_seed.find_test_gaps", return_value=[]))
             # Only find_missing_init returns a finding (the rest are empty)
-            stack.enter_context(patch("_fast_seed.find_missing_init", return_value=[
-                {"title": "Add __init__.py to 1 package in test-repo",
-                 "description": "desc", "priority": 3, "repo": "test-repo"},
-            ]))
+            stack.enter_context(
+                patch(
+                    "_fast_seed.find_missing_init",
+                    return_value=[
+                        {
+                            "title": "Add __init__.py to 1 package in test-repo",
+                            "description": "desc",
+                            "priority": 3,
+                            "repo": "test-repo",
+                        },
+                    ],
+                )
+            )
             stack.enter_context(patch("_fast_seed.find_stale_todos", return_value=[]))
             stack.enter_context(patch("_fast_seed.find_large_files", return_value=[]))
             stack.enter_context(patch("_fast_seed.find_missing_project_files", return_value=[]))

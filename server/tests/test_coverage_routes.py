@@ -1,4 +1,5 @@
 """Targeted coverage tests for analytics, github, and health routes."""
+
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,26 +10,61 @@ from httpx import ASGITransport, AsyncClient
 from main import app
 
 
-def _make_task(tid="t1", title="T", status="available", repo="my-repo",
-               priority=0, created_at=1000, updated_at=1000, due_by=None,
-               roadmap_item="", description="", assigned_to=None,
-               branch=None, created_by="test", depends_on=None,
-               required_skills=None, score=0, position=None,
-               fail_count=0, max_attempts=3, fail_reason=None,
-               subtask_of=None, subtasks=None, sprint=None,
-               archived=False, estimated_hours=None, spent_hours=None):
+def _make_task(
+    tid="t1",
+    title="T",
+    status="available",
+    repo="my-repo",
+    priority=0,
+    created_at=1000,
+    updated_at=1000,
+    due_by=None,
+    roadmap_item="",
+    description="",
+    assigned_to=None,
+    branch=None,
+    created_by="test",
+    depends_on=None,
+    required_skills=None,
+    score=0,
+    position=None,
+    fail_count=0,
+    max_attempts=3,
+    fail_reason=None,
+    subtask_of=None,
+    subtasks=None,
+    sprint=None,
+    archived=False,
+    estimated_hours=None,
+    spent_hours=None,
+):
     return {
-        "id": tid, "title": title, "description": description,
-        "priority": priority, "status": status, "assigned_to": assigned_to,
-        "repo": repo, "branch": branch, "roadmap_item": roadmap_item,
-        "created_by": created_by, "created_at": created_at,
-        "updated_at": updated_at, "depends_on": depends_on,
-        "required_skills": required_skills, "score": score,
-        "position": position, "fail_count": fail_count,
-        "max_attempts": max_attempts, "fail_reason": fail_reason,
-        "subtask_of": subtask_of, "subtasks": subtasks,
-        "due_by": due_by, "sprint": sprint, "archived": archived,
-        "estimated_hours": estimated_hours, "spent_hours": spent_hours,
+        "id": tid,
+        "title": title,
+        "description": description,
+        "priority": priority,
+        "status": status,
+        "assigned_to": assigned_to,
+        "repo": repo,
+        "branch": branch,
+        "roadmap_item": roadmap_item,
+        "created_by": created_by,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "depends_on": depends_on,
+        "required_skills": required_skills,
+        "score": score,
+        "position": position,
+        "fail_count": fail_count,
+        "max_attempts": max_attempts,
+        "fail_reason": fail_reason,
+        "subtask_of": subtask_of,
+        "subtasks": subtasks,
+        "due_by": due_by,
+        "sprint": sprint,
+        "archived": archived,
+        "estimated_hours": estimated_hours,
+        "spent_hours": spent_hours,
     }
 
 
@@ -54,6 +90,7 @@ def mock_all():
         "routes.apikeys": ["_sql", "_call"],
     }
     from contextlib import ExitStack
+
     with ExitStack() as stack:
         sql = AsyncMock(return_value=[])
         param = AsyncMock(return_value=[])
@@ -83,6 +120,7 @@ async def client():
 async def test_analytics_throughput(client, mock_all):
     """Throughput groups completions by day."""
     import time as _time
+
     now = int(_time.time() * 1000)
     day_ms = 86_400_000
     yesterday = now - day_ms
@@ -105,8 +143,22 @@ async def test_analytics_cycle_times_basic(client, mock_all):
     """Cycle times computes duration from created to completed logs."""
     mock_all["sql"].side_effect = [
         [  # logs
-            {"id": "l1", "task_id": "t1", "action": "created", "timestamp": 1000, "agent_id": None, "notes": None},
-            {"id": "l2", "task_id": "t1", "action": "completed", "timestamp": 5000, "agent_id": None, "notes": None},
+            {
+                "id": "l1",
+                "task_id": "t1",
+                "action": "created",
+                "timestamp": 1000,
+                "agent_id": None,
+                "notes": None,
+            },
+            {
+                "id": "l2",
+                "task_id": "t1",
+                "action": "completed",
+                "timestamp": 5000,
+                "agent_id": None,
+                "notes": None,
+            },
         ],
         [  # tasks for repo mapping
             {"id": "t1", "repo": "my-repo"},
@@ -124,8 +176,22 @@ async def test_analytics_cycle_times_repo_filter(client, mock_all):
     """Cycle times filters by repo parameter."""
     mock_all["sql"].side_effect = [
         [  # logs
-            {"id": "l1", "task_id": "t1", "action": "created", "timestamp": 1000, "agent_id": None, "notes": None},
-            {"id": "l2", "task_id": "t1", "action": "completed", "timestamp": 5000, "agent_id": None, "notes": None},
+            {
+                "id": "l1",
+                "task_id": "t1",
+                "action": "created",
+                "timestamp": 1000,
+                "agent_id": None,
+                "notes": None,
+            },
+            {
+                "id": "l2",
+                "task_id": "t1",
+                "action": "completed",
+                "timestamp": 5000,
+                "agent_id": None,
+                "notes": None,
+            },
         ],
     ]
     mock_all["param"].return_value = [{"id": "t1", "repo": "my-repo"}]
@@ -141,37 +207,95 @@ async def test_analytics_cycle_times_repo_filter(client, mock_all):
 async def test_analytics_burndown_filters(client, mock_all):
     """Burndown applies sprint and repo filters."""
     import time as _time
+
     now = int(_time.time() * 1000)
     day_ms = 86_400_000
     recent = now - day_ms
     mock_all["sql"].return_value = [
-        {"id": "t1", "status": "done", "repo": "my-repo", "roadmap_item": "S1",
-         "created_at": recent, "updated_at": recent + 1000,
-         "priority": 2, "title": "A", "description": "", "assigned_to": None,
-         "branch": None, "created_by": "test", "depends_on": None,
-         "required_skills": None, "score": 0, "position": None,
-         "fail_count": 0, "max_attempts": 3, "fail_reason": None,
-         "subtask_of": None, "subtasks": None, "due_by": None,
-         "sprint": None, "archived": False, "estimated_hours": None,
-         "spent_hours": None},
-        {"id": "t2", "status": "available", "repo": "other-repo", "roadmap_item": "S1",
-         "created_at": recent, "updated_at": recent,
-         "priority": 2, "title": "B", "description": "", "assigned_to": None,
-         "branch": None, "created_by": "test", "depends_on": None,
-         "required_skills": None, "score": 0, "position": None,
-         "fail_count": 0, "max_attempts": 3, "fail_reason": None,
-         "subtask_of": None, "subtasks": None, "due_by": None,
-         "sprint": None, "archived": False, "estimated_hours": None,
-         "spent_hours": None},
-        {"id": "t3", "status": "available", "repo": "my-repo", "roadmap_item": "S2",
-         "created_at": recent, "updated_at": recent,
-         "priority": 2, "title": "C", "description": "", "assigned_to": None,
-         "branch": None, "created_by": "test", "depends_on": None,
-         "required_skills": None, "score": 0, "position": None,
-         "fail_count": 0, "max_attempts": 3, "fail_reason": None,
-         "subtask_of": None, "subtasks": None, "due_by": None,
-         "sprint": None, "archived": False, "estimated_hours": None,
-         "spent_hours": None},
+        {
+            "id": "t1",
+            "status": "done",
+            "repo": "my-repo",
+            "roadmap_item": "S1",
+            "created_at": recent,
+            "updated_at": recent + 1000,
+            "priority": 2,
+            "title": "A",
+            "description": "",
+            "assigned_to": None,
+            "branch": None,
+            "created_by": "test",
+            "depends_on": None,
+            "required_skills": None,
+            "score": 0,
+            "position": None,
+            "fail_count": 0,
+            "max_attempts": 3,
+            "fail_reason": None,
+            "subtask_of": None,
+            "subtasks": None,
+            "due_by": None,
+            "sprint": None,
+            "archived": False,
+            "estimated_hours": None,
+            "spent_hours": None,
+        },
+        {
+            "id": "t2",
+            "status": "available",
+            "repo": "other-repo",
+            "roadmap_item": "S1",
+            "created_at": recent,
+            "updated_at": recent,
+            "priority": 2,
+            "title": "B",
+            "description": "",
+            "assigned_to": None,
+            "branch": None,
+            "created_by": "test",
+            "depends_on": None,
+            "required_skills": None,
+            "score": 0,
+            "position": None,
+            "fail_count": 0,
+            "max_attempts": 3,
+            "fail_reason": None,
+            "subtask_of": None,
+            "subtasks": None,
+            "due_by": None,
+            "sprint": None,
+            "archived": False,
+            "estimated_hours": None,
+            "spent_hours": None,
+        },
+        {
+            "id": "t3",
+            "status": "available",
+            "repo": "my-repo",
+            "roadmap_item": "S2",
+            "created_at": recent,
+            "updated_at": recent,
+            "priority": 2,
+            "title": "C",
+            "description": "",
+            "assigned_to": None,
+            "branch": None,
+            "created_by": "test",
+            "depends_on": None,
+            "required_skills": None,
+            "score": 0,
+            "position": None,
+            "fail_count": 0,
+            "max_attempts": 3,
+            "fail_reason": None,
+            "subtask_of": None,
+            "subtasks": None,
+            "due_by": None,
+            "sprint": None,
+            "archived": False,
+            "estimated_hours": None,
+            "spent_hours": None,
+        },
     ]
     resp = await client.get("/api/analytics/burndown?repo=my-repo&sprint=S1&days=7")
     assert resp.status_code == 200
@@ -187,10 +311,23 @@ async def test_analytics_burndown_filters(client, mock_all):
 async def test_analytics_agents_repo_filter(client, mock_all):
     """Agent stats with repo filter."""
     mock_all["sql"].return_value = [
-        {"id": "agent-1", "status": "online", "capabilities": None, "repo_focus": None, "last_heartbeat": 1000},
+        {
+            "id": "agent-1",
+            "status": "online",
+            "capabilities": None,
+            "repo_focus": None,
+            "last_heartbeat": 1000,
+        },
     ]
     mock_all["param"].return_value = [
-        {"task_id": "t1", "agent_id": "agent-1", "action": "completed", "timestamp": 0, "id": "l1", "notes": None},
+        {
+            "task_id": "t1",
+            "agent_id": "agent-1",
+            "action": "completed",
+            "timestamp": 0,
+            "id": "l1",
+            "notes": None,
+        },
     ]
     resp = await client.get("/api/analytics/agents", params={"repo": "my-repo"})
     assert resp.status_code == 200
@@ -205,21 +342,62 @@ async def test_analytics_cross_project(client, mock_all):
     """Cross-project returns per-repo aggregations."""
     mock_all["sql"].side_effect = [
         [  # tasks
-            {"id": "t1", "repo": "repo-a", "status": "done", "priority": 0, "roadmap_item": "S1",
-             "sprint": "S1", "title": "T1", "description": "", "assigned_to": None,
-             "branch": None, "created_by": "test", "created_at": 1000, "updated_at": 1000,
-             "depends_on": None, "required_skills": None, "score": 0, "position": None,
-             "fail_count": 0, "max_attempts": 3, "fail_reason": None,
-             "subtask_of": None, "subtasks": None, "due_by": None,
-             "archived": False, "estimated_hours": None, "spent_hours": None},
-            {"id": "t2", "repo": "repo-a", "status": "available", "priority": 2,
-             "roadmap_item": "", "sprint": "", "title": "T2", "description": "",
-             "assigned_to": None, "branch": None, "created_by": "test",
-             "created_at": 1000, "updated_at": 1000, "depends_on": None,
-             "required_skills": None, "score": 0, "position": None,
-             "fail_count": 0, "max_attempts": 3, "fail_reason": None,
-             "subtask_of": None, "subtasks": None, "due_by": None,
-             "archived": False, "estimated_hours": None, "spent_hours": None},
+            {
+                "id": "t1",
+                "repo": "repo-a",
+                "status": "done",
+                "priority": 0,
+                "roadmap_item": "S1",
+                "sprint": "S1",
+                "title": "T1",
+                "description": "",
+                "assigned_to": None,
+                "branch": None,
+                "created_by": "test",
+                "created_at": 1000,
+                "updated_at": 1000,
+                "depends_on": None,
+                "required_skills": None,
+                "score": 0,
+                "position": None,
+                "fail_count": 0,
+                "max_attempts": 3,
+                "fail_reason": None,
+                "subtask_of": None,
+                "subtasks": None,
+                "due_by": None,
+                "archived": False,
+                "estimated_hours": None,
+                "spent_hours": None,
+            },
+            {
+                "id": "t2",
+                "repo": "repo-a",
+                "status": "available",
+                "priority": 2,
+                "roadmap_item": "",
+                "sprint": "",
+                "title": "T2",
+                "description": "",
+                "assigned_to": None,
+                "branch": None,
+                "created_by": "test",
+                "created_at": 1000,
+                "updated_at": 1000,
+                "depends_on": None,
+                "required_skills": None,
+                "score": 0,
+                "position": None,
+                "fail_count": 0,
+                "max_attempts": 3,
+                "fail_reason": None,
+                "subtask_of": None,
+                "subtasks": None,
+                "due_by": None,
+                "archived": False,
+                "estimated_hours": None,
+                "spent_hours": None,
+            },
         ],
         [  # projects
             {"id": "repo-a", "name": "Repo A", "description": ""},
@@ -266,15 +444,27 @@ async def test_analytics_calendar_with_data(client, mock_all):
 async def test_github_issue_opened_creates_task(client, mock_all):
     """Issue opened creates a task when no existing link."""
     mock_all["call"].return_value = {"status": "ok"}
-    with patch("routes.github.issue_sync.get_link", return_value=None), \
-         patch("routes.github.issue_sync.link_issue", return_value={}), \
-         patch("routes.github.issue_sync.update_issue_status", return_value={}):
+    with (
+        patch("routes.github.issue_sync.get_link", return_value=None),
+        patch("routes.github.issue_sync.link_issue", return_value={}),
+        patch("routes.github.issue_sync.update_issue_status", return_value={}),
+    ):
         resp = await client.post(
             "/api/webhook/github",
-            json={"action": "opened", "issue": {"number": 50, "title": "New",
-                  "html_url": "", "body": "", "state": "open", "url": ""},
-                  "repository": {"full_name": "test/repo"}},
-            headers={"X-GitHub-Event": "issues"})
+            json={
+                "action": "opened",
+                "issue": {
+                    "number": 50,
+                    "title": "New",
+                    "html_url": "",
+                    "body": "",
+                    "state": "open",
+                    "url": "",
+                },
+                "repository": {"full_name": "test/repo"},
+            },
+            headers={"X-GitHub-Event": "issues"},
+        )
     assert resp.status_code == 200
     assert resp.json()["status"] == "created"
 
@@ -286,14 +476,25 @@ async def test_github_issue_reopened_done(client, mock_all):
         _make_task("t1", "Done task", status="done", repo="test/repo"),
     ]
     mock_all["call"].return_value = {"status": "ok"}
-    with patch("routes.github.issue_sync.get_task_id_for_issue", return_value="t1"), \
-         patch("routes.github.issue_sync.update_issue_status", return_value={}):
+    with (
+        patch("routes.github.issue_sync.get_task_id_for_issue", return_value="t1"),
+        patch("routes.github.issue_sync.update_issue_status", return_value={}),
+    ):
         resp = await client.post(
             "/api/webhook/github",
-            json={"action": "reopened", "issue": {"number": 42, "title": "Reopen",
-                  "html_url": "", "body": "", "state": "open"},
-                  "repository": {"full_name": "test/repo"}},
-            headers={"X-GitHub-Event": "issues"})
+            json={
+                "action": "reopened",
+                "issue": {
+                    "number": 42,
+                    "title": "Reopen",
+                    "html_url": "",
+                    "body": "",
+                    "state": "open",
+                },
+                "repository": {"full_name": "test/repo"},
+            },
+            headers={"X-GitHub-Event": "issues"},
+        )
     assert resp.status_code == 200
     assert resp.json()["status"] == "reopened"
 
@@ -305,10 +506,13 @@ async def test_github_pr_opened_sql_fallback(client, mock_all):
     branch = "feature/kanban-task_abc--feature"
     resp = await client.post(
         "/api/webhook/github",
-        json={"action": "opened", "pull_request": {"head": {"ref": branch},
-              "html_url": "", "title": "PR title"},
-              "repository": {"full_name": "test/repo"}},
-        headers={"X-GitHub-Event": "pull_request"})
+        json={
+            "action": "opened",
+            "pull_request": {"head": {"ref": branch}, "html_url": "", "title": "PR title"},
+            "repository": {"full_name": "test/repo"},
+        },
+        headers={"X-GitHub-Event": "pull_request"},
+    )
     assert resp.status_code == 200
     assert resp.json()["status"] == "linked"
 
@@ -323,10 +527,13 @@ async def test_github_pr_merged_available(client, mock_all):
     branch = "feature/kanban-task_abc--feature"
     resp = await client.post(
         "/api/webhook/github",
-        json={"action": "closed", "pull_request": {"head": {"ref": branch},
-              "html_url": "", "title": "", "merged": True},
-              "repository": {"full_name": "test/repo"}},
-        headers={"X-GitHub-Event": "pull_request"})
+        json={
+            "action": "closed",
+            "pull_request": {"head": {"ref": branch}, "html_url": "", "title": "", "merged": True},
+            "repository": {"full_name": "test/repo"},
+        },
+        headers={"X-GitHub-Event": "pull_request"},
+    )
     assert resp.status_code == 200
     assert resp.json()["status"] == "completed"
 
@@ -337,10 +544,13 @@ async def test_github_pr_closed_not_merged(client, mock_all):
     branch = "feature/kanban-task_abc--feature"
     resp = await client.post(
         "/api/webhook/github",
-        json={"action": "closed", "pull_request": {"head": {"ref": branch},
-              "html_url": "", "title": "", "merged": False},
-              "repository": {"full_name": "test/repo"}},
-        headers={"X-GitHub-Event": "pull_request"})
+        json={
+            "action": "closed",
+            "pull_request": {"head": {"ref": branch}, "html_url": "", "title": "", "merged": False},
+            "repository": {"full_name": "test/repo"},
+        },
+        headers={"X-GitHub-Event": "pull_request"},
+    )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ignored"
 
@@ -355,10 +565,13 @@ async def test_github_pr_merged_http_exception(client, mock_all):
     branch = "feature/kanban-task_abc--feature"
     resp = await client.post(
         "/api/webhook/github",
-        json={"action": "closed", "pull_request": {"head": {"ref": branch},
-              "html_url": "", "title": "", "merged": True},
-              "repository": {"full_name": "test/repo"}},
-        headers={"X-GitHub-Event": "pull_request"})
+        json={
+            "action": "closed",
+            "pull_request": {"head": {"ref": branch}, "html_url": "", "title": "", "merged": True},
+            "repository": {"full_name": "test/repo"},
+        },
+        headers={"X-GitHub-Event": "pull_request"},
+    )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ignored"
 
@@ -369,8 +582,10 @@ async def test_github_pr_merged_http_exception(client, mock_all):
 @pytest.mark.asyncio
 async def test_health_projects(client, mock_all):
     """GET /api/health/projects returns data."""
-    with patch("scanners.discover_repos", return_value=["repo1"]), \
-         patch("scanners.health.compute_all_projects", return_value={"projects": []}):
+    with (
+        patch("scanners.discover_repos", return_value=["repo1"]),
+        patch("scanners.health.compute_all_projects", return_value={"projects": []}),
+    ):
         resp = await client.get("/api/health/projects")
     assert resp.status_code == 200
 
@@ -405,8 +620,10 @@ async def test_webhook_update_404(client, mock_all):
     """PATCH /api/webhooks/{id} for non-existent returns 404."""
     with patch("routes.webhook_subs.webhooks.update_webhook", return_value=None):
         resp = await client.patch(
-            "/api/webhooks/nonexistent", json={"label": "test"},
-            headers={"X-API-Key": "test-api-key-123"})
+            "/api/webhooks/nonexistent",
+            json={"label": "test"},
+            headers={"X-API-Key": "test-api-key-123"},
+        )
     assert resp.status_code == 404
 
 
@@ -415,8 +632,8 @@ async def test_webhook_test_404(client, mock_all):
     """POST /api/webhooks/{id}/test for non-existent returns 404."""
     with patch("routes.webhook_subs.webhooks.get_webhook", return_value=None):
         resp = await client.post(
-            "/api/webhooks/nonexistent/test",
-            headers={"X-API-Key": "test-api-key-123"})
+            "/api/webhooks/nonexistent/test", headers={"X-API-Key": "test-api-key-123"}
+        )
     assert resp.status_code == 404
 
 
@@ -429,6 +646,7 @@ async def test_health_uptime_with_scheduler(client, mock_all):
     import time as _time
 
     import scheduler as sched_mod
+
     orig = sched_mod.scheduler_start_time
     sched_mod.scheduler_start_time = _time.time() - 7200
     try:
@@ -463,10 +681,13 @@ async def test_github_pr_no_branch(client, mock_all):
     """PR event with no branch ref is ignored."""
     resp = await client.post(
         "/api/webhook/github",
-        json={"action": "opened", "pull_request": {"head": {},
-              "html_url": "", "title": ""},
-              "repository": {"full_name": "test/repo"}},
-        headers={"X-GitHub-Event": "pull_request"})
+        json={
+            "action": "opened",
+            "pull_request": {"head": {}, "html_url": "", "title": ""},
+            "repository": {"full_name": "test/repo"},
+        },
+        headers={"X-GitHub-Event": "pull_request"},
+    )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ignored"
 
@@ -476,10 +697,13 @@ async def test_github_pr_bad_pattern(client, mock_all):
     """PR event with non-conforming branch is ignored."""
     resp = await client.post(
         "/api/webhook/github",
-        json={"action": "opened", "pull_request": {"head": {"ref": "random-branch"},
-              "html_url": "", "title": ""},
-              "repository": {"full_name": "test/repo"}},
-        headers={"X-GitHub-Event": "pull_request"})
+        json={
+            "action": "opened",
+            "pull_request": {"head": {"ref": "random-branch"}, "html_url": "", "title": ""},
+            "repository": {"full_name": "test/repo"},
+        },
+        headers={"X-GitHub-Event": "pull_request"},
+    )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ignored"
 
@@ -497,10 +721,13 @@ async def test_github_pr_opened_task_title(client, mock_all):
     branch = "feature/kanban-task_abc--feature"
     resp = await client.post(
         "/api/webhook/github",
-        json={"action": "opened", "pull_request": {"head": {"ref": branch},
-              "html_url": "", "title": "PR title"},
-              "repository": {"full_name": "test/repo"}},
-        headers={"X-GitHub-Event": "pull_request"})
+        json={
+            "action": "opened",
+            "pull_request": {"head": {"ref": branch}, "html_url": "", "title": "PR title"},
+            "repository": {"full_name": "test/repo"},
+        },
+        headers={"X-GitHub-Event": "pull_request"},
+    )
     assert resp.status_code == 200
     assert resp.json()["status"] == "linked"
 
@@ -515,10 +742,13 @@ async def test_github_pr_merged_not_found(client, mock_all):
     branch = "feature/kanban-task_abc--feature"
     resp = await client.post(
         "/api/webhook/github",
-        json={"action": "closed", "pull_request": {"head": {"ref": branch},
-              "html_url": "", "title": "", "merged": True},
-              "repository": {"full_name": "test/repo"}},
-        headers={"X-GitHub-Event": "pull_request"})
+        json={
+            "action": "closed",
+            "pull_request": {"head": {"ref": branch}, "html_url": "", "title": "", "merged": True},
+            "repository": {"full_name": "test/repo"},
+        },
+        headers={"X-GitHub-Event": "pull_request"},
+    )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ignored"
     assert "not found" in resp.json()["reason"]
@@ -531,15 +761,34 @@ async def test_github_pr_merged_not_found(client, mock_all):
 async def test_ops_cross_project(client, mock_all):
     """GET /api/cross-project returns per-repo aggregation."""
     mock_all["sql"].return_value = [
-        {"id": "t1", "repo": "repo-a", "status": "done", "priority": 0,
-         "archived": True, "title": "", "description": "",
-         "assigned_to": None, "branch": None, "created_by": "",
-         "created_at": 1000, "updated_at": 1000, "depends_on": None,
-         "required_skills": None, "score": 0, "position": None,
-         "fail_count": 0, "max_attempts": 3, "fail_reason": None,
-         "subtask_of": None, "subtasks": None, "due_by": None,
-         "sprint": None, "roadmap_item": "",
-         "estimated_hours": None, "spent_hours": None},
+        {
+            "id": "t1",
+            "repo": "repo-a",
+            "status": "done",
+            "priority": 0,
+            "archived": True,
+            "title": "",
+            "description": "",
+            "assigned_to": None,
+            "branch": None,
+            "created_by": "",
+            "created_at": 1000,
+            "updated_at": 1000,
+            "depends_on": None,
+            "required_skills": None,
+            "score": 0,
+            "position": None,
+            "fail_count": 0,
+            "max_attempts": 3,
+            "fail_reason": None,
+            "subtask_of": None,
+            "subtasks": None,
+            "due_by": None,
+            "sprint": None,
+            "roadmap_item": "",
+            "estimated_hours": None,
+            "spent_hours": None,
+        },
     ]
     resp = await client.get("/api/cross-project")
     assert resp.status_code == 200
@@ -552,19 +801,28 @@ async def test_ops_cross_project(client, mock_all):
 @pytest.mark.asyncio
 async def test_webhook_test_success(client, mock_all):
     """POST /api/webhooks/{id}/test sends a test ping."""
-    with patch("routes.webhook_subs.webhooks.get_webhook", return_value={
-        "id": "wh1", "url": "https://hooks.example.com/hook",
-        "type": "generic", "events": "created", "label": "test",
-    }), patch("webhooks._format_payload", return_value={"text": "ping"}), \
-        patch("httpx.AsyncClient") as mc:
+    with (
+        patch(
+            "routes.webhook_subs.webhooks.get_webhook",
+            return_value={
+                "id": "wh1",
+                "url": "https://hooks.example.com/hook",
+                "type": "generic",
+                "events": "created",
+                "label": "test",
+            },
+        ),
+        patch("webhooks._format_payload", return_value={"text": "ping"}),
+        patch("httpx.AsyncClient") as mc,
+    ):
         mclient = AsyncMock()
         mc.return_value.__aenter__.return_value = mclient
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mclient.post = AsyncMock(return_value=mock_resp)
         resp = await client.post(
-            "/api/webhooks/wh1/test",
-            headers={"X-API-Key": "test-api-key-123"})
+            "/api/webhooks/wh1/test", headers={"X-API-Key": "test-api-key-123"}
+        )
     assert resp.status_code == 200
     assert resp.json()["status"] == "sent"
 
@@ -589,6 +847,7 @@ async def test_health_board_query_exception(client, mock_all):
 async def test_health_board_import_error(client):
     """Health handles when shared module import fails."""
     import sys
+
     old_shared = sys.modules.get("shared")
     sys.modules["shared"] = None  # Make shared unimportable
     try:
@@ -604,6 +863,7 @@ async def test_health_board_import_error(client):
 
 
 # ── Tasks: batch assign/unassign labels (lines 292-314) ──
+
 
 @pytest.mark.asyncio
 async def test_tasks_batch_assign_labels(client, mock_all):
@@ -659,6 +919,7 @@ async def test_tasks_batch_unassign_empty(client, mock_all):
 
 # ── Tasks: seed (line 168-169) ──
 
+
 @pytest.mark.asyncio
 async def test_tasks_seed(client, mock_all):
     """POST /api/tasks/seed should seed sample tasks."""
@@ -670,13 +931,15 @@ async def test_tasks_seed(client, mock_all):
 
 # ── Tasks: set skills (line 368, 719-720) ──
 
+
 @pytest.mark.asyncio
 async def test_tasks_set_skills(client, mock_all):
     """POST /api/tasks/{id}/skills should set task skills."""
     mock_all["call"].return_value = {"status": "ok"}
     with patch("main.settings.api_key", "test-api-key-123"):
         resp = await client.post(
-            "/api/tasks/task_1/skills", json={"skills": "python, rust"},
+            "/api/tasks/task_1/skills",
+            json={"skills": "python, rust"},
             headers={"X-API-Key": "test-api-key-123"},
         )
     assert resp.status_code == 200
@@ -684,6 +947,7 @@ async def test_tasks_set_skills(client, mock_all):
 
 
 # ── Tasks: unarchive (line 411, 734-737) ──
+
 
 @pytest.mark.asyncio
 async def test_tasks_unarchive(client, mock_all):
@@ -700,6 +964,7 @@ async def test_tasks_unarchive(client, mock_all):
 
 # ── Tasks: list with archived filter (lines 125-126) ──
 
+
 @pytest.mark.asyncio
 async def test_tasks_list_archived_filter(client, mock_all):
     """GET /api/tasks?archived=true should pass archived filter."""
@@ -710,6 +975,7 @@ async def test_tasks_list_archived_filter(client, mock_all):
 
 # ── Tasks: list with repo filter (lines 195-206) ──
 
+
 @pytest.mark.asyncio
 async def test_tasks_list_repo_filter(client, mock_all):
     """GET /api/tasks?repo=xxx should pass repo filter."""
@@ -718,8 +984,8 @@ async def test_tasks_list_repo_filter(client, mock_all):
     assert resp.status_code == 200
 
 
-
 # ── Tasks: reorder (lines 274-275) ──
+
 
 @pytest.mark.asyncio
 async def test_tasks_reorder(client, mock_all):
@@ -727,7 +993,8 @@ async def test_tasks_reorder(client, mock_all):
     mock_all["call"].return_value = {"status": "ok"}
     with patch("main.settings.api_key", "test-api-key-123"):
         resp = await client.post(
-            "/api/tasks/reorder", json={"task_id": "t1", "position": 1},
+            "/api/tasks/reorder",
+            json={"task_id": "t1", "position": 1},
             headers={"X-API-Key": "test-api-key-123"},
         )
     assert resp.status_code == 200
@@ -748,22 +1015,42 @@ async def test_tasks_bulk_reorder(client, mock_all):
     assert resp.json()["status"] == "reordered"
 
 
-
 # ── Tasks: suggest with agent capabilities (lines 79-80, 86-87) ──
+
 
 @pytest.mark.asyncio
 async def test_tasks_suggest_with_agent_caps(client, mock_all):
     """GET /api/tasks/suggest handles agent errors gracefully."""
     mock_all["sql"].side_effect = [
-        [{"id": "t1", "title": "Test", "status": "available",
-          "repo": "r", "priority": 128, "created_at": 9999999999999,
-          "required_skills": "", "description": "", "assigned_to": None,
-          "branch": None, "created_by": "test", "updated_at": 9999999999999,
-          "depends_on": None, "score": 0, "position": None,
-          "fail_count": 0, "max_attempts": 3, "fail_reason": None,
-          "subtask_of": None, "subtasks": None, "due_by": None,
-          "sprint": None, "archived": False, "estimated_hours": None,
-          "spent_hours": None}],  # tasks
+        [
+            {
+                "id": "t1",
+                "title": "Test",
+                "status": "available",
+                "repo": "r",
+                "priority": 128,
+                "created_at": 9999999999999,
+                "required_skills": "",
+                "description": "",
+                "assigned_to": None,
+                "branch": None,
+                "created_by": "test",
+                "updated_at": 9999999999999,
+                "depends_on": None,
+                "score": 0,
+                "position": None,
+                "fail_count": 0,
+                "max_attempts": 3,
+                "fail_reason": None,
+                "subtask_of": None,
+                "subtasks": None,
+                "due_by": None,
+                "sprint": None,
+                "archived": False,
+                "estimated_hours": None,
+                "spent_hours": None,
+            }
+        ],  # tasks
         [{"id": "agent-1", "capabilities": None}],  # agent
         [],  # blockers
     ]
@@ -775,32 +1062,74 @@ async def test_tasks_suggest_with_agent_caps(client, mock_all):
 
 # ── Tasks: pagination edge cases (lines 156, 158) ──
 
+
 @pytest.mark.asyncio
 async def test_tasks_list_with_offset_limit(client, mock_all):
     """GET /api/tasks with offset and limit pagination."""
     mock_all["param"].return_value = [
-        {"id": "t1", "title": "T1", "status": "available",
-         "repo": "r", "priority": 0, "created_at": 1000, "updated_at": 1000,
-         "description": "", "assigned_to": None, "branch": None,
-         "created_by": "test", "depends_on": None, "required_skills": None,
-         "score": 0, "position": None, "fail_count": 0, "max_attempts": 3,
-         "fail_reason": None, "subtask_of": None, "subtasks": None,
-         "due_by": None, "sprint": None, "archived": False,
-         "estimated_hours": None, "spent_hours": None, "roadmap_item": ""},
-        {"id": "t2", "title": "T2", "status": "available",
-         "repo": "r", "priority": 0, "created_at": 1000, "updated_at": 1000,
-         "description": "", "assigned_to": None, "branch": None,
-         "created_by": "test", "depends_on": None, "required_skills": None,
-         "score": 0, "position": None, "fail_count": 0, "max_attempts": 3,
-         "fail_reason": None, "subtask_of": None, "subtasks": None,
-         "due_by": None, "sprint": None, "archived": False,
-         "estimated_hours": None, "spent_hours": None, "roadmap_item": ""},
+        {
+            "id": "t1",
+            "title": "T1",
+            "status": "available",
+            "repo": "r",
+            "priority": 0,
+            "created_at": 1000,
+            "updated_at": 1000,
+            "description": "",
+            "assigned_to": None,
+            "branch": None,
+            "created_by": "test",
+            "depends_on": None,
+            "required_skills": None,
+            "score": 0,
+            "position": None,
+            "fail_count": 0,
+            "max_attempts": 3,
+            "fail_reason": None,
+            "subtask_of": None,
+            "subtasks": None,
+            "due_by": None,
+            "sprint": None,
+            "archived": False,
+            "estimated_hours": None,
+            "spent_hours": None,
+            "roadmap_item": "",
+        },
+        {
+            "id": "t2",
+            "title": "T2",
+            "status": "available",
+            "repo": "r",
+            "priority": 0,
+            "created_at": 1000,
+            "updated_at": 1000,
+            "description": "",
+            "assigned_to": None,
+            "branch": None,
+            "created_by": "test",
+            "depends_on": None,
+            "required_skills": None,
+            "score": 0,
+            "position": None,
+            "fail_count": 0,
+            "max_attempts": 3,
+            "fail_reason": None,
+            "subtask_of": None,
+            "subtasks": None,
+            "due_by": None,
+            "sprint": None,
+            "archived": False,
+            "estimated_hours": None,
+            "spent_hours": None,
+            "roadmap_item": "",
+        },
     ]
     resp = await client.get("/api/tasks", params={"offset": 0, "limit": 1})
     assert resp.status_code == 200
 
 
 # ── Tasks: task not found (line 387) ──
+
 
 @pytest.mark.asyncio
 async def test_tasks_get_not_found(client, mock_all):
@@ -813,13 +1142,15 @@ async def test_tasks_get_not_found(client, mock_all):
 
 # ── Tasks: bulk archive (lines 622-623) ──
 
+
 @pytest.mark.asyncio
 async def test_tasks_bulk_archive(client, mock_all):
     """POST /api/tasks/bulk-archive archives tasks."""
     mock_all["call"].return_value = {"status": "ok"}
     with patch("main.settings.api_key", "test-api-key-123"):
         resp = await client.post(
-            "/api/tasks/bulk-archive", json={"task_ids": ["t1", "t2"]},
+            "/api/tasks/bulk-archive",
+            json={"task_ids": ["t1", "t2"]},
             headers={"X-API-Key": "test-api-key-123"},
         )
     assert resp.status_code == 200
@@ -827,13 +1158,15 @@ async def test_tasks_bulk_archive(client, mock_all):
 
 # ── Tasks: bulk retry (lines 697-698) ──
 
+
 @pytest.mark.asyncio
 async def test_tasks_bulk_retry(client, mock_all):
     """POST /api/tasks/bulk-retry retries failed tasks."""
     mock_all["call"].return_value = {"status": "ok"}
     with patch("main.settings.api_key", "test-api-key-123"):
         resp = await client.post(
-            "/api/tasks/bulk-retry", json={"task_ids": ["t1"]},
+            "/api/tasks/bulk-retry",
+            json={"task_ids": ["t1"]},
             headers={"X-API-Key": "test-api-key-123"},
         )
     assert resp.status_code == 200
@@ -881,9 +1214,15 @@ async def test_dispatcher_state_delete_not_found(client, mock_all):
 async def test_create_label_fallback(client, mock_all):
     """create_label returns fallback when label not found after insert."""
     mock_all["param"].return_value = []  # SELECT after create returns nothing
-    resp = await client.post("/api/labels", json={
-        "id": "new_label", "name": "new", "color": "#ff0", "description": "",
-    })
+    resp = await client.post(
+        "/api/labels",
+        json={
+            "id": "new_label",
+            "name": "new",
+            "color": "#ff0",
+            "description": "",
+        },
+    )
     assert resp.status_code == 201
     assert resp.json() == {"status": "created"}
 
@@ -892,9 +1231,14 @@ async def test_create_label_fallback(client, mock_all):
 async def test_update_label_fallback(client, mock_all):
     """update_label returns fallback when label not found after update."""
     mock_all["param"].return_value = []  # SELECT after update returns nothing
-    resp = await client.patch("/api/labels/label_42", json={
-        "name": "renamed", "color": "#00f", "description": "",
-    })
+    resp = await client.patch(
+        "/api/labels/label_42",
+        json={
+            "name": "renamed",
+            "color": "#00f",
+            "description": "",
+        },
+    )
     assert resp.status_code == 200
     assert resp.json() == {"status": "updated"}
 
@@ -906,11 +1250,14 @@ async def test_update_label_fallback(client, mock_all):
 async def test_roadmap_import_dedup_existing(client, mock_all):
     """Roadmap import skips tasks that already exist (same title+repo, not done)."""
     mock_all["param"].return_value = [{"id": "existing_1", "status": "available"}]
-    resp = await client.post("/api/roadmap/import", json={
-        "content": "- [ ] Existing title\n",
-        "repo": "test-repo",
-        "created_by": "test",
-    })
+    resp = await client.post(
+        "/api/roadmap/import",
+        json={
+            "content": "- [ ] Existing title\n",
+            "repo": "test-repo",
+            "created_by": "test",
+        },
+    )
     assert resp.status_code == 200
     mock_all["call"].assert_not_called()
     data = resp.json()
@@ -921,10 +1268,15 @@ async def test_roadmap_import_dedup_existing(client, mock_all):
 @pytest.mark.asyncio
 async def test_schema_migration_alias(client, mock_all):
     """POST /api/schema-migrations alias returns 201."""
-    resp = await client.post("/api/schema-migrations", json={
-        "version": "v2", "description": "Test migration",
-        "applied_by": "tester", "checksum": "abc123",
-    })
+    resp = await client.post(
+        "/api/schema-migrations",
+        json={
+            "version": "v2",
+            "description": "Test migration",
+            "applied_by": "tester",
+            "checksum": "abc123",
+        },
+    )
     assert resp.status_code == 201
     data = resp.json()
     assert data["status"] == "recorded"
@@ -1012,7 +1364,14 @@ async def test_analytics_agents_blocked_counted(client, mock_all):
 async def test_logs_multi_action_filter(client, mock_all):
     """list_logs with multiple comma-separated actions enters pass block."""
     mock_all["sql"].return_value = [
-        {"id": "l1", "task_id": "t1", "action": "created", "agent_id": None, "notes": None, "timestamp": 1000},
+        {
+            "id": "l1",
+            "task_id": "t1",
+            "action": "created",
+            "agent_id": None,
+            "notes": None,
+            "timestamp": 1000,
+        },
     ]
     resp = await client.get("/api/logs", params={"action": "created,claimed"})
     assert resp.status_code == 200
@@ -1035,4 +1394,3 @@ async def test_suggest_by_project_exception(client, mock_all):
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)
-

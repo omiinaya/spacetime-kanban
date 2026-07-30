@@ -281,9 +281,7 @@ class TestRunLlmWorker:
 
     @patch("workers.llm._has_git_changes", side_effect=[[], ["file1.py"]])
     @patch("workers.llm.subprocess.Popen")
-    def test_fallback_meaningful_with_changes(
-        self, mock_popen, mock_git_changes, worker_context
-    ):
+    def test_fallback_meaningful_with_changes(self, mock_popen, mock_git_changes, worker_context):
         """Fallback: meaningful output + new changes → success (lines 238-239)."""
         mock_proc = MagicMock()
         mock_proc.communicate.return_value = (
@@ -297,9 +295,7 @@ class TestRunLlmWorker:
 
     @patch("workers.llm._has_git_changes", return_value=[])
     @patch("workers.llm.subprocess.Popen")
-    def test_fallback_not_meaningful_no_changes(
-        self, mock_popen, mock_git_changes, worker_context
-    ):
+    def test_fallback_not_meaningful_no_changes(self, mock_popen, mock_git_changes, worker_context):
         """Fallback: empty output + no changes → blocked (lines 240-241)."""
         mock_proc = MagicMock()
         mock_proc.communicate.return_value = ("", "")

@@ -702,9 +702,7 @@ class TestNotify:
     @patch("server.webhooks._deliver_with_retry")
     @patch("server.webhooks._format_payload")
     @patch("server.webhooks.list_webhooks")
-    async def test_sends_to_matching_hooks(
-        self, mock_list, mock_format, mock_deliver, mock_call
-    ):
+    async def test_sends_to_matching_hooks(self, mock_list, mock_format, mock_deliver, mock_call):
         mock_list.return_value = [
             {
                 "id": "wh_1",
@@ -736,9 +734,7 @@ class TestNotify:
     @patch("server.webhooks._deliver_with_retry")
     @patch("server.webhooks._format_payload")
     @patch("server.webhooks.list_webhooks")
-    async def test_no_matching_hooks(
-        self, mock_list, mock_format, mock_deliver, mock_call
-    ):
+    async def test_no_matching_hooks(self, mock_list, mock_format, mock_deliver, mock_call):
         mock_list.return_value = [
             {
                 "id": "wh_1",

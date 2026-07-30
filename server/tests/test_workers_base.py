@@ -330,6 +330,7 @@ class TestRunWorker:
     @patch("workers.base.WorkerContext.complete", return_value=True)
     def test_timeout_default_from_env(self, mock_complete, mock_load, mock_hb_loop):
         """run_worker uses env var default when timeout=0."""
+
         def work_fn(ctx):
             return True, "Done"
 

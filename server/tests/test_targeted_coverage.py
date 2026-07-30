@@ -1,4 +1,5 @@
 """Targeted coverage tests for remaining uncovered lines in routes."""
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -28,6 +29,7 @@ def mock_all():
         "routes.apikeys": ["_sql", "_call"],
     }
     from contextlib import ExitStack
+
     with ExitStack() as stack:
         sql = AsyncMock(return_value=[])
         param = AsyncMock(return_value=[])
@@ -72,8 +74,14 @@ async def test_projects_suggest_by_project_dict_result(client, mock_all):
 async def test_logs_agent_id_filter(client, mock_all):
     """list_logs with agent_id param covers agent_id SQL substitution."""
     mock_all["sql"].return_value = [
-        {"id": "l1", "task_id": "t1", "action": "created",
-         "agent_id": "bot", "notes": None, "timestamp": 1000},
+        {
+            "id": "l1",
+            "task_id": "t1",
+            "action": "created",
+            "agent_id": "bot",
+            "notes": None,
+            "timestamp": 1000,
+        },
     ]
     resp = await client.get("/api/logs", params={"agent_id": "bot"})
     assert resp.status_code == 200
@@ -88,8 +96,11 @@ async def test_logs_agent_id_filter(client, mock_all):
 async def test_rules_update_not_found(client, mock_all):
     """update_rule raises 404 when rule_id doesn't exist."""
     mock_all["param"].return_value = []
-    resp = await client.patch("/api/rules/nonexistent-rule", json={"name": "test"},
-                              headers={"X-API-Key": "test-api-key-123"})
+    resp = await client.patch(
+        "/api/rules/nonexistent-rule",
+        json={"name": "test"},
+        headers={"X-API-Key": "test-api-key-123"},
+    )
     assert resp.status_code == 404
 
 
@@ -102,10 +113,17 @@ async def test_templates_create_not_found_after_creation(client, mock_all):
     mock_all["call"].return_value = {"status": "ok"}
 
     mock_all["param"].return_value = []  # no rows returned after creation
-    resp = await client.post("/api/task-templates", json={
-        "title": "Test Template", "description": "desc", "priority": 2,
-        "repo": "test-repo", "created_by": "test", "cron_schedule": "0 * * * *",
-    })
+    resp = await client.post(
+        "/api/task-templates",
+        json={
+            "title": "Test Template",
+            "description": "desc",
+            "priority": 2,
+            "repo": "test-repo",
+            "created_by": "test",
+            "cron_schedule": "0 * * * *",
+        },
+    )
     assert resp.status_code == 500
 
 
@@ -129,9 +147,7 @@ async def test_templates_trigger_no_log(client, mock_all):
 @pytest.mark.asyncio
 async def test_webhook_subs_test_telegram(client, mock_all):
     """test_webhook sends POST to telegram-type webhook."""
-    mock_all["param"].return_value = [
-        {"id": "wh1", "url": "https://t.me/bot", "type": "telegram"}
-    ]
+    mock_all["param"].return_value = [{"id": "wh1", "url": "https://t.me/bot", "type": "telegram"}]
     mock_all["call"].return_value = {"status": "sent"}
 
     fake_httpx_client = AsyncMock()
@@ -139,11 +155,17 @@ async def test_webhook_subs_test_telegram(client, mock_all):
     fake_httpx_client.__aenter__.return_value = fake_httpx_client
     fake_httpx_client.__aexit__.return_value = None
 
-    with patch("routes.webhook_subs.webhooks.get_webhook", return_value={"id": "wh1", "url": "https://t.me/bot", "type": "telegram"}), \
-         patch("routes.webhook_subs.webhooks.remove_webhook"), \
-         patch("routes.webhook_subs.httpx.AsyncClient", return_value=fake_httpx_client):
-        resp = await client.post("/api/webhooks/wh1/test",
-                                 headers={"X-API-Key": "test-api-key-123"})
+    with (
+        patch(
+            "routes.webhook_subs.webhooks.get_webhook",
+            return_value={"id": "wh1", "url": "https://t.me/bot", "type": "telegram"},
+        ),
+        patch("routes.webhook_subs.webhooks.remove_webhook"),
+        patch("routes.webhook_subs.httpx.AsyncClient", return_value=fake_httpx_client),
+    ):
+        resp = await client.post(
+            "/api/webhooks/wh1/test", headers={"X-API-Key": "test-api-key-123"}
+        )
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "sent"
@@ -165,11 +187,17 @@ async def test_webhook_subs_test_exception(client, mock_all):
     fake_httpx_client.__aenter__.return_value = fake_httpx_client
     fake_httpx_client.__aexit__.return_value = None
 
-    with patch("routes.webhook_subs.webhooks.get_webhook", return_value={"id": "wh1", "url": "https://example.com/hook", "type": "generic"}), \
-         patch("routes.webhook_subs.webhooks.remove_webhook"), \
-         patch("routes.webhook_subs.httpx.AsyncClient", return_value=fake_httpx_client):
-        resp = await client.post("/api/webhooks/wh1/test",
-                                 headers={"X-API-Key": "test-api-key-123"})
+    with (
+        patch(
+            "routes.webhook_subs.webhooks.get_webhook",
+            return_value={"id": "wh1", "url": "https://example.com/hook", "type": "generic"},
+        ),
+        patch("routes.webhook_subs.webhooks.remove_webhook"),
+        patch("routes.webhook_subs.httpx.AsyncClient", return_value=fake_httpx_client),
+    ):
+        resp = await client.post(
+            "/api/webhooks/wh1/test", headers={"X-API-Key": "test-api-key-123"}
+        )
     assert resp.status_code == 502
 
 
@@ -182,11 +210,13 @@ async def test_sync_to_github_with_token(client, mock_all):
     from routes.tasks import _sync_to_github
 
     mock_all["call"].return_value = {"status": "ok"}
-    with patch("issue_sync.get_link", return_value={"repo": "test/test", "issue_number": 42}), \
-         patch("config.settings.github_token", "fake-token"), \
-         patch("issue_sync.close_issue", new_callable=AsyncMock) as mock_close, \
-         patch("issue_sync.reopen_issue", new_callable=AsyncMock) as mock_reopen, \
-         patch("issue_sync.add_issue_comment", new_callable=AsyncMock):
+    with (
+        patch("issue_sync.get_link", return_value={"repo": "test/test", "issue_number": 42}),
+        patch("config.settings.github_token", "fake-token"),
+        patch("issue_sync.close_issue", new_callable=AsyncMock) as mock_close,
+        patch("issue_sync.reopen_issue", new_callable=AsyncMock) as mock_reopen,
+        patch("issue_sync.add_issue_comment", new_callable=AsyncMock),
+    ):
         result = await _sync_to_github("task_1", "completed", "All done")
         assert result is None
         mock_close.assert_called_once_with("fake-token", "test/test", 42)
@@ -218,8 +248,7 @@ async def test_github_webhook_ignored_event(client, mock_all):
 async def test_github_webhook_reopened_re_link(client, mock_all):
     """Reopened issue with task_id in body re-links existing task."""
     mock_all["call"].return_value = {"status": "ok"}
-    with patch("issue_sync.link_issue"), \
-         patch("issue_sync.update_issue_status"):
+    with patch("issue_sync.link_issue"), patch("issue_sync.update_issue_status"):
         resp = await client.post(
             "/api/webhook/github",
             json={
@@ -249,9 +278,11 @@ async def test_github_webhook_closed_issue(client, mock_all):
     mock_all["call"].return_value = {"status": "ok"}
     mock_all["sql"].return_value = [{"id": "task_1", "status": "inProgress"}]
     mock_all["param"].return_value = [{"id": "task_1", "status": "inProgress"}]
-    with patch("issue_sync.get_task_id_for_issue", return_value="task_1"), \
-         patch("issue_sync.update_issue_status"), \
-         patch("asyncio.create_task"):
+    with (
+        patch("issue_sync.get_task_id_for_issue", return_value="task_1"),
+        patch("issue_sync.update_issue_status"),
+        patch("asyncio.create_task"),
+    ):
         resp = await client.post(
             "/api/webhook/github",
             json={
@@ -297,9 +328,11 @@ async def test_github_webhook_closed_available(client, mock_all):
     mock_all["call"].return_value = {"status": "ok"}
     mock_all["sql"].return_value = [{"id": "task_1", "status": "available"}]
     mock_all["param"].return_value = [{"id": "task_1", "status": "available"}]
-    with patch("issue_sync.get_task_id_for_issue", return_value="task_1"), \
-         patch("issue_sync.update_issue_status"), \
-         patch("asyncio.create_task"):
+    with (
+        patch("issue_sync.get_task_id_for_issue", return_value="task_1"),
+        patch("issue_sync.update_issue_status"),
+        patch("asyncio.create_task"),
+    ):
         resp = await client.post(
             "/api/webhook/github",
             json={
@@ -320,9 +353,11 @@ async def test_github_webhook_closed_else(client, mock_all):
     mock_all["call"].return_value = {"status": "ok"}
     mock_all["sql"].return_value = [{"id": "task_1", "status": "blocked"}]
     mock_all["param"].return_value = [{"id": "task_1", "status": "blocked"}]
-    with patch("issue_sync.get_task_id_for_issue", return_value="task_1"), \
-         patch("issue_sync.update_issue_status"), \
-         patch("asyncio.create_task"):
+    with (
+        patch("issue_sync.get_task_id_for_issue", return_value="task_1"),
+        patch("issue_sync.update_issue_status"),
+        patch("asyncio.create_task"),
+    ):
         resp = await client.post(
             "/api/webhook/github",
             json={
@@ -365,8 +400,10 @@ async def test_sync_to_github_no_link_data(client, mock_all):
     from routes.tasks import _sync_to_github
 
     mock_all["call"].return_value = {"status": "ok"}
-    with patch("issue_sync.get_link", return_value={"repo": "", "issue_number": 0}), \
-         patch("config.settings.github_token", "fake-token"):
+    with (
+        patch("issue_sync.get_link", return_value={"repo": "", "issue_number": 0}),
+        patch("config.settings.github_token", "fake-token"),
+    ):
         result = await _sync_to_github("task_1", "completed", "Done")
         assert result is None
 
@@ -380,10 +417,12 @@ async def test_sync_to_github_exception(client, mock_all):
     from routes.tasks import _sync_to_github
 
     mock_all["call"].return_value = {"status": "ok"}
-    with patch("issue_sync.get_link", return_value={"repo": "test/test", "issue_number": 42}), \
-         patch("config.settings.github_token", "fake-token"), \
-         patch("issue_sync.close_issue", side_effect=Exception("API error")), \
-         patch("logging.getLogger"):
+    with (
+        patch("issue_sync.get_link", return_value={"repo": "test/test", "issue_number": 42}),
+        patch("config.settings.github_token", "fake-token"),
+        patch("issue_sync.close_issue", side_effect=Exception("API error")),
+        patch("logging.getLogger"),
+    ):
         result = await _sync_to_github("task_1", "completed", "Done")
         assert result is None
 

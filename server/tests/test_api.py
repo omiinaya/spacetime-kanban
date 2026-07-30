@@ -3283,12 +3283,14 @@ async def test_add_task_log(client, mock_all):
 
 # ── Health: uptime with scheduler loaded ──
 
+
 @pytest.mark.asyncio
 async def test_health_uptime_with_scheduler(client):
     """Health endpoint should include uptime when scheduler has start_time."""
     import time as _time
 
     import scheduler as sched_mod
+
     orig = sched_mod.scheduler_start_time
     sched_mod.scheduler_start_time = _time.time() - 7200
     try:
@@ -3303,10 +3305,14 @@ async def test_health_uptime_with_scheduler(client):
 
 # ── Health: project endpoints ──
 
+
 @pytest.mark.asyncio
 async def test_health_projects_endpoint(client):
     """GET /api/health/projects should succeed."""
-    with patch("scanners.discover_repos", return_value=["repo1"]),          patch("scanners.health.compute_all_projects", return_value={"projects": []}):
+    with (
+        patch("scanners.discover_repos", return_value=["repo1"]),
+        patch("scanners.health.compute_all_projects", return_value={"projects": []}),
+    ):
         resp = await client.get("/api/health/projects")
     assert resp.status_code == 200
 
@@ -3317,4 +3323,3 @@ async def test_health_project_detail(client):
     with patch("scanners.health.compute_project_health", return_value={}):
         resp = await client.get("/api/health/projects/repo1")
     assert resp.status_code == 200
-

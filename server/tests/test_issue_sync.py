@@ -425,8 +425,10 @@ class TestGhRequest:
         mock_client_cls.return_value = mock_client
 
         result = await _gh_request(
-            "POST", "https://api.github.com/test/repos/issues",
-            "token", body={"title": "test"},
+            "POST",
+            "https://api.github.com/test/repos/issues",
+            "token",
+            body={"title": "test"},
         )
         assert result == {"id": 1}
         call_kwargs = mock_client.request.call_args[1]
@@ -443,8 +445,18 @@ class TestSearchIssues:
     async def test_search_with_results(self, mock_gh_req):
         mock_gh_req.return_value = {
             "items": [
-                {"number": 1, "title": "Fix bug", "html_url": "https://github.com/...", "state": "open"},
-                {"number": 2, "title": "Add feature", "html_url": "https://github.com/...", "state": "closed"},
+                {
+                    "number": 1,
+                    "title": "Fix bug",
+                    "html_url": "https://github.com/...",
+                    "state": "open",
+                },
+                {
+                    "number": 2,
+                    "title": "Add feature",
+                    "html_url": "https://github.com/...",
+                    "state": "closed",
+                },
             ]
         }
         results = await search_issues("token", "owner/repo", "bug")

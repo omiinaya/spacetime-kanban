@@ -280,12 +280,14 @@ def test_fetch_existing_titles_skips_empty_title(mock_urlopen):
     """
     import _task_fountain as m
 
-    mock_resp = _make_mock_urlopen_response([
-        {"title": "Valid Task"},
-        {"title": ""},
-        {"notitle": True},
-        {"title": "  "},
-    ])
+    mock_resp = _make_mock_urlopen_response(
+        [
+            {"title": "Valid Task"},
+            {"title": ""},
+            {"notitle": True},
+            {"title": "  "},
+        ]
+    )
 
     # Return same response for all 4 status calls, but we only care about the set
     mock_urlopen.return_value = mock_resp
@@ -454,15 +456,9 @@ def test_run_no_git_repos():
     import _task_fountain as m
 
     with ExitStack() as stack:
-        mock_isdir = stack.enter_context(
-            patch("_task_fountain.os.path.isdir", return_value=False)
-        )
-        stack.enter_context(
-            patch.object(m, "fetch_existing_titles", return_value=set())
-        )
-        mock_post = stack.enter_context(
-            patch.object(m, "api_post")
-        )
+        mock_isdir = stack.enter_context(patch("_task_fountain.os.path.isdir", return_value=False))
+        stack.enter_context(patch.object(m, "fetch_existing_titles", return_value=set()))
+        mock_post = stack.enter_context(patch.object(m, "api_post"))
 
         # Keep SCANNERS as-is (includes scan_board_health) but all repos
         # get skipped by the isdir check
@@ -479,7 +475,9 @@ def test_run_creates_task_for_scanner_finding(mock_isdir):
     """run() creates a task from a scanner finding and increments count."""
     import _task_fountain as m
 
-    stub_scanner = MagicMock(return_value=[{"title": "New Task", "description": "desc", "priority": 3}])
+    stub_scanner = MagicMock(
+        return_value=[{"title": "New Task", "description": "desc", "priority": 3}]
+    )
 
     with ExitStack() as stack:
         stack.enter_context(patch.object(m, "fetch_existing_titles", return_value=set()))
@@ -505,7 +503,9 @@ def test_run_skips_duplicate_title(mock_isdir):
     stub_scanner = MagicMock(return_value=[{"title": "Existing Task", "description": ""}])
 
     with ExitStack() as stack:
-        stack.enter_context(patch.object(m, "fetch_existing_titles", return_value={"existing task"}))
+        stack.enter_context(
+            patch.object(m, "fetch_existing_titles", return_value={"existing task"})
+        )
         stack.enter_context(patch.object(m, "api_post", return_value={"status": "ok"}))
         stack.enter_context(patch("_task_fountain.SCANNERS", [stub_scanner]))
         stack.enter_context(patch("_task_fountain.HOME", "/home/test"))
@@ -584,8 +584,10 @@ def test_run_with_scan_board_health_integrated(mock_isdir):
 
         # Order: 4 fetch calls, then 1 health check call
         mock_urlopen = stack.enter_context(
-            patch("_task_fountain.urllib.request.urlopen",
-                  side_effect=[empty_resp] * 4 + [health_resp])
+            patch(
+                "_task_fountain.urllib.request.urlopen",
+                side_effect=[empty_resp] * 4 + [health_resp],
+            )
         )
         stack.enter_context(patch.object(m, "api_post", return_value={"status": "ok"}))
         stack.enter_context(patch("_task_fountain.HOME", "/home/test"))
@@ -597,7 +599,10 @@ def test_run_with_scan_board_health_integrated(mock_isdir):
     assert mock_urlopen.call_count == 5
 
 
-@patch("_task_fountain.os.path.isdir", side_effect=[True, False, False, False, False, False, False, False, False])
+@patch(
+    "_task_fountain.os.path.isdir",
+    side_effect=[True, False, False, False, False, False, False, False, False],
+)
 def test_run_first_repo_only(mock_isdir):
     """run() processes only repos where .git exists (first repo here)."""
     import _task_fountain as m
@@ -632,7 +637,9 @@ def test_main_block_structure():
     assert hasattr(m, "run")
     # Verify run() returns an int (0 here because no repos have .git dirs
     # in the test environment)
-    with patch.object(m, "fetch_existing_titles", return_value=set()), \
-         patch.object(m, "api_post", return_value=None):
+    with (
+        patch.object(m, "fetch_existing_titles", return_value=set()),
+        patch.object(m, "api_post", return_value=None),
+    ):
         n = m.run()
     assert isinstance(n, int)

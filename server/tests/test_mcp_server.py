@@ -278,6 +278,7 @@ class TestGetTask:
         with (
             patch("mcp_server.api_get") as mock_get,
         ):
+
             def side_effect(path, *args, **kwargs):
                 if "logs" in path:
                     return [{"action": "created", "agent_id": "hermes"}]
@@ -304,6 +305,7 @@ class TestGetTask:
         with (
             patch("mcp_server.api_get") as mock_get,
         ):
+
             def side_effect(path, *args, **kwargs):
                 if "logs" in path:
                     return []
@@ -324,6 +326,7 @@ class TestGetTask:
         with (
             patch("mcp_server.api_get") as mock_get,
         ):
+
             def side_effect(path, *args, **kwargs):
                 if "logs" in path:
                     return {"error": "not found"}
@@ -393,10 +396,10 @@ class TestUpdateTask:
     @pytest.mark.asyncio
     async def test_update_with_branch(self):
         """Cover lines 188, 190, 192: branch field handling."""
-        with patch("mcp_server.api_patch", return_value={"status": "updated", "branch": "feature/test"}):
-            result = json.loads(
-                await kanban_update_task(task_id="task_1", branch="feature/test")
-            )
+        with patch(
+            "mcp_server.api_patch", return_value={"status": "updated", "branch": "feature/test"}
+        ):
+            result = json.loads(await kanban_update_task(task_id="task_1", branch="feature/test"))
             assert result["status"] == "updated"
             assert result["branch"] == "feature/test"
 
@@ -452,7 +455,9 @@ class TestBlockWithReason:
     @pytest.mark.asyncio
     async def test_block_with_reason(self):
         """Cover line 215: kanban_block_with_reason."""
-        with patch("mcp_server.api_post", return_value={"status": "blocked", "fail_reason": "API limit"}):
+        with patch(
+            "mcp_server.api_post", return_value={"status": "blocked", "fail_reason": "API limit"}
+        ):
             result = json.loads(
                 await kanban_block_with_reason(task_id="task_1", reason="API limit")
             )
@@ -495,10 +500,10 @@ class TestSetDependency:
     @pytest.mark.asyncio
     async def test_set_dependency(self):
         """Cover line 237: kanban_set_dependency."""
-        with patch("mcp_server.api_post", return_value={"status": "updated", "depends_on": "task_0"}):
-            result = json.loads(
-                await kanban_set_dependency(task_id="task_1", depends_on="task_0")
-            )
+        with patch(
+            "mcp_server.api_post", return_value={"status": "updated", "depends_on": "task_0"}
+        ):
+            result = json.loads(await kanban_set_dependency(task_id="task_1", depends_on="task_0"))
             assert result["status"] == "updated"
             assert result["depends_on"] == "task_0"
 
@@ -506,9 +511,7 @@ class TestSetDependency:
     async def test_clear_dependency(self):
         """Cover line 237 with empty depends_on."""
         with patch("mcp_server.api_post", return_value={"status": "updated", "depends_on": ""}):
-            result = json.loads(
-                await kanban_set_dependency(task_id="task_1", depends_on="")
-            )
+            result = json.loads(await kanban_set_dependency(task_id="task_1", depends_on=""))
             assert result["status"] == "updated"
             assert result["depends_on"] == ""
 
@@ -518,9 +521,7 @@ class TestSetSkills:
     async def test_set_skills(self):
         """Cover line 242: kanban_set_skills."""
         with patch("mcp_server.api_post", return_value={"status": "updated"}):
-            result = json.loads(
-                await kanban_set_skills(task_id="task_1", skills="python,fastapi")
-            )
+            result = json.loads(await kanban_set_skills(task_id="task_1", skills="python,fastapi"))
             assert result["status"] == "updated"
 
 
@@ -570,7 +571,9 @@ class TestRegisterAgent:
     @pytest.mark.asyncio
     async def test_register_agent(self):
         """Cover line 271: kanban_register_agent."""
-        with patch("mcp_server.api_post", return_value={"status": "registered", "agent_id": "my-agent"}):
+        with patch(
+            "mcp_server.api_post", return_value={"status": "registered", "agent_id": "my-agent"}
+        ):
             result = json.loads(
                 await kanban_register_agent(
                     agent_id="my-agent",
@@ -586,9 +589,7 @@ class TestRegisterAgent:
     async def test_register_agent_minimal(self):
         """Cover line 271: minimal registration."""
         with patch("mcp_server.api_post", return_value={"status": "registered"}):
-            result = json.loads(
-                await kanban_register_agent(agent_id="my-agent")
-            )
+            result = json.loads(await kanban_register_agent(agent_id="my-agent"))
             assert result["status"] == "registered"
 
 
@@ -598,7 +599,9 @@ class TestHeartbeat:
         """Cover line 290: kanban_heartbeat."""
         with patch("mcp_server.api_post", return_value={"status": "online"}):
             result = json.loads(
-                await kanban_heartbeat(agent_id="my-agent", status="online", current_task_id="task_1")
+                await kanban_heartbeat(
+                    agent_id="my-agent", status="online", current_task_id="task_1"
+                )
             )
             assert result["status"] == "online"
 
@@ -698,9 +701,7 @@ class TestUpdateProject:
     async def test_update_project_name_only(self):
         """Cover lines 359-369: name only."""
         with patch("mcp_server.api_patch", return_value={"status": "updated"}):
-            result = json.loads(
-                await kanban_update_project(project_id="proj_1", name="New Name")
-            )
+            result = json.loads(await kanban_update_project(project_id="proj_1", name="New Name"))
             assert result["status"] == "updated"
 
     @pytest.mark.asyncio
@@ -716,18 +717,14 @@ class TestUpdateProject:
     async def test_update_project_color_only(self):
         """Cover lines 359-369: color only."""
         with patch("mcp_server.api_patch", return_value={"status": "updated"}):
-            result = json.loads(
-                await kanban_update_project(project_id="proj_1", color="#0000ff")
-            )
+            result = json.loads(await kanban_update_project(project_id="proj_1", color="#0000ff"))
             assert result["status"] == "updated"
 
     @pytest.mark.asyncio
     async def test_update_project_defaults(self):
         """Cover lines 359-369: defaults (priority=3, active=True)."""
         with patch("mcp_server.api_patch", return_value={"status": "updated"}):
-            result = json.loads(
-                await kanban_update_project(project_id="proj_1")
-            )
+            result = json.loads(await kanban_update_project(project_id="proj_1"))
             assert result["status"] == "updated"
 
 
@@ -762,7 +759,9 @@ class TestAddLog:
         """Cover line 389: kanban_add_log."""
         with patch("mcp_server.api_post", return_value={"status": "logged"}):
             result = json.loads(
-                await kanban_add_log(task_id="task_1", action="started", agent_id="hermes", notes="Working")
+                await kanban_add_log(
+                    task_id="task_1", action="started", agent_id="hermes", notes="Working"
+                )
             )
             assert result["status"] == "logged"
 
@@ -770,9 +769,7 @@ class TestAddLog:
     async def test_add_log_defaults(self):
         """Cover line 389: kanban_add_log with defaults."""
         with patch("mcp_server.api_post", return_value={"status": "logged"}):
-            result = json.loads(
-                await kanban_add_log(task_id="task_1", action="completed")
-            )
+            result = json.loads(await kanban_add_log(task_id="task_1", action="completed"))
             assert result["status"] == "logged"
 
 
@@ -780,7 +777,9 @@ class TestGetLogs:
     @pytest.mark.asyncio
     async def test_get_logs(self):
         """Cover lines 404-405: kanban_get_logs."""
-        with patch("mcp_server.api_get", return_value=[{"action": "created"}, {"action": "claimed"}]):
+        with patch(
+            "mcp_server.api_get", return_value=[{"action": "created"}, {"action": "claimed"}]
+        ):
             result = json.loads(await kanban_get_logs(task_id="task_1"))
             assert result["count"] == 2
             assert len(result["logs"]) == 2
@@ -810,7 +809,9 @@ class TestIssueCreate:
     @pytest.mark.asyncio
     async def test_issue_create(self):
         """Cover line 432: kanban_issue_create."""
-        with patch("mcp_server.api_post", return_value={"status": "created", "issue_url": "http://..."}):
+        with patch(
+            "mcp_server.api_post", return_value={"status": "created", "issue_url": "http://..."}
+        ):
             result = json.loads(
                 await kanban_issue_create(
                     task_id="task_1", repo="my-repo", labels="bug", assignee="hermes"
@@ -866,7 +867,9 @@ class TestAddComment:
         """Cover line 464: kanban_add_comment."""
         with patch("mcp_server.api_post", return_value={"status": "created"}):
             result = json.loads(
-                await kanban_add_comment(task_id="task_1", body="This is a comment", author="hermes")
+                await kanban_add_comment(
+                    task_id="task_1", body="This is a comment", author="hermes"
+                )
             )
             assert result["status"] == "created"
 
@@ -874,9 +877,7 @@ class TestAddComment:
     async def test_add_comment_default_author(self):
         """Cover line 464: kanban_add_comment with default author."""
         with patch("mcp_server.api_post", return_value={"status": "created"}):
-            result = json.loads(
-                await kanban_add_comment(task_id="task_1", body="Comment text")
-            )
+            result = json.loads(await kanban_add_comment(task_id="task_1", body="Comment text"))
             assert result["status"] == "created"
 
 
@@ -884,7 +885,9 @@ class TestListComments:
     @pytest.mark.asyncio
     async def test_list_comments(self):
         """Cover lines 477-478: kanban_list_comments."""
-        with patch("mcp_server.api_get", return_value=[{"body": "comment 1"}, {"body": "comment 2"}]):
+        with patch(
+            "mcp_server.api_get", return_value=[{"body": "comment 1"}, {"body": "comment 2"}]
+        ):
             result = json.loads(await kanban_list_comments(task_id="task_1"))
             assert result["count"] == 2
             assert len(result["comments"]) == 2
