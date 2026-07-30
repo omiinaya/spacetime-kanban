@@ -93,6 +93,11 @@ def mock_all():
             for name in names:
                 stack.enter_context(patch(f"{mod}.{name}", mock_map[name]))
 
+        # Patch shared module for dynamic imports (e.g. routes/health.py which
+        # does `from shared import _sql` inside the function body at call time)
+        for name in ("_sql",):
+            stack.enter_context(patch(f"shared.{name}", mock_map[name]))
+
         yield {"sql": sql, "param": param, "call": call, "notify": notify}
 
 
@@ -3274,3 +3279,41 @@ async def test_add_task_log(client, mock_all):
     assert data["status"] == "logged"
     log_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "add_log"]
     assert len(log_calls) == 1
+
+
+# ── Health: uptime with scheduler loaded ──
+
+@pytest.mark.asyncio
+async def test_health_uptime_with_scheduler(client):
+    """Health endpoint should include uptime when scheduler has start_time."""
+    import time as _time
+    import scheduler as sched_mod
+    orig = sched_mod.scheduler_start_time
+    sched_mod.scheduler_start_time = _time.time() - 7200
+    try:
+        resp = await client.get("/api/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["uptime_seconds"] is not None
+        assert data["uptime_seconds"] >= 7199.0
+    finally:
+        sched_mod.scheduler_start_time = orig
+
+
+# ── Health: project endpoints ──
+
+@pytest.mark.asyncio
+async def test_health_projects_endpoint(client):
+    """GET /api/health/projects should succeed."""
+    with patch("scanners.discover_repos", return_value=["repo1"]),          patch("scanners.health.compute_all_projects", return_value={"projects": []}):
+        resp = await client.get("/api/health/projects")
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_health_project_detail(client):
+    """GET /api/health/projects/{name} should succeed."""
+    with patch("scanners.health.compute_project_health", return_value={}):
+        resp = await client.get("/api/health/projects/repo1")
+    assert resp.status_code == 200
+
