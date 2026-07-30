@@ -12,10 +12,10 @@ from server.webhooks import (
     _format_payload,
     _format_slack,
     _format_telegram,
+    _parse_rows,
     _sanitize,
     _sql_param,
     _stdb_sql,
-    _parse_rows,
     add_webhook,
     get_webhook,
     list_webhook_deliveries,
@@ -631,6 +631,13 @@ class TestFormatterEdgeCases:
         task = {"id": "t5", "title": "Done task", "repo": "r", "assigned_to": "bot"}
         payload = _format_telegram("completed", task, extra="Finished")
         assert "Agent" not in payload["text"]
+
+    def test_format_telegram_with_agent_non_blocked(self):
+        """Telegram includes agent field for non-blocked/completed actions."""
+        task = {"id": "t6", "title": "Working", "repo": "r", "assigned_to": "worker-2"}
+        payload = _format_telegram("claimed", task)
+        assert "Agent" in payload["text"]
+        assert "worker-2" in payload["text"]
 
 
 # ════════════════════════════════════════════════════════════════════════

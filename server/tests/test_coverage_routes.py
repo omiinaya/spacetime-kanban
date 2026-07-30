@@ -1,6 +1,6 @@
 """Targeted coverage tests for analytics, github, and health routes."""
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -249,7 +249,7 @@ async def test_analytics_calendar_default(client, mock_all):
 @pytest.mark.asyncio
 async def test_analytics_calendar_with_data(client, mock_all):
     """Calendar returns tasks in the specified month."""
-    due = int(datetime(2026, 6, 15, tzinfo=timezone.utc).timestamp() * 1000)
+    due = int(datetime(2026, 6, 15, tzinfo=UTC).timestamp() * 1000)
     mock_all["sql"].return_value = [
         _make_task("t1", "June task", status="available", due_by=due),
     ]
@@ -427,6 +427,7 @@ async def test_webhook_test_404(client, mock_all):
 async def test_health_uptime_with_scheduler(client, mock_all):
     """Health endpoint shows uptime when scheduler has start_time."""
     import time as _time
+
     import scheduler as sched_mod
     orig = sched_mod.scheduler_start_time
     sched_mod.scheduler_start_time = _time.time() - 7200
@@ -836,4 +837,202 @@ async def test_tasks_bulk_retry(client, mock_all):
             headers={"X-API-Key": "test-api-key-123"},
         )
     assert resp.status_code == 200
+
+
+# ── Dispatcher: state parsing errors and call failures ──
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_state_json_decode_error(client, mock_all):
+    """Dispatcher handles non-JSON value in dispatcher_state."""
+    mock_all["sql"].return_value = [
+        {"key": "test_key", "value": "not-json{"},
+    ]
+    resp = await client.get("/api/dispatcher/state")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("test_key") == "not-json{"
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_state_call_failure(client, mock_all):
+    """Dispatcher returns 502 when set_dispatcher_state reducer fails."""
+    mock_all["call"].side_effect = Exception("Reducer crashed")
+    resp = await client.post(
+        "/api/dispatcher/state",
+        json={"key": "test_key", "value": "test_val"},
+    )
+    assert resp.status_code == 502
+    assert "Reducer crashed" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_state_delete_not_found(client, mock_all):
+    """Dispatcher returns 404 when deleting non-existent key."""
+    mock_all["call"].side_effect = Exception("Key not found: ghost")
+    resp = await client.delete("/api/dispatcher/state/ghost")
+    assert resp.status_code == 404
+
+
+# ── Labels: fallback responses after create/update ──
+
+
+@pytest.mark.asyncio
+async def test_create_label_fallback(client, mock_all):
+    """create_label returns fallback when label not found after insert."""
+    mock_all["param"].return_value = []  # SELECT after create returns nothing
+    resp = await client.post("/api/labels", json={
+        "id": "new_label", "name": "new", "color": "#ff0", "description": "",
+    })
+    assert resp.status_code == 201
+    assert resp.json() == {"status": "created"}
+
+
+@pytest.mark.asyncio
+async def test_update_label_fallback(client, mock_all):
+    """update_label returns fallback when label not found after update."""
+    mock_all["param"].return_value = []  # SELECT after update returns nothing
+    resp = await client.patch("/api/labels/label_42", json={
+        "name": "renamed", "color": "#00f", "description": "",
+    })
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "updated"}
+
+
+# ── Ops: roadmap import dedup and migration alias ──
+
+
+@pytest.mark.asyncio
+async def test_roadmap_import_dedup_existing(client, mock_all):
+    """Roadmap import skips tasks that already exist (same title+repo, not done)."""
+    mock_all["param"].return_value = [{"id": "existing_1", "status": "available"}]
+    resp = await client.post("/api/roadmap/import", json={
+        "content": "- [ ] Existing title\n",
+        "repo": "test-repo",
+        "created_by": "test",
+    })
+    assert resp.status_code == 200
+    mock_all["call"].assert_not_called()
+    data = resp.json()
+    assert data["status"] == "imported"
+    assert data["task_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_schema_migration_alias(client, mock_all):
+    """POST /api/schema-migrations alias returns 201."""
+    resp = await client.post("/api/schema-migrations", json={
+        "version": "v2", "description": "Test migration",
+        "applied_by": "tester", "checksum": "abc123",
+    })
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "recorded"
+    assert data["version"] == "v2"
+
+
+# ── Projects: suggest_by_project fallback ──
+
+
+@pytest.mark.asyncio
+async def test_suggest_by_project_reducer_fail_fallback(client, mock_all):
+    """suggest_by_project falls back to API computation when reducer fails."""
+    mock_all["call"].side_effect = HTTPException(502, "Reducer failed")
+    call_count = [0]
+
+    async def sql_side(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return []  # tasks
+        return [{"id": "proj_1", "priority": 1, "active": True}]
+
+    mock_all["sql"].side_effect = sql_side
+    resp = await client.get("/api/suggest-by-project?limit=5")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+
+
+# ── Main: 404 catch-all (line 223) ──
+
+
+@pytest.mark.asyncio
+async def test_main_404_catch_all(client, mock_all):
+    """GET on non-existent API path returns 404."""
+    resp = await client.get("/api/nonexistent/route")
+    assert resp.status_code == 404
+    data = resp.json()
+    assert data["detail"] == "Not found"
+
+
+# ── Analytics: old-task throughput filtering (line 130) ──
+
+
+@pytest.mark.asyncio
+async def test_analytics_throughput_old_done_task_filtered(client, mock_all):
+    """Throughput filters out tasks older than requested days."""
+    old_done = _make_task("old_done", status="done", updated_at=1000)
+    mock_all["sql"].return_value = [old_done]
+    resp = await client.get("/api/analytics/throughput?days=7")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert all(d["completed"] == 0 for d in data)
+
+
+# ── Analytics: agents endpoint with blocked actions (lines 304-305) ──
+
+
+@pytest.mark.asyncio
+async def test_analytics_agents_blocked_counted(client, mock_all):
+    """Agents endpoint counts blocked logs separately."""
+    calls = []
+
+    async def sql_side(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            return [{"id": "agent_1", "status": "online"}]
+        return [
+            {"agent_id": "agent_1", "action": "completed", "task_id": "t1"},
+            {"agent_id": "agent_1", "action": "blocked", "task_id": "t2"},
+        ]
+
+    mock_all["sql"].side_effect = sql_side
+    resp = await client.get("/api/analytics/agents")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["completed"] == 1
+    assert data[0]["blocked"] == 1
+
+
+# ── Logs: multi-action filter pass (lines 35-36) ──
+
+
+@pytest.mark.asyncio
+async def test_logs_multi_action_filter(client, mock_all):
+    """list_logs with multiple comma-separated actions enters pass block."""
+    mock_all["sql"].return_value = [
+        {"id": "l1", "task_id": "t1", "action": "created", "agent_id": None, "notes": None, "timestamp": 1000},
+    ]
+    resp = await client.get("/api/logs", params={"action": "created,claimed"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+
+
+# ── Projects: suggest by project exception path (lines 115-117) ──
+
+
+@pytest.mark.asyncio
+async def test_suggest_by_project_exception(client, mock_all):
+    """suggest_by_project handles reducer exception via fallback."""
+    mock_all["call"].side_effect = HTTPException(502, "Reducer failed")
+    mock_all["sql"].side_effect = [
+        [],  # tasks for fallback query
+        [{"id": "proj_1", "priority": 1, "active": True}],  # projects
+    ]
+    resp = await client.get("/api/suggest-by-project?limit=5")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
 

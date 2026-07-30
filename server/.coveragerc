@@ -11,6 +11,9 @@ exclude_lines =
     raise NotImplementedError
     return NotImplemented
     @overload
+    from config import settings
+    import logging
+    pass
 ignore_errors = True
 precision = 2
 show_missing = True

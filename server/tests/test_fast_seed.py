@@ -3,9 +3,7 @@ import json
 import subprocess
 import urllib.error
 from contextlib import ExitStack
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from _fast_seed import (
     api_get,
@@ -20,7 +18,6 @@ from _fast_seed import (
     is_dup,
     main,
 )
-
 
 # ── api_get ──────────────────────────────────────────────────────────
 
@@ -396,6 +393,14 @@ class TestFindStaleTodos:
             assert len(findings) == 1
             assert "11" in findings[0]["title"]
 
+    def test_non_numeric_count_skipped(self):
+        """Lines with non-numeric count are skipped gracefully."""
+        with patch("subprocess.run") as m:
+            m.return_value.stdout = "src/main.py:5\nsrc/utils.py:not_a_number\nsrc/config.py:6\n"
+            findings = find_stale_todos("r", "/p")
+            assert len(findings) == 1
+            assert "11" in findings[0]["title"]
+
 
 # ── find_large_files ─────────────────────────────────────────────────
 
@@ -423,6 +428,14 @@ class TestFindLargeFiles:
     def test_exception_returns_empty(self):
         with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 30)):
             assert find_large_files("r", "/p") == []
+
+    def test_skips_lines_with_non_numeric_count(self):
+        """Lines with non-numeric count in wc output are skipped gracefully."""
+        with patch("subprocess.run") as m:
+            m.return_value.stdout = "abc /p/file.py\n 300 /p/huge.py\n  total\n"
+            findings = find_large_files("r", "/p")
+            assert len(findings) == 1
+            assert "large" in findings[0]["title"].lower()
 
 
 # ── find_missing_project_files ───────────────────────────────────────

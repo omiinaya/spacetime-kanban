@@ -1,11 +1,12 @@
 """Tests for issue_sync module — STDB helpers, mapping API, error handling."""
 
-import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from issue_sync import (
+    GH_API_MAX_RETRIES,
     _call,
     _gh_headers,
     _gh_request,
@@ -27,7 +28,6 @@ from issue_sync import (
     unlink_issue,
     update_issue_status,
 )
-from issue_sync import GH_API_MAX_RETRIES
 
 # ── _sanitize ──────────────────────────────────────────────────────────
 
@@ -411,6 +411,28 @@ class TestGhRequest:
         result = await _gh_request("GET", "https://api.github.com/test", "token")
         assert result == {"ok": True}
         assert mock_client.request.call_count == 2
+
+    @pytest.mark.asyncio
+    @patch("issue_sync.httpx.AsyncClient")
+    async def test_request_with_body_sets_content_type(self, mock_client_cls):
+        """_gh_request with body sets Content-Type header."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = '{"id": 1}'
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.request = AsyncMock(return_value=mock_resp)
+        mock_client_cls.return_value = mock_client
+
+        result = await _gh_request(
+            "POST", "https://api.github.com/test/repos/issues",
+            "token", body={"title": "test"},
+        )
+        assert result == {"id": 1}
+        call_kwargs = mock_client.request.call_args[1]
+        assert call_kwargs["json"] == {"title": "test"}
+        assert "Content-Type" in call_kwargs["headers"]
+        assert call_kwargs["headers"]["Content-Type"] == "application/json"
 
 
 class TestSearchIssues:
