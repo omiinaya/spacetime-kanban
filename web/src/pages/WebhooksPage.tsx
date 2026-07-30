@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type Webhook, type WebhookDelivery } from '../api'
 import {
-  WebhookIcon, Plus, Loader2, AlertCircle, Trash2, Send,
+  Webhook as WebhookIcon, Plus, Loader2, AlertCircle, Trash2, Send,
   CheckCircle2, XCircle, X, Zap, Edit3, History, ChevronDown, ChevronUp
 } from 'lucide-react'
 import { useToast } from '../hooks/useToast'

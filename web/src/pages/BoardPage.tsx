@@ -25,7 +25,7 @@ import { useBoardShortcuts } from '../hooks/useBoardShortcuts'
 import { useColumnReorder } from '../hooks/useColumnReorder'
 
 export default function BoardPage() {
-  const { tasks, connected, loading } = useRealtimeTasks()
+  const { tasks, connected, loading, error } = useRealtimeTasks()
   const [showCreate, setShowCreate] = useState(false)
   const [repoFilter, setRepoFilter] = useState<string>('')
   const [mobileStatusTab, setMobileStatusTab] = useState<TaskStatus>('available')
@@ -411,6 +411,14 @@ export default function BoardPage() {
               <span className="truncate text-[var(--color-foreground)]">{t.text}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Connection error banner */}
+      {error && !loading && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 

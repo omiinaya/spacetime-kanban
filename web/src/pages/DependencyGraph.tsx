@@ -46,10 +46,10 @@ function layoutGraph(tasks: Task[]) {
 
   const sorted: string[] = []
   while (queue.length) {
-    const id = queue.shift()!
+    const id = queue.shift() as string
     sorted.push(id)
     for (const dep of outgoing.get(id) || []) {
-      const d = inDeg.get(dep)! - 1
+      const d = (inDeg.get(dep) ?? 0) - 1
       inDeg.set(dep, d)
       if (d === 0) queue.push(dep)
     }
@@ -72,7 +72,7 @@ function layoutGraph(tasks: Task[]) {
   const layers = new Map<number, string[]>()
   for (const [id, l] of layer) {
     if (!layers.has(l)) layers.set(l, [])
-    layers.get(l)!.push(id)
+    layers.get(l)?.push(id)
   }
 
   // Position nodes
@@ -149,8 +149,7 @@ export default function DependencyGraph({
       <div className="flex-1 overflow-hidden" onClick={e => e.stopPropagation()}>
         <svg
           viewBox={vb.viewBox}
-          className="w-full h-full"
-          style={{ minHeight: 400 }}
+          className="w-full h-full min-h-[400px]"
           preserveAspectRatio="xMidYMid meet"
         >
           {/* Edges */}
@@ -179,8 +178,8 @@ export default function DependencyGraph({
             return (
               <g
                 key={id}
+                className="cursor-pointer"
                 onClick={() => onSelectTask(id)}
-                style={{ cursor: 'pointer' }}
               >
                 <rect
                   x={pos.x - NODE_W / 2}
