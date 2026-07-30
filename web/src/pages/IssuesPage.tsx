@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Github, ExternalLink, RefreshCw, Search } from 'lucide-react'
+import { Github, ExternalLink, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { api, type IssueLink } from '../api'
 import { ListViewSkeleton } from '../components/Skeleton'
+import { useConfirm } from '../components/ConfirmDialog'
 
 export default function IssuesPage() {
+  const { confirm } = useConfirm()
   const [links, setLinks] = useState<IssueLink[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -129,6 +131,15 @@ export default function IssuesPage() {
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+                <button onClick={async () => {
+                  const ok = await confirm({ title: 'Unlink Issue', message: 'Unlink this issue from the task?', confirmLabel: 'Unlink', variant: 'danger' })
+                  if (!ok) return
+                  try {
+                    await api.issues.unlink(link.kanban_task_id)
+                    fetchLinks()
+                  } catch(e) { console.error(e) }
+                }} aria-label="Unlink issue" className="p-1 rounded hover:bg-white/10 text-[var(--color-muted)] hover:text-red-400"
+                ><Trash2 className="w-3 h-3" /></button>
               </div>
             </div>
           ))}

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { api, type ApiKeyItem, type ApiKeyItemFull } from '../api'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../components/ConfirmDialog'
 import { Key, Loader2, AlertCircle, Plus, Trash2, Copy, Check, X } from 'lucide-react'
 import { ListViewSkeleton } from '../components/Skeleton'
 
 export default function ApiKeysPage() {
   const { addToast } = useToast()
+  const { confirm } = useConfirm()
   const [keys, setKeys] = useState<ApiKeyItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -46,7 +48,8 @@ export default function ApiKeysPage() {
   }
 
   const handleRevoke = async (keyId: string) => {
-    if (!confirm('Revoke this API key? This cannot be undone.')) return
+    const ok = await confirm({ title: 'Revoke API Key', message: 'Revoke this API key? This cannot be undone.', confirmLabel: 'Revoke', variant: 'danger' })
+    if (!ok) return
     try {
       await api.apiKeys.revoke(keyId)
       loadKeys()
@@ -171,14 +174,14 @@ export default function ApiKeysPage() {
             <div key={key.id}
               className={`rounded-lg border p-4 flex items-start gap-3 ${
                 key.revoked
-                  ? 'border-red-500/20 bg-red-500/5 opacity-60'
+                  ? 'border-red-500/20 bg-red-500/5'
                   : 'border-[var(--color-border)] bg-[var(--color-card)]'
               }`}
             >
               <Key className={`w-4 h-4 mt-0.5 ${key.revoked ? 'text-red-400' : 'text-[var(--color-primary)]'}`} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium">{key.name}</span>
+                  <span className={`text-sm font-medium ${key.revoked ? 'line-through text-red-400/60' : ''}`}>{key.name}</span>
                   {key.revoked && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Revoked</span>
                   )}

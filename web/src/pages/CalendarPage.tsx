@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { api, type Task } from '../api'
-import { CalendarDays, AlertCircle, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
+import { CalendarDays, AlertCircle, ChevronLeft, ChevronRight, Clock, X } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS } from '../components/constants'
 import { CalendarSkeleton } from '../components/Skeleton'
 
@@ -31,6 +31,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [showAllDay, setShowAllDay] = useState<number | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -138,8 +139,17 @@ export default function CalendarPage() {
                     cell.day === 0 ? 'bg-white/[0.02]' : 'hover:bg-white/[0.04] cursor-pointer'
                   } ${isToday(cell.day) ? 'bg-blue-500/5' : ''}`}
                   onClick={() => {
-                    if (cell.day > 0 && cell.tasks.length > 0) {
-                      setSelectedTask(cell.tasks[0])
+                    if (cell.day > 0) {
+                      if (cell.tasks.length > 0) {
+                        if (showAllDay === cell.day) {
+                          setShowAllDay(null)
+                        } else {
+                          setShowAllDay(cell.day)
+                          setSelectedTask(null)
+                        }
+                      } else {
+                        setShowAllDay(null)
+                      }
                     }
                   }}
                 >
@@ -151,7 +161,7 @@ export default function CalendarPage() {
                         {cell.day}
                       </span>
                       <div className="space-y-0.5 mt-0.5">
-                        {cell.tasks.slice(0, 3).map(t => (
+                        {(showAllDay === cell.day ? cell.tasks : cell.tasks.slice(0, 3)).map(t => (
                           <div key={t.id}
                             className="text-[8px] sm:text-[9px] px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80"
                             style={{
@@ -164,9 +174,16 @@ export default function CalendarPage() {
                             {t.title}
                           </div>
                         ))}
-                        {cell.tasks.length > 3 && (
+                        {showAllDay !== cell.day && cell.tasks.length > 3 && (
                           <div className="text-[8px] text-[var(--color-muted)] pl-1">
                             +{cell.tasks.length - 3} more
+                          </div>
+                        )}
+                        {showAllDay === cell.day && cell.tasks.length > 3 && (
+                          <div className="text-[8px] text-[var(--color-muted)] pl-1 cursor-pointer hover:text-[var(--color-foreground)]"
+                            onClick={(e) => { e.stopPropagation(); setShowAllDay(null) }}
+                          >
+                            Show less
                           </div>
                         )}
                       </div>
@@ -214,7 +231,7 @@ export default function CalendarPage() {
                     )}
                   </div>
                   <button onClick={() => setSelectedTask(null)} aria-label="Close dialog" className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
-                    <span aria-hidden="true">✕</span>
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
                 <h3 className="text-sm font-semibold mb-2">{selectedTask.title}</h3>

@@ -5,6 +5,7 @@ import {
   CheckCircle2, XCircle, X, Zap, Edit3, History, ChevronDown, ChevronUp
 } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../components/ConfirmDialog'
 import { PageSkeleton } from '../components/Skeleton'
 
 const WEBHOOK_TYPES = ['discord', 'slack', 'telegram', 'generic']
@@ -20,6 +21,7 @@ const EVENT_COLORS: Record<string, string> = {
 
 export default function WebhooksPage() {
   const { addToast } = useToast()
+  const { confirm } = useConfirm()
   const [webhooks, setWebhooks] = useState<Webhook[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -70,7 +72,8 @@ export default function WebhooksPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Remove this webhook?')) return
+    const ok = await confirm({ title: 'Remove Webhook', message: 'Remove this webhook?', confirmLabel: 'Remove', variant: 'danger' })
+    if (!ok) return
     try {
       await api.webhooks.delete(id)
       setTestResults(prev => { const r = { ...prev }; delete r[id]; return r })
@@ -169,6 +172,7 @@ export default function WebhooksPage() {
             <div className="sm:col-span-2 space-y-1.5">
               <label className="text-xs text-[var(--color-muted)]">Webhook URL</label>
               <input
+                type="url"
                 value={createUrl}
                 onChange={e => setCreateUrl(e.target.value)}
                 placeholder="https://discord.com/api/webhooks/..."

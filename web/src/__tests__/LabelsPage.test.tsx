@@ -23,6 +23,13 @@ vi.mock('../hooks/useToast', () => ({
   useToast: () => ({ addToast: mockAddToast }),
 }))
 
+// Mock ConfirmDialog — useConfirm resolves to true by default
+const mockConfirm = vi.hoisted(() => vi.fn().mockResolvedValue(true))
+vi.mock('../components/ConfirmDialog', () => ({
+  useConfirm: () => ({ confirm: mockConfirm }),
+  ConfirmProvider: ({ children }: any) => <>{children}</>,
+}))
+
 vi.mock('../components/Skeleton', () => ({
   CardGridSkeleton: () => <div data-testid="card-grid-skeleton">Loading...</div>,
 }))
@@ -185,25 +192,22 @@ describe('LabelsPage', () => {
 
   it('deletes label on Delete click with confirmation', async () => {
     mockList.mockResolvedValue([makeLabel()])
-    vi.stubGlobal('confirm', vi.fn(() => true))
     render(<MemoryRouter><LabelsPage /></MemoryRouter>)
     await waitFor(() => expect(screen.getByText('bug')).toBeDefined())
     fireEvent.click(screen.getByText('Delete'))
-    expect(confirm).toHaveBeenCalled()
     await waitFor(() => {
       expect(mockDelete).toHaveBeenCalledWith('label-1')
     })
-    vi.unstubAllGlobals()
   })
 
   it('does not delete label when confirmation cancelled', async () => {
+    mockConfirm.mockResolvedValueOnce(false)
     mockList.mockResolvedValue([makeLabel()])
-    vi.stubGlobal('confirm', vi.fn(() => false))
     render(<MemoryRouter><LabelsPage /></MemoryRouter>)
     await waitFor(() => expect(screen.getByText('bug')).toBeDefined())
     fireEvent.click(screen.getByText('Delete'))
+    await new Promise(r => setTimeout(r, 50))
     expect(mockDelete).not.toHaveBeenCalled()
-    vi.unstubAllGlobals()
   })
 
   it('handles create failure with toast', async () => {

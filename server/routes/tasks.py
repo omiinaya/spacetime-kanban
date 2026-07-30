@@ -911,6 +911,29 @@ async def get_task_labels(task_id: str):
     ]
 
 
+@router.get("/api/tasks/labels/assignments")
+async def get_all_task_label_assignments():
+    """Get all task-label assignments as a dict of task_id -> labels."""
+    rows = await _sql(
+        "SELECT a.task_id, l.id, l.name, l.color, l.description, l.created_at "
+        "FROM task_label_assignments a "
+        "INNER JOIN kanban_labels l ON l.id = a.label_id"
+    )
+    result: dict[str, list[dict]] = {}
+    for r in rows:
+        tid = r["task_id"]
+        if tid not in result:
+            result[tid] = []
+        result[tid].append({
+            "id": r["id"],
+            "name": r["name"],
+            "color": r.get("color", "#0ea5e9"),
+            "description": r.get("description", ""),
+            "created_at": r.get("created_at", 0),
+        })
+    return result
+
+
 @router.post("/api/tasks/{task_id}/labels", dependencies=[Depends(verify_auth)])
 async def set_task_labels(task_id: str, body: TaskLabelAssign):
     """Set labels for a task by replacing all current assignments."""

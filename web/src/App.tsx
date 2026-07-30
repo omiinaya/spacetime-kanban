@@ -3,6 +3,7 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { KanbanSquare, Clock, BarChart3, Menu, X, Github, Webhook, Activity, Tag, FolderKanban, LayoutDashboard, CalendarDays, Key, LifeBuoy, Database } from 'lucide-react'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './hooks/useToast'
+import { ConfirmProvider } from './components/ConfirmDialog'
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.1.0'
 
@@ -122,23 +123,25 @@ export default function App() {
           </div>
         }>
           <ToastProvider>
-            <ErrorBoundary>
-              <Routes>
-                <Route path="/" element={<ErrorBoundary><BoardPage /></ErrorBoundary>} />
-                <Route path="/triage" element={<ErrorBoundary><TriagePage /></ErrorBoundary>} />
-                <Route path="/projects" element={<ErrorBoundary><ProjectsPage /></ErrorBoundary>} />
-                <Route path="/labels" element={<ErrorBoundary><LabelsPage /></ErrorBoundary>} />
-                <Route path="/issues" element={<ErrorBoundary><IssuesPage /></ErrorBoundary>} />
-                <Route path="/webhooks" element={<ErrorBoundary><WebhooksPage /></ErrorBoundary>} />
-                <Route path="/agents" element={<ErrorBoundary><AgentHealthPage /></ErrorBoundary>} />
-                <Route path="/logs" element={<ErrorBoundary><LogsPage /></ErrorBoundary>} />
-                <Route path="/analytics" element={<ErrorBoundary><AnalyticsPage /></ErrorBoundary>} />
-                <Route path="/cross-project" element={<ErrorBoundary><CrossProjectPage /></ErrorBoundary>} />
-                <Route path="/calendar" element={<ErrorBoundary><CalendarPage /></ErrorBoundary>} />
-                <Route path="/schema-migrations" element={<ErrorBoundary><SchemaMigrationsPage /></ErrorBoundary>} />
-                <Route path="/api-keys" element={<ErrorBoundary><ApiKeysPage /></ErrorBoundary>} />
-              </Routes>
-            </ErrorBoundary>
+            <ConfirmProvider>
+              <ErrorBoundary>
+                <Routes>
+                  <Route path="/" element={<ErrorBoundary><BoardPage /></ErrorBoundary>} />
+                  <Route path="/triage" element={<ErrorBoundary><TriagePage /></ErrorBoundary>} />
+                  <Route path="/projects" element={<ErrorBoundary><ProjectsPage /></ErrorBoundary>} />
+                  <Route path="/labels" element={<ErrorBoundary><LabelsPage /></ErrorBoundary>} />
+                  <Route path="/issues" element={<ErrorBoundary><IssuesPage /></ErrorBoundary>} />
+                  <Route path="/webhooks" element={<ErrorBoundary><WebhooksPage /></ErrorBoundary>} />
+                  <Route path="/agents" element={<ErrorBoundary><AgentHealthPage /></ErrorBoundary>} />
+                  <Route path="/logs" element={<ErrorBoundary><LogsPage /></ErrorBoundary>} />
+                  <Route path="/analytics" element={<ErrorBoundary><AnalyticsPage /></ErrorBoundary>} />
+                  <Route path="/cross-project" element={<ErrorBoundary><CrossProjectPage /></ErrorBoundary>} />
+                  <Route path="/calendar" element={<ErrorBoundary><CalendarPage /></ErrorBoundary>} />
+                  <Route path="/schema-migrations" element={<ErrorBoundary><SchemaMigrationsPage /></ErrorBoundary>} />
+                  <Route path="/api-keys" element={<ErrorBoundary><ApiKeysPage /></ErrorBoundary>} />
+                </Routes>
+              </ErrorBoundary>
+            </ConfirmProvider>
           </ToastProvider>
         </Suspense>
       </main>

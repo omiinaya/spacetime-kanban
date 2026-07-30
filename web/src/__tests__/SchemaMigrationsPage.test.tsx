@@ -144,7 +144,7 @@ describe('SchemaMigrationsPage', () => {
     fireEvent.change(screen.getByPlaceholderText('v2.1.0'), { target: { value: 'v3.0.0' } })
     fireEvent.click(screen.getByRole('button', { name: /record migration$/i }))
     await waitFor(() => {
-      expect(screen.getByText(/Error: Duplicate version/)).toBeDefined()
+      expect(screen.getByText('Duplicate version')).toBeDefined()
     })
   })
 

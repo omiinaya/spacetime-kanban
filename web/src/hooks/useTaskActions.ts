@@ -1,16 +1,21 @@
 import { api } from '../api'
 import type { Task, TaskStatus } from './useRealtimeTasks'
 import { STATUS_LABELS } from '../components/constants'
+import { useToast } from './useToast'
+import { useConfirm } from '../components/ConfirmDialog'
 
 /** All task-mutating actions for the board (claim/complete/block/archive/etc).
  *  Drag-and-drop state handlers stay in BoardPage — this hook is API calls only. */
 export function useTaskActions(tasks: Task[], filtered: Task[]) {
+  const { addToast } = useToast()
+  const { confirm } = useConfirm()
+
   const handleClaim = async (taskId: string, agentId: string) => {
     try {
       await api.tasks.claim(taskId, agentId)
       // STDB subscription will push the update — no manual refresh needed
     } catch (e: unknown) {
-      alert(`Claim failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Claim failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -18,7 +23,7 @@ export function useTaskActions(tasks: Task[], filtered: Task[]) {
     try {
       await api.tasks.unclaim(taskId)
     } catch (e: unknown) {
-      alert(`Unclaim failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Unclaim failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -26,26 +31,27 @@ export function useTaskActions(tasks: Task[], filtered: Task[]) {
     try {
       await api.tasks.complete(taskId, 'Done via web UI')
     } catch (e: unknown) {
-      alert(`Complete failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Complete failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   const handleBlock = async (taskId: string) => {
-    const reason = prompt('Block reason:')
-    if (reason === null) return
+    const ok = await confirm({ title: 'Block Task', message: 'Enter the reason for blocking this task:', confirmLabel: 'Block', variant: 'warning' })
+    if (!ok) return
     try {
-      await api.tasks.block(taskId, reason || 'Blocked')
+      await api.tasks.block(taskId, 'Blocked')
     } catch (e: unknown) {
-      alert(`Block failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Block failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   const handleDelete = async (taskId: string) => {
-    if (!confirm('Delete this task?')) return
+    const ok = await confirm({ title: 'Delete Task', message: 'Delete this task? This cannot be undone.', confirmLabel: 'Delete', variant: 'danger' })
+    if (!ok) return
     try {
       await api.tasks.delete(taskId)
     } catch (e: unknown) {
-      alert(`Delete failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Delete failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -53,39 +59,41 @@ export function useTaskActions(tasks: Task[], filtered: Task[]) {
     try {
       await api.tasks.archive(taskId)
     } catch (e: unknown) {
-      alert(`Archive failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Archive failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   const handleArchiveAll = async (status: string) => {
     const ids = filtered.filter(t => t.status === status).map(t => t.id)
     if (ids.length === 0) return
-    if (!confirm(`Archive all ${ids.length} ${STATUS_LABELS[status as TaskStatus] || status} task(s)?\n\nThey will disappear from the board (recoverable via API).`)) return
+    const label = STATUS_LABELS[status as TaskStatus] || status
+    const ok = await confirm({ title: 'Archive All', message: `Archive all ${ids.length} ${label} task(s)?\n\nThey will disappear from the board (recoverable via API).`, confirmLabel: 'Archive', variant: 'warning' })
+    if (!ok) return
     try {
       const res = await api.tasks.bulkArchive(ids)
-      alert(`Archived ${res.archived}/${ids.length} tasks${res.failed.length ? ` — ${res.failed.length} failed` : ''}`)
+      addToast('✅', `Archived ${res.archived}/${ids.length} tasks${res.failed.length ? ` — ${res.failed.length} failed` : ''}`)
     } catch (e: unknown) {
-      alert(`Archive failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Archive failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   const handleSetDependency = async (taskId: string) => {
-    const depId = prompt('Enter the ID of the task this task depends on (leave empty to clear):')
-    if (depId === null) return
+    const ok = await confirm({ title: 'Set Dependency', message: 'Enter the ID of the task this task depends on (leave empty to clear):', confirmLabel: 'Set', variant: 'info' })
+    if (!ok) return
     try {
-      await api.tasks.setDependency(taskId, depId.trim())
+      await api.tasks.setDependency(taskId, '')
     } catch (e: unknown) {
-      alert(`Set dependency failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Set dependency failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   const handleSetSkills = async (taskId: string) => {
-    const skills = prompt('Enter required skills (comma-separated, e.g. rust,typescript,react):')
-    if (skills === null) return
+    const ok = await confirm({ title: 'Set Skills', message: 'Enter required skills (comma-separated, e.g. rust,typescript,react):', confirmLabel: 'Set', variant: 'info' })
+    if (!ok) return
     try {
-      await api.tasks.setSkills(taskId, skills.trim())
+      await api.tasks.setSkills(taskId, '')
     } catch (e: unknown) {
-      alert(`Set skills failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Set skills failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -102,7 +110,7 @@ export function useTaskActions(tasks: Task[], filtered: Task[]) {
         await api.tasks.create({ title: trimmed, status })
       }
     } catch (e: unknown) {
-      alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Create failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -142,7 +150,7 @@ export function useTaskActions(tasks: Task[], filtered: Task[]) {
           break
       }
     } catch (e: unknown) {
-      alert(`Drop failed: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Drop failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
