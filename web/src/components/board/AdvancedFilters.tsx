@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import type { KanbanLabel } from '../../api'
 import type { Task } from '../../hooks/useRealtimeTasks'
 import { PRIORITY_LABELS } from '../constants'
@@ -46,7 +47,7 @@ export function AdvancedFilters({
                       : 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--color-muted)]'
                   }`}
                 >
-                  {active ? '✓ ' : ''}{PRIORITY_LABELS[p] || p}
+                  {active ? <Check className="w-3 h-3 inline mr-0.5" /> : ''}{PRIORITY_LABELS[p] || p}
                 </button>
               )
             })}
@@ -68,7 +69,7 @@ export function AdvancedFilters({
                       : 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--color-muted)]'
                   }`}
                 >
-                  {active ? '✓ ' : ''}{a === 'unassigned' ? 'Unassigned' : a}
+                  {active ? <Check className="w-3 h-3 inline mr-0.5" /> : ''}{a === 'unassigned' ? 'Unassigned' : a}
                 </button>
               )
             })}
@@ -93,7 +94,7 @@ export function AdvancedFilters({
                     style={active ? { backgroundColor: lbl.color + '30', borderColor: lbl.color + '60' } : {}}
                   >
                     <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lbl.color }} />
-                    {active ? '✓ ' : ''}{lbl.name}
+                    {active ? <Check className="w-3 h-3 inline mr-0.5" /> : ''}{lbl.name}
                   </button>
                 )
               })}

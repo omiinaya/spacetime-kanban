@@ -1,12 +1,21 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Loader2, AlertCircle, Search, X, ChevronDown, Clock, Activity, Users, Filter } from 'lucide-react'
+import {
+  Loader2, AlertCircle, Search, X, ChevronDown, Clock, Activity, Users, Filter, Check,
+  PlusCircle, User, Undo2, CheckCircle2, Ban, Link2, Wrench, Bot, RefreshCw, ClipboardList,
+} from 'lucide-react'
 import { api, LogEntry, LogStats } from '../api'
 import { ListViewSkeleton } from '../components/Skeleton'
 
-const ACTION_ICONS: Record<string, string> = {
-  created: '🆕', claimed: '👤', unclaimed: '↩️', completed: '✅',
-  blocked: '🚧', dependency_set: '🔗', skills_set: '🛠️',
-  agent_registered: '🤖', agent_reconnected: '🔄',
+const ACTION_ICONS: Record<string, React.ReactNode> = {
+  created: <PlusCircle className="w-3.5 h-3.5" aria-hidden="true" />,
+  claimed: <User className="w-3.5 h-3.5" aria-hidden="true" />,
+  unclaimed: <Undo2 className="w-3.5 h-3.5" aria-hidden="true" />,
+  completed: <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />,
+  blocked: <Ban className="w-3.5 h-3.5" aria-hidden="true" />,
+  dependency_set: <Link2 className="w-3.5 h-3.5" aria-hidden="true" />,
+  skills_set: <Wrench className="w-3.5 h-3.5" aria-hidden="true" />,
+  agent_registered: <Bot className="w-3.5 h-3.5" aria-hidden="true" />,
+  agent_reconnected: <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />,
 }
 
 const ACTION_COLORS: Record<string, string> = {
@@ -189,9 +198,9 @@ export default function LogsPage() {
                         selectedActions.has(a) ? 'text-white' : 'text-[var(--color-muted-foreground)]'
                       }`}
                     >
-                      <span aria-hidden="true" className="text-sm">{ACTION_ICONS[a] || '📋'}</span>
+                      <span aria-hidden="true" className="text-sm">{ACTION_ICONS[a] || <ClipboardList className="w-3.5 h-3.5 inline" />}</span>
                       <span className="capitalize">{a.replace(/_/g, ' ')}</span>
-                      {selectedActions.has(a) && <span className="ml-auto text-[var(--color-primary)]">✓</span>}
+                      {selectedActions.has(a) && <Check className="w-3 h-3 ml-auto text-[var(--color-primary)]" />}
                     </button>
                   ))}
                 </div>
@@ -264,7 +273,7 @@ export default function LogsPage() {
                   isHighlighted ? 'bg-white/[0.04] ring-1 ring-[var(--color-ring)]' : 'hover:bg-white/[0.02]'
                 }`}
               >
-                <span aria-hidden="true" className="text-lg shrink-0 mt-0.5">{ACTION_ICONS[log.action] || '📋'}</span>
+                <span aria-hidden="true" className="text-lg shrink-0 mt-0.5">{ACTION_ICONS[log.action] || <ClipboardList className="w-4 h-4 inline" />}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${actionColor}`}>
@@ -335,7 +344,7 @@ export default function LogsPage() {
                       })
                     }}
                   >
-                    <span aria-hidden="true" className="text-sm">{ACTION_ICONS[action] || '📋'}</span>
+                    <span aria-hidden="true" className="text-sm">{ACTION_ICONS[action] || <ClipboardList className="w-3.5 h-3.5 inline" />}</span>
                     <span className="capitalize">{action.replace(/_/g, ' ')}</span>
                     <span className="font-semibold">{count}</span>
                     <span className="opacity-60">({pct}%)</span>
