@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import type React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -27,7 +28,7 @@ vi.mock('../hooks/useToast', () => ({
 const mockConfirm = vi.hoisted(() => vi.fn().mockResolvedValue(true))
 vi.mock('../components/ConfirmDialog', () => ({
   useConfirm: () => ({ confirm: mockConfirm }),
-  ConfirmProvider: ({ children }: any) => <>{children}</>,
+  ConfirmProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
 vi.mock('../components/Skeleton', () => ({
