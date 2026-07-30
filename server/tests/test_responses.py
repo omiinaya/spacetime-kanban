@@ -51,6 +51,71 @@ class TestRowToTask:
         assert task.assigned_to is None
 
 
+class TestRowToAgent:
+    def test_minimal_agent(self):
+        from server.responses import _row_to_agent
+        row = {"id": "agent_1"}
+        agent = _row_to_agent(row)
+        assert agent.id == "agent_1"
+        assert agent.host == ""
+        assert agent.status == "offline"
+        assert agent.last_heartbeat == 0
+
+    def test_full_agent(self):
+        from server.responses import _row_to_agent
+        row = {
+            "id": "agent_2",
+            "host": "192.0.2.10",
+            "capabilities": "rust,python",
+            "repo_focus": "sample-repo-q",
+            "current_task_id": "task_42",
+            "status": "online",
+            "last_heartbeat": 5000,
+            "first_seen": 1000,
+        }
+        agent = _row_to_agent(row)
+        assert agent.id == "agent_2"
+        assert agent.host == "192.0.2.10"
+        assert agent.capabilities == "rust,python"
+        assert agent.repo_focus == "sample-repo-q"
+        assert agent.status == "online"
+        assert agent.last_heartbeat == 5000
+        assert agent.first_seen == 1000
+
+
+class TestRowToTemplate:
+    def test_minimal_template(self):
+        from server.responses import _row_to_template
+        row = {"id": "tmpl_1", "title": "Template", "description": "Test"}
+        tmpl = _row_to_template(row)
+        assert tmpl.id == "tmpl_1"
+        assert tmpl.title == "Template"
+        assert tmpl.active is True
+        assert tmpl.cron_schedule == ""
+
+    def test_full_template(self):
+        from server.responses import _row_to_template
+        row = {
+            "id": "tmpl_2",
+            "title": "Full",
+            "description": "Full template",
+            "priority": 1,
+            "repo": "test-repo",
+            "roadmap_item": "Phase 2",
+            "required_skills": "python",
+            "cron_schedule": "0 9 * * *",
+            "created_by": "admin",
+            "created_at": 1000,
+            "last_triggered_at": 2000,
+            "active": False,
+        }
+        tmpl = _row_to_template(row)
+        assert tmpl.id == "tmpl_2"
+        assert tmpl.priority == 1
+        assert tmpl.cron_schedule == "0 9 * * *"
+        assert tmpl.active is False
+
+
 class TestRowToLog:
     def test_minimal_log(self):
         from server.responses import _row_to_log

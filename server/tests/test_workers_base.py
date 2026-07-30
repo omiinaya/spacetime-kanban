@@ -323,3 +323,16 @@ class TestRunWorker:
         exit_code = run_worker("task_123", crashing_work, timeout=30)
         assert exit_code == 2
         mock_block.assert_called_once()
+
+    @patch.dict(os.environ, {"KANBAN_LLM_TIMEOUT": "60"}, clear=False)
+    @patch("workers.base.heartbeat_loop")
+    @patch("workers.base.WorkerContext.load_task", return_value=True)
+    @patch("workers.base.WorkerContext.complete", return_value=True)
+    def test_timeout_default_from_env(self, mock_complete, mock_load, mock_hb_loop):
+        """run_worker uses env var default when timeout=0."""
+        def work_fn(ctx):
+            return True, "Done"
+
+        exit_code = run_worker("task_123", work_fn, timeout=0)
+        assert exit_code == 0
+        mock_complete.assert_called_once()
