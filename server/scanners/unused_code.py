@@ -137,7 +137,7 @@ def scan_unused_code(repo_name: str, repo_path: str) -> list[dict]:
                             "skip_verify": True,
                         }
                     )
-        except Exception:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             pass
 
     return findings

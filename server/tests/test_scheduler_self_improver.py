@@ -236,9 +236,6 @@ class TestSelfImproverGitStatus:
         mock_load.return_value = {"run_count": 0}
         mock_restart.return_value = None
 
-        mock_get.side_effect = lambda p: _OK_HEALTH if "/api/health" in p else []
-        mock_get.side_effect = AsyncMock()
-
         async def get_side_effect(path):
             return _OK_HEALTH if "/api/health" in path else []
 
