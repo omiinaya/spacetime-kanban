@@ -4,13 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Improved
-- CHANGELOG.md, LICENSE, .coveragerc added
-- Dockerfile STDB version corrected to v2.6.1
-- Stale planning files removed
-- Scanner tests discovered in test collection
-- CI/CD workflows: branch triggers corrected, removed stale deps, consistent working-directory
-- ROADMAP.md updated: test count 387, Round 8 section
+### Added
+- Python test count: 299→449 (+150 tests across 8 sessions)
+  - 35 scheduler helper tests (API wrappers, worker lifecycle, crash detection)
+  - 27 issue_sync tests (sanitize, parse, SQL generation, link/unlink)
+  - MCP server test fix: rewritten for MCP SDK v2.0.0 (MCPServer + Tool.from_function API)
+  - 8 Worker run CLI routing/parsing tests
+  - 6 Analytics endpoint structure tests
+- Frontend test coverage expanded: 90→188 tests (13 files)
+  - AgentHealthPage: 27 tests (formatDuration, loading, error, empty, stat bar, refresh, navigation)
+  - LogsPage: 18 tests (relativeTime, filters, pagination, stats, event distribution, clear, load more)
+  - WebhooksPage: 13 tests (CRUD, delete confirmation, create form, deliveries)
+  - LabelsPage: 16 tests (CRUD, edit, delete with confirm, create form, toast errors)
+  - SchemaMigrationsPage: 12 tests (CRUD, form validation, success/error messages, table rendering)
+  - IssuesPage: 12 tests (loading, rendering, filtering by repo/issue number, error/empty states)
+
+### Fixed
+- Docker entrypoint: STDB v2.6.1 CLI flags (`-b` instead of `-f`), health endpoint `/v1/health`
+- Bare `except: pass` replaced with proper error logging in all route handlers
+- CI/CD branch triggers: `develop`→`main` in all workflow files
+- Duplicate health endpoints removal, dead section header cleanup
+- MCP server: rewritten for SDK v2.0.0 (`@app.list_tools()` removed)
+- Scanner `test_gaps.py` renamed to `gaps.py` to prevent pytest misidentification
+
+### Changed
+- ROADMAP.md: updated test count to 449+, expanded Round 8 section
+- CHANGELOG.md: structured format, added Round 8 entries
+- `requirements.txt` minimums synced to `pyproject.toml` (fastapi≥0.115.0, uvicorn≥0.30.0, httpx≥0.27.0)
+- tsconfig.json: exclude `src/__tests__` from tsc (vitest handles test file types)
+- 72 files reformatted with `ruff format` for consistent style
+- Dockerfile: pinned STDB to `v2.6.1`
 
 ## Phase 1 — Core Foundation
 - SpacetimeDB module: `tasks` table + atomic claim reducers
