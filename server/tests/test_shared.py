@@ -56,7 +56,10 @@ class TestValidateWebhookUrl:
     """SSRF protection — blocks http, private IPs, internal hostnames."""
 
     def test_valid_https_url(self):
-        assert validate_webhook_url("https://hooks.example.com/hook") == "https://hooks.example.com/hook"
+        assert (
+            validate_webhook_url("https://hooks.example.com/hook")
+            == "https://hooks.example.com/hook"
+        )
 
     def test_rejects_http(self):
         with pytest.raises(ValueError, match="must use https"):
@@ -80,7 +83,10 @@ class TestValidateWebhookUrl:
 
     def test_allows_domain_name(self):
         """Domain names that resolve to public IPs should pass."""
-        assert validate_webhook_url("https://discord.com/api/webhooks/xxx") == "https://discord.com/api/webhooks/xxx"
+        assert (
+            validate_webhook_url("https://discord.com/api/webhooks/xxx")
+            == "https://discord.com/api/webhooks/xxx"
+        )
 
     def test_private_ip_passes_validation(self):
         """Private IPs are not blocked by validation (DNS resolution handles it)."""

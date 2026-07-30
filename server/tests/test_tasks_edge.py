@@ -4,6 +4,7 @@ Covers: label assignments endpoint, block-with-reason, export filters,
 scoring exception handlers, bulk operation error paths, reorder checklist,
 task update branches, and delete notification firing.
 """
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -121,12 +122,30 @@ async def client():
 async def test_get_all_task_label_assignments(client, mock_all):
     """GET /api/tasks/labels/assignments returns task->labels mapping."""
     mock_all["sql"].return_value = [
-        {"task_id": "t1", "id": "l1", "name": "bug", "color": "#f00",
-         "description": "", "created_at": 1000},
-        {"task_id": "t1", "id": "l2", "name": "urgent", "color": "#ff0",
-         "description": "", "created_at": 1000},
-        {"task_id": "t2", "id": "l1", "name": "bug", "color": "#f00",
-         "description": "", "created_at": 1000},
+        {
+            "task_id": "t1",
+            "id": "l1",
+            "name": "bug",
+            "color": "#f00",
+            "description": "",
+            "created_at": 1000,
+        },
+        {
+            "task_id": "t1",
+            "id": "l2",
+            "name": "urgent",
+            "color": "#ff0",
+            "description": "",
+            "created_at": 1000,
+        },
+        {
+            "task_id": "t2",
+            "id": "l1",
+            "name": "bug",
+            "color": "#f00",
+            "description": "",
+            "created_at": 1000,
+        },
     ]
     resp = await client.get("/api/tasks/labels/assignments")
     assert resp.status_code == 200
@@ -160,7 +179,9 @@ async def test_block_with_reason_notifies_first_block(client, mock_all):
 async def test_list_tasks_offset_and_limit(client, mock_all):
     """GET /api/tasks with offset/limit returns subset."""
     mock_all["sql"].return_value = [
-        _task_dict(tid="t1"), _task_dict(tid="t2"), _task_dict(tid="t3"),
+        _task_dict(tid="t1"),
+        _task_dict(tid="t2"),
+        _task_dict(tid="t3"),
     ]
     resp = await client.get("/api/tasks?offset=1&limit=2")
     assert resp.status_code == 200
@@ -409,9 +430,7 @@ async def test_bulk_tasks_exception(client, mock_all):
 @pytest.mark.asyncio
 async def test_list_tasks_limit_slicing(client, mock_all):
     """GET /api/tasks with limit less than remaining tasks slices correctly."""
-    mock_all["sql"].return_value = [
-        _task_dict(tid=f"t{i}") for i in range(5)
-    ]
+    mock_all["sql"].return_value = [_task_dict(tid=f"t{i}") for i in range(5)]
     resp = await client.get("/api/tasks?offset=1&limit=2")
     assert resp.status_code == 200
     data = resp.json()
@@ -472,8 +491,10 @@ async def test_sync_to_github_no_token():
     """_sync_to_github returns early when no token configured."""
     from routes.tasks import _sync_to_github
 
-    with patch("issue_sync.get_link", return_value={"repo": "test/test", "issue_number": 1}), \
-         patch("config.settings.github_token", ""):
+    with (
+        patch("issue_sync.get_link", return_value={"repo": "test/test", "issue_number": 1}),
+        patch("config.settings.github_token", ""),
+    ):
         result = await _sync_to_github("task_1", "completed", "Done")
         assert result is None
 
@@ -547,6 +568,7 @@ async def test_set_task_labels(client, mock_all):
 async def test_maybe_notify_blocked_early_return():
     """_maybe_notify_blocked returns early when no rows."""
     from routes.tasks import _maybe_notify_blocked
+
     result = _maybe_notify_blocked("task_1", [], "reason")
     assert result is None
 
@@ -555,6 +577,7 @@ async def test_maybe_notify_blocked_early_return():
 async def test_maybe_notify_blocked_skip_notification():
     """_maybe_notify_blocked skips notification when fail_count != 1."""
     from routes.tasks import _maybe_notify_blocked
+
     result = _maybe_notify_blocked("task_1", [{"fail_count": 0}], "reason")
     assert result is None
     result = _maybe_notify_blocked("task_1", [{"fail_count": 2}], "reason")
@@ -616,11 +639,15 @@ async def test_ops_roadmap_dedup_batch():
     """Roadmap import batch dedup continue (line 71)."""
     from routes.ops import import_roadmap
 
-    body = type("RoadmapImportRequest", (), {
-        "content": "\n".join([f"- [ ] Task {i}" for i in range(6)]),
-        "repo": "test-repo",
-        "created_by": "tester",
-    })()
+    body = type(
+        "RoadmapImportRequest",
+        (),
+        {
+            "content": "\n".join([f"- [ ] Task {i}" for i in range(6)]),
+            "repo": "test-repo",
+            "created_by": "tester",
+        },
+    )()
 
     with patch("routes.ops._sql_param", new_callable=AsyncMock) as mock_param:
         mock_param.return_value = [{"id": "existing", "status": "available"}]
@@ -636,10 +663,16 @@ async def test_ops_migration_alias_direct():
     """record_schema_migration calls record_migration (line 146)."""
     from routes.ops import record_schema_migration
 
-    body = type("MigrationCreate", (), {
-        "version": "v3", "description": "Direct test",
-        "applied_by": "tester", "checksum": "def456",
-    })()
+    body = type(
+        "MigrationCreate",
+        (),
+        {
+            "version": "v3",
+            "description": "Direct test",
+            "applied_by": "tester",
+            "checksum": "def456",
+        },
+    )()
 
     with patch("routes.ops._call", new_callable=AsyncMock) as mock_call:
         mock_call.return_value = {"status": "ok"}
@@ -655,8 +688,14 @@ async def test_logs_multi_action_pass():
 
     with patch("routes.logs._sql", new_callable=AsyncMock) as mock_sql:
         mock_sql.return_value = [
-            {"id": "l1", "task_id": "t1", "action": "created",
-             "agent_id": None, "notes": None, "timestamp": 1000},
+            {
+                "id": "l1",
+                "task_id": "t1",
+                "action": "created",
+                "agent_id": None,
+                "notes": None,
+                "timestamp": 1000,
+            },
         ]
         result = await list_logs(action="created,claimed")
         assert len(result) == 1

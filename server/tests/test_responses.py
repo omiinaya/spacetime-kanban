@@ -54,6 +54,7 @@ class TestRowToTask:
 class TestRowToAgent:
     def test_minimal_agent(self):
         from server.responses import _row_to_agent
+
         row = {"id": "agent_1"}
         agent = _row_to_agent(row)
         assert agent.id == "agent_1"
@@ -63,6 +64,7 @@ class TestRowToAgent:
 
     def test_full_agent(self):
         from server.responses import _row_to_agent
+
         row = {
             "id": "agent_2",
             "host": "192.0.2.10",
@@ -86,6 +88,7 @@ class TestRowToAgent:
 class TestRowToTemplate:
     def test_minimal_template(self):
         from server.responses import _row_to_template
+
         row = {"id": "tmpl_1", "title": "Template", "description": "Test"}
         tmpl = _row_to_template(row)
         assert tmpl.id == "tmpl_1"
@@ -95,6 +98,7 @@ class TestRowToTemplate:
 
     def test_full_template(self):
         from server.responses import _row_to_template
+
         row = {
             "id": "tmpl_2",
             "title": "Full",
