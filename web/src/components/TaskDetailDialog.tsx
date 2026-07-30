@@ -3,7 +3,7 @@ import { Plus, Loader2, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, Link,
   Cpu, History, GitBranch, ExternalLink, X, Github,
   Tag, Archive,
-  User, Undo2, Wrench, Bot, RefreshCw, ClipboardList, Calendar, Pencil, PlusCircle,
+  User, Undo2, Wrench, Bot, RefreshCw, ClipboardList, Calendar, Pencil, PlusCircle, Check,
 } from 'lucide-react'
 import { api, type KanbanLabel, type LogEntry } from '../api'
 import { type Task } from '../hooks/useRealtimeTasks'
@@ -72,7 +72,7 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
         />
         <button onClick={handleSave} disabled={saving}
           className="text-[10px] px-1.5 py-1 rounded bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
-        >{saving ? '...' : '✓'}</button>
+        >{saving ? '...' : <Check className="w-3 h-3" />}</button>
         <button onClick={() => { setEditing(false); setValue(epochMsToDateInput(dueBy)) }}
           aria-label="Cancel"
           className="text-[10px] px-1.5 py-1 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors"
@@ -317,7 +317,7 @@ export function TaskDetailDialog({
                       style={active ? { backgroundColor: lbl.color + '30', borderColor: lbl.color + '60' } : {}}
                     >
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: lbl.color }} />
-                      {active ? '✓ ' : ''}{lbl.name}
+                      {active && <Check className="w-3 h-3 inline mr-0.5" />}{lbl.name}
                     </button>
                   )
                 })}
