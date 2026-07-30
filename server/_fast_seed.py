@@ -88,9 +88,10 @@ def fetch_existing_titles() -> set[str]:
         tasks = api_get(f"/api/tasks?status={status}&limit=200")
         if tasks:
             for t in tasks:
-                title = t.get("title", "")
-                if title:
-                    existing.add(title.strip().lower())
+                raw = t.get("title", "")
+                stripped = raw.strip().lower()
+                if stripped:
+                    existing.add(stripped)
     print(f"[seed] Loaded {len(existing)} existing titles for dedup", file=sys.stderr)
     return existing
 

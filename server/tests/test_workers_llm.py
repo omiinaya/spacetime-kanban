@@ -243,3 +243,114 @@ class TestRunLlmWorker:
         success, message = run_llm_worker(ctx)
         assert success is False
         assert "Repo directory not found" in message
+
+    # ── Additional coverage for uncovered lines ────────────────────────
+
+    @patch("workers.llm._has_git_changes", side_effect=[[], ["file1.py"]])
+    @patch("workers.llm.subprocess.Popen")
+    def test_worker_done_marker_with_new_changes(
+        self, mock_popen, mock_git_changes, worker_context
+    ):
+        """WORKER_DONE with new changes returns changes count (line 176)."""
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = (
+            "I fixed the bug.\nWORKER_DONE: Fixed authentication bug",
+            "",
+        )
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+        success, message = run_llm_worker(worker_context)
+        assert success is True
+        assert "file(s) changed" in message
+
+    @patch("workers.llm.subprocess.Popen")
+    def test_os_error(self, mock_popen, worker_context):
+        """OSError should return blocked (lines 160-161)."""
+        mock_popen.side_effect = OSError("Permission denied")
+        success, message = run_llm_worker(worker_context)
+        assert success is False
+        assert "Failed to run" in message
+
+    @patch("workers.llm.subprocess.Popen")
+    def test_generic_exception(self, mock_popen, worker_context):
+        """Generic Exception should return blocked (lines 162-163)."""
+        mock_popen.side_effect = RuntimeError("Unexpected error")
+        success, message = run_llm_worker(worker_context)
+        assert success is False
+        assert "LLM worker error" in message
+
+    @patch("workers.llm._has_git_changes", side_effect=[[], ["file1.py"]])
+    @patch("workers.llm.subprocess.Popen")
+    def test_fallback_meaningful_with_changes(
+        self, mock_popen, mock_git_changes, worker_context
+    ):
+        """Fallback: meaningful output + new changes → success (lines 238-239)."""
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = (
+            "I have done some work on the task. " * 10,
+            "",
+        )
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+        success, message = run_llm_worker(worker_context)
+        assert success is True
+
+    @patch("workers.llm._has_git_changes", return_value=[])
+    @patch("workers.llm.subprocess.Popen")
+    def test_fallback_not_meaningful_no_changes(
+        self, mock_popen, mock_git_changes, worker_context
+    ):
+        """Fallback: empty output + no changes → blocked (lines 240-241)."""
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("", "")
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+        success, message = run_llm_worker(worker_context)
+        assert success is False
+        assert "empty/trivial" in message
+
+    @patch("workers.llm._has_git_changes", side_effect=[[], ["file1.py"]])
+    @patch("workers.llm.subprocess.Popen")
+    def test_fallback_not_meaningful_with_changes(
+        self, mock_popen, mock_git_changes, worker_context
+    ):
+        """Fallback: minimal output + changes detected → success (lines 242-243)."""
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("done", "")
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+        success, message = run_llm_worker(worker_context)
+        assert success is True
+        assert "Changes detected" in message
+
+    @patch("workers.llm._has_git_changes", return_value=[])
+    @patch("workers.llm.subprocess.Popen")
+    def test_fallback_stderr_present(self, mock_popen, mock_git_changes, worker_context):
+        """Fallback: meaningful output, no changes, stderr present → blocked with stderr (lines 248-249)."""
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = (
+            "I have done some work but I'm not sure if it's complete. "
+            "Let me check if everything works. " * 2,
+            "error: something went wrong",
+        )
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+        success, message = run_llm_worker(worker_context)
+        assert success is False
+        assert "stderr" in message
+
+    @patch("workers.llm._has_git_changes", return_value=[])
+    @patch("workers.llm.subprocess.Popen")
+    def test_fallback_no_stderr(self, mock_popen, mock_git_changes, worker_context):
+        """Fallback: meaningful output, no changes, no stderr → default message (line 250)."""
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = (
+            "I have done some work but I'm not sure if it's complete. "
+            "Let me check if everything works. " * 2,
+            "",
+        )
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+        success, message = run_llm_worker(worker_context)
+        assert success is False
+        assert "did not report" in message

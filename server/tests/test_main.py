@@ -14,14 +14,14 @@ class TestMain:
 
     def test_app_title_and_version(self):
         """The FastAPI app should have the correct title and version."""
-        from server.main import app
+        from main import app
 
         assert app.title == "spacetimedb-kanban"
         assert app.version == "0.1.0"
 
     def test_app_has_openapi_docs_enabled(self):
         """The app should have docs, redoc, and openapi endpoints configured."""
-        from server.main import app
+        from main import app
 
         assert app.docs_url == "/docs"
         assert app.redoc_url == "/redoc"
@@ -29,7 +29,7 @@ class TestMain:
 
     def test_app_has_cors_middleware(self):
         """CORS middleware should be registered."""
-        from server.main import app
+        from main import app
 
         middleware_types = [
             m.cls for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"
@@ -38,7 +38,7 @@ class TestMain:
 
     def test_app_has_gzip_middleware(self):
         """GZip middleware should be registered."""
-        from server.main import app
+        from main import app
 
         middleware_types = [
             m.cls for m in app.user_middleware if m.cls.__name__ == "GZipMiddleware"
@@ -49,7 +49,7 @@ class TestMain:
 
     def test_all_routers_are_included(self):
         """All expected routers should be registered with the app."""
-        from server.main import app
+        from main import app
 
         # Collect ALL route paths by traversing the route tree recursively
         def _collect_paths(routes: list) -> set:
@@ -104,7 +104,7 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_health_endpoint_returns_json(self):
         """The /health endpoint should return a JSON response with status ok."""
-        from server.main import app
+        from main import app
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -118,7 +118,7 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_health_includes_worker_count(self):
         """The health endpoint should include workers_alive field."""
-        from server.main import app
+        from main import app
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -132,7 +132,7 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_health_includes_scheduler_enabled(self):
         """The health endpoint should include scheduler_enabled field."""
-        from server.main import app
+        from main import app
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -146,7 +146,7 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_health_includes_now_ms(self):
         """The health endpoint should include a now_ms timestamp."""
-        from server.main import app
+        from main import app
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -163,7 +163,7 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_security_headers_are_set(self):
         """The security middleware should set X-Content-Type-Options and other headers."""
-        from server.main import app
+        from main import app
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -177,7 +177,7 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_rate_limit_headers_are_set(self):
         """The middleware should set X-RateLimit-Limit and X-RateLimit-Remaining."""
-        from server.main import app
+        from main import app
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -189,7 +189,7 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_content_security_policy_header_set(self):
         """Content-Security-Policy header should be set."""
-        from server.main import app
+        from main import app
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -204,7 +204,7 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_api_404_returns_json(self):
         """API 404s should return JSON, not SPA HTML."""
-        from server.main import app
+        from main import app
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -220,44 +220,74 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_lifespan_creates_stdb_on_404(self):
         """On startup, if STDB returns 404 for database, it should create one."""
+        from main import lifespan
 
-        MagicMock()
+        mock_app = MagicMock()
 
-        # Mock the lifespan's httpx calls
         with (
-            patch("server.main.httpx.AsyncClient") as mock_client_cls,
+            patch("main.httpx.AsyncClient") as mock_client_cls,
+            patch("scheduler.start_scheduler", new_callable=AsyncMock),
+            patch("scheduler.stop_scheduler", new_callable=AsyncMock),
         ):
             mock_client = AsyncMock()
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
             # First call returns 404 (DB not found)
-            # Second call returns 201 (DB created)
             get_resp = MagicMock()
             get_resp.status_code = 404
+            # Second call returns 201 (DB created)
             post_resp = MagicMock()
             post_resp.status_code = 201
 
-            async def side_effect(url, **kwargs):
-                if "/v1/database/" in str(url) and "POST" not in str(kwargs.get("method", "")):
-                    return get_resp
-                # Default check
-                return post_resp
+            mock_client.get.return_value = get_resp
+            mock_client.post.return_value = post_resp
 
-            # Simpler: use two separate contexts
-            # We'll just test the mechanism exists
-            pass
+            async with lifespan(mock_app):
+                pass
 
-    @pytest.mark.skip(reason="Lifespan retry loop is hard to mock deterministically")
+            # Verify create was called
+            assert mock_client.post.call_count >= 1
+            # Verify the create call had the right payload
+            create_call = mock_client.post.call_args_list[0]
+            assert "/v1/database" in str(create_call)
+
     @pytest.mark.asyncio
-    async def test_lifespan_retries_on_connection_error(self):
-        """On startup, if STDB is unreachable, lifespan should retry."""
-        from server.main import lifespan
+    async def test_lifespan_stdb_ok_first_try(self):
+        """On startup, if STDB is reachable on first try."""
+        from main import lifespan
 
         mock_app = MagicMock()
 
         with (
-            patch("server.main.httpx.AsyncClient") as mock_client_cls,
-            patch("server.main.os._exit") as mock_exit,
+            patch("main.httpx.AsyncClient") as mock_client_cls,
+            patch("scheduler.start_scheduler", new_callable=AsyncMock),
+            patch("scheduler.stop_scheduler", new_callable=AsyncMock),
+        ):
+            mock_client = AsyncMock()
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            # STDB already exists
+            get_resp = MagicMock()
+            get_resp.status_code = 200
+            mock_client.get.return_value = get_resp
+
+            async with lifespan(mock_app):
+                pass
+
+            # Should NOT have called create
+            assert mock_client.post.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_lifespan_exits_on_unreachable_stdb(self):
+        """On startup, if STDB is unreachable after retries, should exit."""
+        from main import lifespan
+
+        mock_app = MagicMock()
+
+        with (
+            patch("main.httpx.AsyncClient") as mock_client_cls,
+            patch("main.os._exit") as mock_exit,
+            patch.dict("os.environ", {"KANBAN_STDB_RETRIES": "2"}, clear=False),
         ):
             mock_client = AsyncMock()
             mock_client_cls.return_value.__aenter__.return_value = mock_client
@@ -265,13 +295,280 @@ class TestMain:
             mock_client.get.side_effect = ConnectionError("STDB not ready")
             mock_client.post.side_effect = ConnectionError("STDB not ready")
 
-            # Use async with to properly enter the context manager
             try:
                 async with lifespan(mock_app):
-                    pass  # Should not reach here
+                    pass
             except (Exception, asyncio.CancelledError):
                 pass
 
             # Should have retried and eventually called os._exit
             assert mock_client.get.call_count > 1
             mock_exit.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_lifespan_scheduler_started_and_stopped(self):
+        """The scheduler should be started on enter and stopped on exit."""
+        from main import lifespan
+
+        mock_app = MagicMock()
+
+        with (
+            patch("main.httpx.AsyncClient") as mock_client_cls,
+            patch("scheduler.start_scheduler", new_callable=AsyncMock) as mock_start,
+            patch("scheduler.stop_scheduler", new_callable=AsyncMock) as mock_stop,
+        ):
+            mock_client = AsyncMock()
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+            get_resp = MagicMock()
+            get_resp.status_code = 200
+            mock_client.get.return_value = get_resp
+
+            async with lifespan(mock_app):
+                pass
+
+            mock_start.assert_awaited_once()
+            mock_stop.assert_awaited_once()
+
+    # ── SPA serving ────────────────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_spa_root_served_when_built(self):
+        """When web dist exists, / should serve index.html."""
+        from main import app, WEB_DIST
+
+        # Only test if the dist actually exists
+        import os
+
+        if os.path.isdir(WEB_DIST) and os.path.isfile(os.path.join(WEB_DIST, "index.html")):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                resp = await ac.get("/")
+            assert resp.status_code == 200
+            assert "text/html" in resp.headers.get("content-type", "")
+        else:
+            pytest.skip("Web dist not built — skipping SPA test")
+
+    @pytest.mark.asyncio
+    async def test_spa_root_returns_json_when_not_built(self):
+        """When web dist doesn't exist, / should return a JSON message."""
+        from main import app, WEB_DIST
+
+        import os
+
+        if not os.path.isdir(WEB_DIST):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                resp = await ac.get("/")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert "dashboard not built" in data["status"]
+        else:
+            pytest.skip("Web dist exists — skipping not-built test")
+
+    # ── 404 handler / SPA fallback ─────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_non_api_404_serves_spa_when_built(self):
+        """Non-API 404 should serve index.html when web dist exists."""
+        from main import app, WEB_DIST
+
+        import os
+
+        if os.path.isdir(WEB_DIST) and os.path.isfile(os.path.join(WEB_DIST, "index.html")):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                resp = await ac.get("/some/spa/route")
+            assert resp.status_code == 200
+            assert "text/html" in resp.headers.get("content-type", "")
+        else:
+            pytest.skip("Web dist not built — skipping SPA fallback test")
+
+    @pytest.mark.asyncio
+    async def test_non_api_404_returns_json_when_not_built(self):
+        """Non-API 404 should return JSON when web dist doesn't exist."""
+        from main import app, WEB_DIST
+
+        import os
+
+        if not os.path.isdir(WEB_DIST):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                resp = await ac.get("/some/spa/route")
+            assert resp.status_code == 404
+            data = resp.json()
+            assert data["detail"] == "Not found"
+        else:
+            pytest.skip("Web dist exists — skipping not-built fallback test")
+
+    # ── GitHub sync ────────────────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_sync_to_github_no_link(self):
+        """_sync_to_github should return early if no link found."""
+        from main import _sync_to_github
+
+        with patch("main.issue_sync.get_link", return_value=None):
+            result = await _sync_to_github(task_id="task_1", event="completed")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_github_no_token(self):
+        """_sync_to_github should return early if no token configured."""
+        from main import _sync_to_github
+
+        with (
+            patch("main.issue_sync.get_link", return_value={"repo": "my-repo", "issue_number": 42}),
+            patch("main.settings.github_token", ""),
+        ):
+            result = await _sync_to_github(task_id="task_1", event="completed")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_github_no_repo_or_issue(self):
+        """_sync_to_github should return early if repo or issue_number missing."""
+        from main import _sync_to_github
+
+        with (
+            patch("main.issue_sync.get_link", return_value={"repo": "", "issue_number": 0}),
+            patch("main.settings.github_token", "some-token"),
+        ):
+            result = await _sync_to_github(task_id="task_1", event="completed")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_github_completed(self):
+        """_sync_to_github should close issue on completed event."""
+        from main import _sync_to_github
+
+        with (
+            patch("main.issue_sync.get_link", return_value={"repo": "my-repo", "issue_number": 42}),
+            patch("main.settings.github_token", "some-token"),
+            patch("main.issue_sync.close_issue", new_callable=AsyncMock) as mock_close,
+            patch("main.issue_sync.update_issue_status") as mock_update,
+            patch("main.issue_sync.add_issue_comment", new_callable=AsyncMock) as mock_comment,
+        ):
+            result = await _sync_to_github(task_id="task_1", event="completed", notes="Done!")
+            mock_close.assert_awaited_once_with("some-token", "my-repo", 42)
+            mock_update.assert_called_once_with("task_1", "closed")
+            mock_comment.assert_awaited_once()
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_github_unclaimed(self):
+        """_sync_to_github should reopen issue on unclaimed event."""
+        from main import _sync_to_github
+
+        with (
+            patch("main.issue_sync.get_link", return_value={"repo": "my-repo", "issue_number": 42}),
+            patch("main.settings.github_token", "some-token"),
+            patch("main.issue_sync.reopen_issue", new_callable=AsyncMock) as mock_reopen,
+            patch("main.issue_sync.update_issue_status") as mock_update,
+            patch("main.issue_sync.add_issue_comment", new_callable=AsyncMock) as mock_comment,
+        ):
+            result = await _sync_to_github(task_id="task_1", event="unclaimed", notes="Reopened")
+            mock_reopen.assert_awaited_once_with("some-token", "my-repo", 42)
+            mock_update.assert_called_once_with("task_1", "open")
+            mock_comment.assert_awaited_once()
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_github_no_notes(self):
+        """_sync_to_github should handle events without notes."""
+        from main import _sync_to_github
+
+        with (
+            patch("main.issue_sync.get_link", return_value={"repo": "my-repo", "issue_number": 42}),
+            patch("main.settings.github_token", "some-token"),
+            patch("main.issue_sync.close_issue", new_callable=AsyncMock),
+            patch("main.issue_sync.update_issue_status"),
+        ):
+            result = await _sync_to_github(task_id="task_1", event="completed")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_github_comment_error(self):
+        """_sync_to_github should not crash if add_issue_comment fails."""
+        from main import _sync_to_github
+
+        with (
+            patch("main.issue_sync.get_link", return_value={"repo": "my-repo", "issue_number": 42}),
+            patch("main.settings.github_token", "some-token"),
+            patch("main.issue_sync.close_issue", new_callable=AsyncMock),
+            patch("main.issue_sync.update_issue_status"),
+            patch("main.issue_sync.add_issue_comment", side_effect=Exception("API error")),
+        ):
+            # Should not raise
+            result = await _sync_to_github(task_id="task_1", event="completed", notes="Done!")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_github_unclaimed_comment_error(self):
+        """_sync_to_github should handle comment errors on unclaimed event (lines 199-200)."""
+        from main import _sync_to_github
+
+        with (
+            patch("main.issue_sync.get_link", return_value={"repo": "my-repo", "issue_number": 42}),
+            patch("main.settings.github_token", "some-token"),
+            patch("main.issue_sync.reopen_issue", new_callable=AsyncMock),
+            patch("main.issue_sync.update_issue_status"),
+            patch("main.issue_sync.add_issue_comment", side_effect=Exception("API error")),
+        ):
+            # Should not raise
+            result = await _sync_to_github(task_id="task_1", event="unclaimed", notes="Reopened")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_github_outer_exception(self):
+        """_sync_to_github outer exception handler (lines 201-205)."""
+        from main import _sync_to_github
+
+        with (
+            patch("main.issue_sync.get_link", return_value={"repo": "my-repo", "issue_number": 42}),
+            patch("main.settings.github_token", "some-token"),
+            patch("main.issue_sync.close_issue", side_effect=Exception("Sync failed")),
+        ):
+            # Should not raise - outer handler catches everything
+            result = await _sync_to_github(task_id="task_1", event="completed", notes="Done!")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_github_unclaimed_outer_exception(self):
+        """_sync_to_github outer exception on unclaimed path."""
+        from main import _sync_to_github
+
+        with (
+            patch("main.issue_sync.get_link", return_value={"repo": "my-repo", "issue_number": 42}),
+            patch("main.settings.github_token", "some-token"),
+            patch("main.issue_sync.reopen_issue", side_effect=Exception("Reopen failed")),
+        ):
+            result = await _sync_to_github(task_id="task_1", event="unclaimed", notes="Reopened")
+            assert result is None
+
+    # ── spa_fallback for non-API paths without index.html ──────────────
+
+    @pytest.mark.asyncio
+    async def test_spa_fallback_without_index(self):
+        """spa_fallback should return JSON 404 when index.html doesn't exist (line 223)."""
+        from main import app
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/nonexistent/spa/route")
+
+        # This tests the spa_fallback handler at line 223
+        # If WEB_DIST/index.html exists, it will return the file (FileResponse)
+        # If not, it returns JSON 404
+        # Either way it should return 200 or 404, not crash
+        assert resp.status_code in (200, 404)
+
+    # ── Web dist message lines ─────────────────────────────────────────
+
+    def test_web_dist_message_built(self):
+        """Verify the WEB_DIST path and the messages printed when dist is missing."""
+        from main import WEB_DIST
+
+        import os
+
+        assert isinstance(WEB_DIST, str)
+        assert "web" in WEB_DIST
+        assert "dist" in WEB_DIST

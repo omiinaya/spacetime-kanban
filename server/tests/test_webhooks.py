@@ -2,17 +2,25 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from server.webhooks import (
+    _call,
     _deliver_with_retry,
     _format_discord,
     _format_generic,
     _format_payload,
     _format_slack,
     _format_telegram,
+    _sanitize,
+    _sql_param,
+    _stdb_sql,
+    _parse_rows,
     add_webhook,
     get_webhook,
     list_webhook_deliveries,
     list_webhooks,
+    notify,
     remove_webhook,
     update_webhook,
 )
@@ -447,3 +455,346 @@ class TestWebhooks:
         timestamps = [d["delivered_at"] for d in result]
         assert timestamps == sorted(timestamps, reverse=True)
         assert len(result) == 3
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Internal STDB Helpers
+# ════════════════════════════════════════════════════════════════════════
+
+
+class TestWebhookStdbHelpers:
+    """_sanitize, _sql_param, _stdb_sql, _parse_rows, _call."""
+
+    # ── _sanitize ───────────────────────────────────────────────────
+
+    def test_sanitize_escapes_quotes(self):
+        assert _sanitize("it's") == "it''s"
+        assert _sanitize("'") == "''"
+
+    def test_sanitize_preserves_normal(self):
+        assert _sanitize("hello") == "hello"
+        assert _sanitize("") == ""
+
+    # ── _sql_param ──────────────────────────────────────────────────
+
+    @patch("server.webhooks._stdb_sql")
+    def test_sql_param_escapes_parameters(self, mock_stdb_sql):
+        mock_stdb_sql.return_value = []
+        _sql_param("SELECT * FROM t WHERE n = '{name}'", name="it's")
+        # Verify the query was escaped before being sent
+        called_query = mock_stdb_sql.call_args[0][0]
+        assert "it''s" in called_query
+
+    # ── _stdb_sql ───────────────────────────────────────────────────
+
+    @patch("server.webhooks.httpx.post")
+    def test_stdb_sql_success(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [{"schema": {"elements": []}, "rows": []}]
+        mock_resp.text = "ok"
+        mock_post.return_value = mock_resp
+
+        result = _stdb_sql("SELECT 1")
+        assert result == []
+        mock_post.assert_called_once()
+
+    @patch("server.webhooks.httpx.post")
+    def test_stdb_sql_error(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 400
+        mock_resp.text = "Syntax error"
+        mock_post.return_value = mock_resp
+
+        with pytest.raises(RuntimeError, match="SQL query failed"):
+            _stdb_sql("BAD SQL")
+
+    # ── _parse_rows ─────────────────────────────────────────────────
+
+    def test_parse_rows_empty(self):
+        assert _parse_rows([]) == []
+
+    def test_parse_rows_no_rows(self):
+        data = [{"schema": {"elements": []}, "rows": []}]
+        assert _parse_rows(data) == []
+
+    def test_parse_rows_simple(self):
+        data = [
+            {
+                "schema": {
+                    "elements": [
+                        {"name": {"some": "id"}, "algebraic_type": {}},
+                        {"name": {"some": "name"}, "algebraic_type": {}},
+                    ]
+                },
+                "rows": [["abc", "test"]],
+            }
+        ]
+        result = _parse_rows(data)
+        assert len(result) == 1
+        assert result[0]["id"] == "abc"
+        assert result[0]["name"] == "test"
+
+    # ── _call ───────────────────────────────────────────────────────
+
+    @patch("server.webhooks.httpx.post")
+    def test_call_success(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = '{"status": "ok"}'
+        mock_resp.json.return_value = {"status": "ok"}
+        mock_post.return_value = mock_resp
+
+        result = _call("test_reducer", ["arg1"])
+        assert result == {"status": "ok"}
+
+    @patch("server.webhooks.httpx.post")
+    def test_call_empty_response(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = ""
+        mock_post.return_value = mock_resp
+
+        result = _call("test_reducer", [])
+        assert result == {"status": "ok"}
+
+    @patch("server.webhooks.httpx.post")
+    def test_call_error(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_resp.text = "Internal error"
+        mock_post.return_value = mock_resp
+
+        with pytest.raises(RuntimeError, match="Reducer failed"):
+            _call("test_reducer", [])
+
+
+# ════════════════════════════════════════════════════════════════════════
+# remove_webhook edge cases
+# ════════════════════════════════════════════════════════════════════════
+
+
+class TestRemoveWebhookEdgeCases:
+    """remove_webhook re-raise on non-'not found' errors."""
+
+    @patch("server.webhooks._call")
+    def test_remove_webhook_raises_on_other_error(self, mock_call):
+        mock_call.side_effect = RuntimeError("database error")
+        with pytest.raises(RuntimeError, match="database error"):
+            remove_webhook("wh_abc")
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Formatter edge cases
+# ════════════════════════════════════════════════════════════════════════
+
+
+class TestFormatterEdgeCases:
+    """Slack, Telegram formatter edge cases."""
+
+    # ── Slack: agent not added for blocked/completed ────────────────
+
+    def test_format_slack_blocked_no_agent_field(self):
+        task = {"id": "t1", "title": "Blocked task", "repo": "r", "assigned_to": "bot"}
+        payload = _format_slack("blocked", task, extra="Blocked on X")
+        fields = payload["attachments"][0]["fields"]
+        # Agent field should NOT be present for blocked
+        agent_fields = [f for f in fields if "Agent" in f.get("text", "")]
+        assert len(agent_fields) == 0
+        # Notes should be present
+        notes_fields = [f for f in fields if "Notes" in f.get("text", "")]
+        assert len(notes_fields) == 1
+
+    def test_format_slack_completed_no_agent_field(self):
+        task = {"id": "t2", "title": "Done", "repo": "r", "assigned_to": "bot"}
+        payload = _format_slack("completed", task, extra="All done")
+        fields = payload["attachments"][0]["fields"]
+        agent_fields = [f for f in fields if "Agent" in f.get("text", "")]
+        assert len(agent_fields) == 0
+
+    def test_format_slack_includes_agent_for_non_blocked_completed(self):
+        task = {"id": "t3", "title": "Claimed", "repo": "r", "assigned_to": "worker-1"}
+        payload = _format_slack("claimed", task)
+        fields = payload["attachments"][0]["fields"]
+        agent_fields = [f for f in fields if "worker-1" in f.get("text", "")]
+        assert len(agent_fields) == 1
+
+    # ── Telegram: agent not added for blocked/completed ─────────────
+
+    def test_format_telegram_blocked_no_agent(self):
+        task = {"id": "t4", "title": "Blocked", "repo": "r", "assigned_to": "bot"}
+        payload = _format_telegram("blocked", task, extra="Stuck")
+        assert "Agent" not in payload["text"]
+        assert "Notes" in payload["text"]
+
+    def test_format_telegram_completed_no_agent(self):
+        task = {"id": "t5", "title": "Done task", "repo": "r", "assigned_to": "bot"}
+        payload = _format_telegram("completed", task, extra="Finished")
+        assert "Agent" not in payload["text"]
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Delivery retry branches
+# ════════════════════════════════════════════════════════════════════════
+
+
+class TestDeliverWithRetryBranches:
+    """Telegram and generic delivery paths."""
+
+    @patch("server.webhooks.httpx.post")
+    def test_deliver_telegram_success(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "OK"
+        mock_post.return_value = mock_resp
+
+        code, body, success = _deliver_with_retry("telegram", "https://t.me/bot", {})
+        assert code == 200
+        assert success is True
+        mock_post.assert_called_once()
+
+    @patch("server.webhooks.httpx.post")
+    def test_deliver_generic_with_content_type(self, mock_post):
+        """Generic delivery should include Content-Type header."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "OK"
+        mock_post.return_value = mock_resp
+
+        code, body, success = _deliver_with_retry("generic", "https://example.com/hook", {})
+        assert code == 200
+        assert success is True
+        # Generic uses Content-Type header
+        call_kwargs = mock_post.call_args[1]
+        assert call_kwargs.get("headers", {}).get("Content-Type") == "application/json"
+
+    @patch("server.webhooks.httpx.post")
+    def test_deliver_unknown_type(self, mock_post):
+        """Unknown type falls through to else branch (plain JSON POST)."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "OK"
+        mock_post.return_value = mock_resp
+
+        code, body, success = _deliver_with_retry("custom", "https://example.com/hook", {})
+        assert code == 200
+        assert success is True
+        mock_post.assert_called_once()
+
+
+# ════════════════════════════════════════════════════════════════════════
+# notify — main dispatcher (async)
+# ════════════════════════════════════════════════════════════════════════
+
+
+class TestNotify:
+    """notify dispatches to matching webhooks and logs deliveries."""
+
+    @pytest.mark.asyncio
+    @patch("server.webhooks._call")
+    @patch("server.webhooks._deliver_with_retry")
+    @patch("server.webhooks._format_payload")
+    @patch("server.webhooks.list_webhooks")
+    async def test_sends_to_matching_hooks(
+        self, mock_list, mock_format, mock_deliver, mock_call
+    ):
+        mock_list.return_value = [
+            {
+                "id": "wh_1",
+                "url": "https://hook.example.com",
+                "type": "generic",
+                "events": ["created", "completed"],
+            },
+            {
+                "id": "wh_2",
+                "url": "https://other.example.com",
+                "type": "discord",
+                "events": ["completed"],
+            },
+        ]
+        mock_format.return_value = {"event": "created", "task": {}}
+        mock_deliver.return_value = (200, "OK", True)
+        mock_call.return_value = {"status": "ok"}
+
+        await notify("created", {"id": "task_1", "title": "Test"}, extra="")
+
+        # Only wh_1 matches "created" event
+        mock_format.assert_called_once()
+        mock_deliver.assert_called_once()
+        # Delivery should be logged
+        mock_call.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("server.webhooks._call")
+    @patch("server.webhooks._deliver_with_retry")
+    @patch("server.webhooks._format_payload")
+    @patch("server.webhooks.list_webhooks")
+    async def test_no_matching_hooks(
+        self, mock_list, mock_format, mock_deliver, mock_call
+    ):
+        mock_list.return_value = [
+            {
+                "id": "wh_1",
+                "url": "https://hook.example.com",
+                "type": "generic",
+                "events": ["completed"],
+            }
+        ]
+
+        await notify("created", {"id": "task_1", "title": "Test"})
+
+        # No webhook matches "created" event
+        mock_format.assert_not_called()
+        mock_deliver.assert_not_called()
+        mock_call.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("server.webhooks._call")
+    @patch("server.webhooks._deliver_with_retry")
+    @patch("server.webhooks._format_payload")
+    @patch("server.webhooks.list_webhooks")
+    async def test_delivery_failure_still_logged(
+        self, mock_list, mock_format, mock_deliver, mock_call
+    ):
+        mock_list.return_value = [
+            {
+                "id": "wh_1",
+                "url": "https://hook.example.com",
+                "type": "generic",
+                "events": ["created"],
+            }
+        ]
+        mock_format.return_value = {"event": "created"}
+        mock_deliver.return_value = (0, "Connection refused", False)
+
+        await notify("created", {"id": "task_1", "title": "Test"})
+
+        # Even on failure, delivery should be logged
+        mock_call.assert_called_once()
+        call_args = mock_call.call_args[0]
+        assert call_args[0] == "log_webhook_delivery"
+        assert call_args[1][6] is False  # success = False
+
+    @pytest.mark.asyncio
+    @patch("server.webhooks._call")
+    @patch("server.webhooks._deliver_with_retry")
+    @patch("server.webhooks._format_payload")
+    @patch("server.webhooks.list_webhooks")
+    async def test_logging_exception_suppressed(
+        self, mock_list, mock_format, mock_deliver, mock_call
+    ):
+        """Exception during _call logging should not propagate (suppressed)."""
+        mock_list.return_value = [
+            {
+                "id": "wh_1",
+                "url": "https://hook.example.com",
+                "type": "generic",
+                "events": ["created"],
+            }
+        ]
+        mock_format.return_value = {"event": "created"}
+        mock_deliver.return_value = (200, "OK", True)
+        mock_call.side_effect = RuntimeError("STDB unavailable")
+
+        # Should not raise — exception is suppressed in the logging loop
+        await notify("created", {"id": "task_1", "title": "Test"})
