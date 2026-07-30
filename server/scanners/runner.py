@@ -175,16 +175,27 @@ def _verify_completed_tasks(repos: list[tuple[str, str]], existing: set[str]) ->
             except Exception:
                 continue
 
-            fresh_titles = {ff["title"].strip().lower() for ff in fresh_findings}
+            # Build dict mapping title→finding for skip_verify check
+            fresh_map = {}
+            for ff in fresh_findings:
+                ff_title = ff["title"].strip().lower()
+                fresh_map[ff_title] = ff
+
             for t in tasks_to_check:
                 title = t.get("title", "").strip().lower()
                 tid = t.get("id", "")
-                if title in fresh_titles:
-                    _api_post(f"/api/tasks/{tid}/unarchive", {})
-                    # Unarchive transitions done→available; skip 409 errors silently
-                    existing.add(title)
-                    regressed += 1
-                    print(f"[scanner] ⚠ Re-opened regressed: {title[:60]}...", file=sys.stderr)
+                if title not in fresh_map:
+                    continue
+                # skip_verify flag: find-only scanners (unwraps, bare excepts, etc.)
+                # whose tasks can't be auto-fixed. Re-opening them creates an
+                # infinite loop because the issue persists after completion.
+                if fresh_map[title].get("skip_verify"):
+                    continue
+                _api_post(f"/api/tasks/{tid}/unarchive", {})
+                # Unarchive transitions done→available; skip 409 errors silently
+                existing.add(title)
+                regressed += 1
+                print(f"[scanner] ⚠ Re-opened regressed: {title[:60]}...", file=sys.stderr)
 
     return regressed
 
@@ -234,8 +245,10 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
             scanner_name = get_scanner_name(scanner_fn)
             layer = SCANNER_LAYER.get(scanner_name, 0)
 
-            # Progressive escalation: skip higher layers if lower ones unresolved
-            if layer > highest_unresolved + 1:
+            # Progressive escalation: skip higher layers if lower ones unresolved.
+            # Layer 3+ scanners (security, docs, prod_readiness) always run —
+            # they shouldn't be blocked by trivial L0-L2 tasks flooding the board.
+            if layer <= 2 and layer > highest_unresolved + 1:
                 continue  # Too far ahead — wait for intermediate layers
 
             start = time.time()

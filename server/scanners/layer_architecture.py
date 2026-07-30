@@ -179,6 +179,7 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
             findings.append(
                 {
                     "title": f"Split {len(chunk)} large source file(s) in {repo_name}{label}",
+                    "skip_verify": True,  # Find-only — splitting is manual work
                     "description": (
                         f"Found source files over 500 lines that should be split into modules.\n\n"
                         f"Files:\n{file_list}"
@@ -188,43 +189,43 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
                 }
             )
 
-    # ── Check Rust unwrap() calls ──
+    # ── Check Rust unwrap() calls (batched per repo, not per file) ──
     unwraps = _check_rust_unwraps(repo_path)
     if unwraps:
-        for uw in unwraps:
-            file_name = uw.split(":")[0].split("/")[-1]
-            findings.append(
-                {
-                    "title": (
-                        f"Replace unwrap() calls with error handling in {file_name} ({repo_name})"
-                    ),
-                    "description": (
-                        f"Found Rust files with excessive `.unwrap()` calls. These crash "
-                        f"at runtime if the value is None/Err.\n\n"
-                        f"  - {uw}"
-                    ),
-                    "priority": 2,
-                    "scanner": "architecture",
-                }
-            )
+        file_list = "\n".join(f"  - {uw}" for uw in unwraps)
+        findings.append(
+            {
+                "title": f"Replace unwrap() calls with error handling in {repo_name}",
+                "skip_verify": True,  # Find-only — no auto-fix, re-opening creates infinite loop
+                "description": (
+                    f"Found {len(unwraps)} Rust file(s) with excessive `.unwrap()` calls.\n"
+                    f"These crash at runtime if the value is None/Err.\n\n"
+                    f"Files:\n{file_list}"
+                ),
+                "priority": 2,
+                "scanner": "architecture",
+            }
+        )
 
-    # ── Check bare excepts ──
+    # ── Check bare excepts (batched per repo, not per file) ──
     bare = _check_bare_excepts(repo_path)
     if bare:
-        for b in bare:
-            file_name = b.split(":")[0].split("/")[-1]
-            findings.append(
-                {
-                    "title": f"Replace bare `except:` in {file_name} ({repo_name})",
-                    "description": (
-                        f"Found bare `except:` clause that catches ALL exceptions "
-                        f"(including KeyboardInterrupt, SystemExit) in {b}. "
-                        f"Use `except Exception:` instead."
-                    ),
-                    "priority": 2,
-                    "scanner": "architecture",
-                }
-            )
+        file_list = "\n".join(f"  - {b}" for b in bare)
+        findings.append(
+            {
+                "title": f"Replace bare `except:` statements in {repo_name}",
+                "skip_verify": True,  # Find-only — no auto-fix, re-opening creates infinite loop
+                "description": (
+                    f"Found bare `except:` clauses that catch ALL exceptions "
+                    f"(including KeyboardInterrupt, SystemExit) "
+                    f"in {len(bare)} file(s).\n"
+                    f"Use `except Exception:` instead.\n\n"
+                    f"Files:\n{file_list}"
+                ),
+                "priority": 2,
+                "scanner": "architecture",
+            }
+        )
 
     # ── Check missing __init__.py ──
     missing_init = _check_missing_init_py(repo_path)
@@ -233,6 +234,7 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
         findings.append(
             {
                 "title": f"Add __init__.py to {len(missing_init)} Python package(s) in {repo_name}",
+                "skip_verify": True,  # Find-only — manual creation needed
                 "description": (
                     f"Found directories with .py files but no `__init__.py`. "
                     f"These won't be importable as packages.\n\n{dir_list}"
@@ -249,6 +251,7 @@ def scan_architecture(repo_name: str, repo_path: str) -> list[dict]:
         findings.append(
             {
                 "title": f"Review {len(stale)} stale TODO(s) in {repo_name}",
+                "skip_verify": True,  # Find-only — manual review needed
                 "description": (
                     f"Found TODO markers in files that haven't been modified in over a year. "
                     f"These may represent abandoned work or outdated notes.\n\n{file_list}"

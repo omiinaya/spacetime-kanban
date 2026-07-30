@@ -1020,14 +1020,6 @@ async def self_improver(interval: int):
             improver_status["last_run"] = now
             _save_improver_status(improver_status)
 
-            # Phase 5: generate improvement tasks based on what was found
-            try:
-                from scanners.runner import scan_and_generate_tasks
-
-                await scan_and_generate_tasks()
-            except Exception as exc:
-                print(f"[scheduler:improver] scanner task generation failed: {exc}")
-
             print(f"[scheduler:improver] Check complete (run #{improver_status['run_count']})")
 
         except asyncio.CancelledError:

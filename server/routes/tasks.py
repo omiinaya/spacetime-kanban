@@ -924,13 +924,15 @@ async def get_all_task_label_assignments():
         tid = r["task_id"]
         if tid not in result:
             result[tid] = []
-        result[tid].append({
-            "id": r["id"],
-            "name": r["name"],
-            "color": r.get("color", "#0ea5e9"),
-            "description": r.get("description", ""),
-            "created_at": r.get("created_at", 0),
-        })
+        result[tid].append(
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "color": r.get("color", "#0ea5e9"),
+                "description": r.get("description", ""),
+                "created_at": r.get("created_at", 0),
+            }
+        )
     return result
 
 
