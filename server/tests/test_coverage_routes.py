@@ -600,3 +600,240 @@ async def test_health_board_import_error(client):
             sys.modules["shared"] = old_shared
         else:
             sys.modules.pop("shared", None)
+
+
+# ── Tasks: batch assign/unassign labels (lines 292-314) ──
+
+@pytest.mark.asyncio
+async def test_tasks_batch_assign_labels(client, mock_all):
+    """POST /api/tasks/batch/labels should assign labels to tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    with patch("main.settings.api_key", "test-api-key-123"):
+        resp = await client.post(
+            "/api/tasks/batch/labels",
+            json={"task_ids": ["t1", "t2"], "label_ids": ["l1", "l2"]},
+            headers={"X-API-Key": "test-api-key-123"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "assigned"
+
+
+@pytest.mark.asyncio
+async def test_tasks_batch_assign_empty(client, mock_all):
+    """batch/labels with empty lists returns 400."""
+    with patch("main.settings.api_key", "test-api-key-123"):
+        resp = await client.post(
+            "/api/tasks/batch/labels",
+            json={"task_ids": [], "label_ids": []},
+            headers={"X-API-Key": "test-api-key-123"},
+        )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_tasks_batch_unassign_labels(client, mock_all):
+    """POST /api/tasks/batch/unlabels should remove labels."""
+    mock_all["call"].return_value = {"status": "ok"}
+    with patch("main.settings.api_key", "test-api-key-123"):
+        resp = await client.post(
+            "/api/tasks/batch/unlabels",
+            json={"task_ids": ["t1"], "label_ids": ["l1"]},
+            headers={"X-API-Key": "test-api-key-123"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "removed"
+
+
+@pytest.mark.asyncio
+async def test_tasks_batch_unassign_empty(client, mock_all):
+    """batch/unlabels with empty lists returns 400."""
+    with patch("main.settings.api_key", "test-api-key-123"):
+        resp = await client.post(
+            "/api/tasks/batch/unlabels",
+            json={"task_ids": [], "label_ids": []},
+            headers={"X-API-Key": "test-api-key-123"},
+        )
+    assert resp.status_code == 400
+
+
+# ── Tasks: seed (line 168-169) ──
+
+@pytest.mark.asyncio
+async def test_tasks_seed(client, mock_all):
+    """POST /api/tasks/seed should seed sample tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post("/api/tasks/seed")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "seeded"
+
+
+# ── Tasks: set skills (line 368, 719-720) ──
+
+@pytest.mark.asyncio
+async def test_tasks_set_skills(client, mock_all):
+    """POST /api/tasks/{id}/skills should set task skills."""
+    mock_all["call"].return_value = {"status": "ok"}
+    with patch("main.settings.api_key", "test-api-key-123"):
+        resp = await client.post(
+            "/api/tasks/task_1/skills", json={"skills": "python, rust"},
+            headers={"X-API-Key": "test-api-key-123"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "updated"
+
+
+# ── Tasks: unarchive (line 411, 734-737) ──
+
+@pytest.mark.asyncio
+async def test_tasks_unarchive(client, mock_all):
+    """POST /api/tasks/{id}/unarchive should unarchive a task."""
+    mock_all["call"].return_value = {"status": "ok"}
+    with patch("main.settings.api_key", "test-api-key-123"):
+        resp = await client.post(
+            "/api/tasks/task_1/unarchive",
+            headers={"X-API-Key": "test-api-key-123"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "unarchived"
+
+
+# ── Tasks: list with archived filter (lines 125-126) ──
+
+@pytest.mark.asyncio
+async def test_tasks_list_archived_filter(client, mock_all):
+    """GET /api/tasks?archived=true should pass archived filter."""
+    mock_all["param"].return_value = []
+    resp = await client.get("/api/tasks", params={"status": "available", "archived": True})
+    assert resp.status_code == 200
+
+
+# ── Tasks: list with repo filter (lines 195-206) ──
+
+@pytest.mark.asyncio
+async def test_tasks_list_repo_filter(client, mock_all):
+    """GET /api/tasks?repo=xxx should pass repo filter."""
+    mock_all["param"].return_value = []
+    resp = await client.get("/api/tasks", params={"repo": "sample-repo-q"})
+    assert resp.status_code == 200
+
+
+
+# ── Tasks: reorder (lines 274-275) ──
+
+@pytest.mark.asyncio
+async def test_tasks_reorder(client, mock_all):
+    """POST /api/tasks/reorder should call reorder_task."""
+    mock_all["call"].return_value = {"status": "ok"}
+    with patch("main.settings.api_key", "test-api-key-123"):
+        resp = await client.post(
+            "/api/tasks/reorder", json={"task_id": "t1", "position": 1},
+            headers={"X-API-Key": "test-api-key-123"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "reordered"
+
+
+@pytest.mark.asyncio
+async def test_tasks_bulk_reorder(client, mock_all):
+    """POST /api/tasks/bulk-reorder should call bulk_reorder_tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    with patch("main.settings.api_key", "test-api-key-123"):
+        resp = await client.post(
+            "/api/tasks/bulk-reorder",
+            json={"items": [{"task_id": "t1", "position": 0}]},
+            headers={"X-API-Key": "test-api-key-123"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "reordered"
+
+
+
+# ── Tasks: suggest with agent capabilities (lines 79-80, 86-87) ──
+
+@pytest.mark.asyncio
+async def test_tasks_suggest_with_agent_caps(client, mock_all):
+    """GET /api/tasks/suggest handles agent errors gracefully."""
+    mock_all["sql"].side_effect = [
+        [{"id": "t1", "title": "Test", "status": "available",
+          "repo": "r", "priority": 128, "created_at": 9999999999999,
+          "required_skills": "", "description": "", "assigned_to": None,
+          "branch": None, "created_by": "test", "updated_at": 9999999999999,
+          "depends_on": None, "score": 0, "position": None,
+          "fail_count": 0, "max_attempts": 3, "fail_reason": None,
+          "subtask_of": None, "subtasks": None, "due_by": None,
+          "sprint": None, "archived": False, "estimated_hours": None,
+          "spent_hours": None}],  # tasks
+        [{"id": "agent-1", "capabilities": None}],  # agent
+        [],  # blockers
+    ]
+    resp = await client.get("/api/tasks/suggest", params={"agent_caps": "python, rust"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) >= 1
+
+
+# ── Tasks: pagination edge cases (lines 156, 158) ──
+
+@pytest.mark.asyncio
+async def test_tasks_list_with_offset_limit(client, mock_all):
+    """GET /api/tasks with offset and limit pagination."""
+    mock_all["param"].return_value = [
+        {"id": "t1", "title": "T1", "status": "available",
+         "repo": "r", "priority": 0, "created_at": 1000, "updated_at": 1000,
+         "description": "", "assigned_to": None, "branch": None,
+         "created_by": "test", "depends_on": None, "required_skills": None,
+         "score": 0, "position": None, "fail_count": 0, "max_attempts": 3,
+         "fail_reason": None, "subtask_of": None, "subtasks": None,
+         "due_by": None, "sprint": None, "archived": False,
+         "estimated_hours": None, "spent_hours": None, "roadmap_item": ""},
+        {"id": "t2", "title": "T2", "status": "available",
+         "repo": "r", "priority": 0, "created_at": 1000, "updated_at": 1000,
+         "description": "", "assigned_to": None, "branch": None,
+         "created_by": "test", "depends_on": None, "required_skills": None,
+         "score": 0, "position": None, "fail_count": 0, "max_attempts": 3,
+         "fail_reason": None, "subtask_of": None, "subtasks": None,
+         "due_by": None, "sprint": None, "archived": False,
+         "estimated_hours": None, "spent_hours": None, "roadmap_item": ""},
+    ]
+    resp = await client.get("/api/tasks", params={"offset": 0, "limit": 1})
+    assert resp.status_code == 200
+
+
+# ── Tasks: task not found (line 387) ──
+
+@pytest.mark.asyncio
+async def test_tasks_get_not_found(client, mock_all):
+    """GET /api/tasks/{id} returns 404 for unknown task."""
+    mock_all["param"].return_value = []
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.get("/api/tasks/nonexistent")
+    assert resp.status_code == 404
+
+
+# ── Tasks: bulk archive (lines 622-623) ──
+
+@pytest.mark.asyncio
+async def test_tasks_bulk_archive(client, mock_all):
+    """POST /api/tasks/bulk-archive archives tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    with patch("main.settings.api_key", "test-api-key-123"):
+        resp = await client.post(
+            "/api/tasks/bulk-archive", json={"task_ids": ["t1", "t2"]},
+            headers={"X-API-Key": "test-api-key-123"},
+        )
+    assert resp.status_code == 200
+
+
+# ── Tasks: bulk retry (lines 697-698) ──
+
+@pytest.mark.asyncio
+async def test_tasks_bulk_retry(client, mock_all):
+    """POST /api/tasks/bulk-retry retries failed tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    with patch("main.settings.api_key", "test-api-key-123"):
+        resp = await client.post(
+            "/api/tasks/bulk-retry", json={"task_ids": ["t1"]},
+            headers={"X-API-Key": "test-api-key-123"},
+        )
+    assert resp.status_code == 200
+
