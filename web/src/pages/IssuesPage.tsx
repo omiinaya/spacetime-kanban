@@ -3,9 +3,11 @@ import { Github, ExternalLink, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { api, type IssueLink } from '../api'
 import { ListViewSkeleton } from '../components/Skeleton'
 import { useConfirm } from '../components/ConfirmDialog'
+import { useToast } from '../hooks/useToast'
 
 export default function IssuesPage() {
   const { confirm } = useConfirm()
+  const { addToast } = useToast()
   const [links, setLinks] = useState<IssueLink[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -137,7 +139,9 @@ export default function IssuesPage() {
                   try {
                     await api.issues.unlink(link.kanban_task_id)
                     fetchLinks()
-                  } catch(e) { console.error(e) }
+                  } catch(e) {
+                    addToast('❌', `Failed to unlink: ${e instanceof Error ? e.message : String(e)}`)
+                  }
                 }} aria-label="Unlink issue" className="p-1 rounded hover:bg-white/10 text-[var(--color-muted)] hover:text-red-400"
                 ><Trash2 className="w-3 h-3" /></button>
               </div>

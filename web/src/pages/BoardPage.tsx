@@ -182,6 +182,7 @@ export default function BoardPage() {
       await api.tasks.bulkReorder(items)
     } catch (e: unknown) {
       console.error('Reorder failed:', e)
+      addToast('❌', `Reorder failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Plus, Loader2 } from 'lucide-react'
 import { api } from '../api'
+import { useToast } from '../hooks/useToast'
 import { PRIORITY_LABELS, type TaskTemplate, BUILT_IN_TEMPLATES } from './constants'
 
 /** Convert YYYY-MM-DD from a date input to epoch ms (start of that day in local timezone). */
@@ -11,6 +12,7 @@ function dateInputToEpochMs(val: string): number | null {
 }
 
 export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { addToast } = useToast()
   const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -20,6 +22,8 @@ export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; 
   const [skills, setSkills] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const clearTemplate = () => setSelectedTemplate(null)
 
   const applyTemplate = (tpl: TaskTemplate) => {
     setSelectedTemplate(tpl)
@@ -49,7 +53,7 @@ export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; 
       onCreated()
       onClose()
     } catch (err) {
-      console.error('Failed to create task', err)
+      addToast('❌', `Failed to create task: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setSaving(false)
     }
@@ -72,31 +76,31 @@ export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; 
             ))}
           </div>
           <form onSubmit={handleSubmit} className="space-y-3">
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Task title" required
+            <input value={title} onChange={e => { setTitle(e.target.value); clearTemplate() }} placeholder="Task title" required
               className="w-full px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
             />
-            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Description (optional)" rows={4}
+            <textarea value={description} onChange={e => { setDescription(e.target.value); clearTemplate() }} placeholder="Description (optional)" rows={4}
               className="w-full px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
             />
-            <select value={priority} onChange={e => setPriority(Number(e.target.value))}
+            <select value={priority} onChange={e => { setPriority(Number(e.target.value)); clearTemplate() }}
               className="w-full px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm"
             >
               {Object.entries(PRIORITY_LABELS).map(([val, label]) => (
                 <option key={val} value={val}>{label}</option>
               ))}
             </select>
-            <input value={repo} onChange={e => setRepo(e.target.value)} placeholder="Repo slug"
+            <input value={repo} onChange={e => { setRepo(e.target.value); clearTemplate() }} placeholder="Repo slug"
               className="w-full px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
             />
-            <input value={roadmap} onChange={e => setRoadmap(e.target.value)} placeholder="Roadmap item"
+            <input value={roadmap} onChange={e => { setRoadmap(e.target.value); clearTemplate() }} placeholder="Roadmap item"
               className="w-full px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
             />
-            <input value={skills} onChange={e => setSkills(e.target.value)} placeholder="Skills (e.g. rust,python)"
+            <input value={skills} onChange={e => { setSkills(e.target.value); clearTemplate() }} placeholder="Skills (e.g. rust,python)"
               className="w-full px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
             />
             <div>
               <label className="text-xs font-medium text-[var(--color-muted)] block mb-1">Due date (optional)</label>
-              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+              <input type="date" value={dueDate} onChange={e => { setDueDate(e.target.value); clearTemplate() }}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
               />
             </div>

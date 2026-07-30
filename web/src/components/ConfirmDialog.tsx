@@ -1,5 +1,5 @@
 import { AlertTriangle, X } from 'lucide-react'
-import { useState, useCallback, createContext, useContext, type ReactNode } from 'react'
+import { useState, useCallback, createContext, useContext, useRef, useEffect, type ReactNode } from 'react'
 
 interface ConfirmOptions {
   title: string
@@ -20,6 +20,7 @@ const ConfirmContext = createContext<ConfirmContextValue>({
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [dialog, setDialog] = useState<ConfirmOptions & { resolve: (v: boolean) => void } | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   const confirm = useCallback((opts: ConfirmOptions) => {
     return new Promise<boolean>((resolve) => {
@@ -27,10 +28,23 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const handleClose = (result: boolean) => {
+  const handleClose = useCallback((result: boolean) => {
     dialog?.resolve(result)
     setDialog(null)
-  }
+  }, [dialog])
+
+  // Auto-focus dialog and handle keyboard
+  useEffect(() => {
+    if (dialog) {
+      dialogRef.current?.focus()
+      const handler = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') handleClose(false)
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleClose(true) }
+      }
+      window.addEventListener('keydown', handler)
+      return () => window.removeEventListener('keydown', handler)
+    }
+  }, [dialog, handleClose])
 
   return (
     <ConfirmContext.Provider value={{ confirm }}>
@@ -41,6 +55,8 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           onClick={() => handleClose(false)}
           role="dialog"
           aria-modal="true"
+          ref={dialogRef}
+          tabIndex={-1}
         >
           <div
             className="w-full max-w-md bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-4 shadow-2xl"
@@ -73,6 +89,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 {dialog.cancelLabel || 'Cancel'}
               </button>
               <button
+                autoFocus
                 onClick={() => handleClose(true)}
                 className={`px-4 py-1.5 text-xs rounded text-white transition-opacity hover:opacity-90 ${
                   dialog.variant === 'danger' ? 'bg-red-500' :
