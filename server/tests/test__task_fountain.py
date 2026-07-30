@@ -2,10 +2,12 @@
 
 
 def test_module_importable():
-    import server._task_fountain  # noqa: F401
+    import _task_fountain as m  # noqa: F401
+
+    assert callable(m.run)
 
 
 def test_run_function():
-    from server._task_fountain import run
+    from _task_fountain import run
 
     assert callable(run)

@@ -57,7 +57,7 @@ export function CreateTaskDialog({ onClose, onCreated }: { onClose: () => void; 
     } finally {
       setSaving(false)
     }
-  }, [title, description, priority, repo, roadmap, skills, dueDate, onClose, onCreated])
+  }, [title, description, priority, repo, roadmap, skills, dueDate, addToast, onClose, onCreated])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true">

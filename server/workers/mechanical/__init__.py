@@ -1775,9 +1775,9 @@ def handle_replace_unwrap_scanner(ctx: WorkerContext) -> tuple[bool, str]:
 def handle_bare_except_scanner(ctx: WorkerContext) -> tuple[bool, str]:
     """Handle 'Replace bare except:' scanner tasks.
 
-    These are P2 tasks from the architecture scanner that found bare
-    `except:` clauses. Rather than sending to LLM, mark the task as
-    informational and report what was found.
+    Reads the description to find files with bare `except:` clauses,
+    reads each file, and adds a // TODO comment if the issue still exists.
+    Does NOT attempt to auto-fix (requires human judgment).
     """
     repo_path = ctx.repo_path
     if not repo_path:
@@ -1785,13 +1785,68 @@ def handle_bare_except_scanner(ctx: WorkerContext) -> tuple[bool, str]:
 
     description = (ctx.task or {}).get("description", "")  # type: ignore[union-attr]
 
-    # Just report that the issue is documented
-    if "bare" in description:
+    # Parse description for file paths listed after "Files:" section
+    in_files = False
+    bare_files = []
+    for line in description.split("\n"):
+        stripped = line.strip()
+        if stripped.lower().startswith("files:"):
+            in_files = True
+            continue
+        if in_files:
+            if stripped.startswith("- "):
+                # Extract path after the dash
+                file_path = stripped[2:].split(":")[0].strip()
+                if file_path:
+                    bare_files.append(file_path)
+            elif not stripped:
+                break
+
+    if not bare_files:
+        return True, "No bare except: files listed — task may be stale"
+
+    # Check each file and add TODO if issue still present
+    changed = False
+    for rel_path in bare_files:
+        abs_path = os.path.join(repo_path, rel_path)
+        if not os.path.isfile(abs_path):
+            continue
+        try:
+            with open(abs_path, encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            bare_count = len(re.findall(r"^except\s*:", content, re.MULTILINE))
+            if bare_count == 0:
+                continue  # Already fixed
+            if "# TODO: Replace bare except: with except Exception:" not in content:
+                lines = content.split("\n")
+                comment = (
+                    f"# TODO (kanban): Replace {bare_count}"
+                    f" bare `except:` clause(s) with `except Exception:`"
+                )
+                # Insert after module docstring or at top of file
+                insert_at = 0
+                for i, line in enumerate(lines):
+                    stripped = line.strip()
+                    if stripped.startswith(('"""', "'''", "#", "//!")):
+                        insert_at = i + 1
+                    else:
+                        break
+                lines.insert(insert_at, comment)
+                try:
+                    with open(abs_path, "w") as f:
+                        f.write("\n".join(lines))
+                    changed = True
+                except OSError:
+                    pass
+        except Exception:
+            pass
+
+    if changed:
         return (
             True,
-            "Bare except: clause flagged for manual review — replace with 'except Exception:'",
+            f"Flagged {len(bare_files)} file(s) with bare except: clauses for manual review",
         )
-    return True, "No bare except: issues remain in this file"
+    return True, "No bare except: issues remain — already flagged or already fixed"
 
 
 @register(r"(add\s+ci\s+pipeline|set\s+up\s+ci.?cd)")

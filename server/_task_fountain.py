@@ -62,12 +62,12 @@ def api_post(path: str, data: dict):
 
 
 def fetch_existing_titles() -> set[str]:
-    """Lightweight — only check available + inProgress (cheapest calls)."""
+    """Fetch all task titles from ALL statuses for dedup."""
     existing = set()
-    for status in ("available", "inProgress"):
+    for status in ("available", "inProgress", "blocked", "done"):
         try:
             with urllib.request.urlopen(
-                f"{API}/api/tasks?status={status}&limit=50", timeout=3
+                f"{API}/api/tasks?status={status}&limit=200", timeout=5
             ) as resp:
                 tasks = json.loads(resp.read().decode())
                 if tasks:
