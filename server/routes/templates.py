@@ -78,7 +78,7 @@ async def delete_task_template(template_id: str):
     except RuntimeError as e:
         if "not found" in str(e).lower():
             raise HTTPException(404, "Template not found") from e
-        raise
+        raise HTTPException(500, str(e)) from e
 
 
 @router.post("/api/task-templates/trigger")
