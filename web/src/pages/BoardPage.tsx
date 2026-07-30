@@ -20,6 +20,7 @@ import { useSavedViews } from '../hooks/useSavedViews'
 import { useTaskActions } from '../hooks/useTaskActions'
 import { useBoardToasts } from '../hooks/useBoardToasts'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../components/ConfirmDialog'
 import { useBoardShortcuts } from '../hooks/useBoardShortcuts'
 import { useColumnReorder } from '../hooks/useColumnReorder'
 
@@ -56,7 +57,7 @@ export default function BoardPage() {
   const [filterAssignees, setFilterAssignees] = useState<Set<string>>(new Set())
   const [filterLabels, setFilterLabels] = useState<Set<string>>(new Set())
   const [allLabels, setAllLabels] = useState<KanbanLabel[]>([])
-  const [taskLabelMap] = useState<Map<string, KanbanLabel[]>>(new Map())
+  const [taskLabelMap, setTaskLabelMap] = useState<Map<string, KanbanLabel[]>>(new Map())
   const [issueLinks, setIssueLinks] = useState<Record<string, IssueLink>>({})
   const [showShortcuts, setShowShortcuts] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -73,6 +74,7 @@ export default function BoardPage() {
 
   const toasts = useBoardToasts(tasks)
   const { addToast } = useToast()
+  const { confirm } = useConfirm()
 
   // ── Filtering (needed before actions that reference `filtered`) ──
   const sorted = useMemo(() =>
@@ -209,7 +211,8 @@ export default function BoardPage() {
   const handleBatch = async (action: BatchAction) => {
     if (selectedIds.size === 0) return
     const label = action === 'delete' ? 'Delete' : action === 'block' ? 'Block' : action === 'unclaim' ? 'Release' : action === 'archive' ? 'Archive' : action.charAt(0).toUpperCase() + action.slice(1)
-    if (!confirm(`${label} ${selectedIds.size} selected task(s)?`)) return
+    const ok = await confirm({ title: `${label} Tasks`, message: `${label} ${selectedIds.size} selected task(s)?`, confirmLabel: label, variant: action === 'delete' ? 'danger' : 'warning' })
+    if (!ok) return
     setBatchProcessing(true)
     if (action === 'archive') {
       try {
@@ -286,6 +289,17 @@ export default function BoardPage() {
   // Load labels once (they rarely change)
   useEffect(() => {
     api.labels.list().then(setAllLabels).catch(() => { /* ignore */ })
+  }, [])
+
+  // Load task-label assignments for filtering and badge display
+  useEffect(() => {
+    api.labels.assignments().then((data) => {
+      const map = new Map<string, KanbanLabel[]>()
+      for (const [taskId, labels] of Object.entries(data)) {
+        map.set(taskId, labels)
+      }
+      setTaskLabelMap(map)
+    }).catch(() => { /* ignore */ })
   }, [])
 
   // Load issue links for board badges — 30s polling, skip when tab hidden

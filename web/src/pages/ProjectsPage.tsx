@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Loader2, AlertCircle, Plus, FolderKanban, ChevronUp, ChevronDown, Eye, EyeOff, Trash2, Save } from 'lucide-react'
 import { api, Project } from '../api'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../components/ConfirmDialog'
 import { CardGridSkeleton } from '../components/Skeleton'
 
 const PRIORITY_LABELS: Record<number, string> = {
@@ -27,6 +28,7 @@ const PRIORITY_BG: Record<number, string> = {
 
 export default function ProjectsPage() {
   const { addToast } = useToast()
+  const { confirm } = useConfirm()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -108,7 +110,8 @@ export default function ProjectsPage() {
   }
 
   const handleDelete = async (p: Project) => {
-    if (!confirm(`Delete project "${p.name}"? This only removes the project registration, not tasks.`)) return
+    const ok = await confirm({ title: 'Delete Project', message: `Delete project "${p.name}"? This only removes the project registration, not tasks.`, confirmLabel: 'Delete', variant: 'danger' })
+    if (!ok) return
     try {
       await api.projects.delete(p.id)
       await load()

@@ -30,7 +30,7 @@ vi.mock('../hooks/useRealtimeTasks', () => ({
 
 vi.mock('../api', () => ({
   api: {
-    labels: { list: vi.fn().mockResolvedValue([]) },
+    labels: { list: vi.fn().mockResolvedValue([]), assignments: vi.fn().mockResolvedValue({}) },
     suggest: { list: vi.fn().mockResolvedValue([]) },
     agents: { list: vi.fn().mockResolvedValue([]) },
     issues: { list: vi.fn().mockResolvedValue([]) },

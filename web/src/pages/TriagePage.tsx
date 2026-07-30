@@ -4,6 +4,7 @@ import {
   AlertTriangle, CheckCircle2,
 } from 'lucide-react'
 import { api, type Task } from '../api'
+import { useConfirm } from '../components/ConfirmDialog'
 import { PageSkeleton } from '../components/Skeleton'
 
 /** Normalize a fail_reason into a cluster key by stripping volatile counters/ids. */
@@ -38,6 +39,7 @@ export default function TriagePage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<string | null>(null) // cluster key or task id in flight
   const [notice, setNotice] = useState<string | null>(null)
+  const { confirm } = useConfirm()
 
   const load = async () => {
     setLoading(true)
@@ -78,7 +80,8 @@ export default function TriagePage() {
   }, [tasks])
 
   const retryTasks = async (ids: string[], label: string) => {
-    if (!confirm(`Retry ${ids.length} task(s) from "${label}"?\n\nThey will return to Available with fail counts reset.`)) return
+    const ok = await confirm({ title: 'Retry Tasks', message: `Retry ${ids.length} task(s) from "${label}"?\n\nThey will return to Available with fail counts reset.`, confirmLabel: 'Retry', variant: 'warning' })
+    if (!ok) return
     setBusy(label)
     setNotice(null)
     try {
@@ -93,7 +96,8 @@ export default function TriagePage() {
   }
 
   const archiveTasks = async (ids: string[], label: string) => {
-    if (!confirm(`Archive ${ids.length} task(s) from "${label}"?\n\nArchived tasks disappear from the board.`)) return
+    const ok = await confirm({ title: 'Archive Tasks', message: `Archive ${ids.length} task(s) from "${label}"?\n\nArchived tasks disappear from the board.`, confirmLabel: 'Archive', variant: 'warning' })
+    if (!ok) return
     setBusy(label)
     setNotice(null)
     try {

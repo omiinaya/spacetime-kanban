@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Loader2, AlertCircle, Plus, X, Tag, Palette } from 'lucide-react'
 import { api, KanbanLabel } from '../api'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../components/ConfirmDialog'
 import { CardGridSkeleton } from '../components/Skeleton'
 
 const PRESET_COLORS = [
@@ -12,6 +13,7 @@ const PRESET_COLORS = [
 
 export default function LabelsPage() {
   const { addToast } = useToast()
+  const { confirm } = useConfirm()
   const [labels, setLabels] = useState<KanbanLabel[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -76,7 +78,8 @@ export default function LabelsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this label? It will be removed from all tasks.')) return
+    const ok = await confirm({ title: 'Delete Label', message: 'Delete this label? It will be removed from all tasks.', confirmLabel: 'Delete', variant: 'danger' })
+    if (!ok) return
     try {
       await api.labels.delete(id)
       await load()
@@ -148,6 +151,13 @@ export default function LabelsPage() {
                     />
                   ))}
                 </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <input type="color" value={newColor} onChange={e => setNewColor(e.target.value)} 
+                    className="w-7 h-7 rounded cursor-pointer border border-[var(--color-border)] bg-transparent" />
+                  <input type="text" value={newColor} onChange={e => setNewColor(e.target.value)}
+                    placeholder="#hex" maxLength={7}
+                    className="w-24 px-2 py-1 text-xs rounded bg-[var(--color-background)] border border-[var(--color-border)] font-mono focus:outline-none focus:ring-1 focus:ring-[var(--color-ring)]" />
+                </div>
               </div>
               <div className="flex items-center gap-3 pt-2">
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
@@ -196,6 +206,13 @@ export default function LabelsPage() {
                       style={{ backgroundColor: c }}
                     />
                   ))}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <input type="color" value={editColor} onChange={e => setEditColor(e.target.value)} 
+                    className="w-5 h-5 rounded cursor-pointer border border-[var(--color-border)] bg-transparent" />
+                  <input type="text" value={editColor} onChange={e => setEditColor(e.target.value)}
+                    placeholder="#hex" maxLength={7}
+                    className="w-20 px-2 py-1 text-xs rounded bg-[var(--color-background)] border border-[var(--color-border)] font-mono focus:outline-none focus:ring-1 focus:ring-[var(--color-ring)]" />
                 </div>
                 <div className="flex items-center gap-2 pt-1">
                   <button onClick={() => handleUpdate(label.id)}

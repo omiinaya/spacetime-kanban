@@ -389,6 +389,8 @@ export const api = {
       apiGet<KanbanLabel[]>(`/tasks/${taskId}/labels`),
     setForTask: (taskId: string, body: TaskLabelAssign) =>
       apiPost<{ status: string; assigned: string[] }>(`/tasks/${taskId}/labels`, body),
+    assignments: () =>
+      apiGet<Record<string, KanbanLabel[]>>('/tasks/labels/assignments'),
   },
   projects: {
     list: () => apiGet<Project[]>('/projects'),

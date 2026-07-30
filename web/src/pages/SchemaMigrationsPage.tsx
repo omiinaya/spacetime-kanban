@@ -13,7 +13,7 @@ export default function SchemaMigrationsPage() {
   const [appliedBy, setAppliedBy] = useState('')
   const [checksum, setChecksum] = useState('')
   const [saving, setSaving] = useState(false)
-  const [saveMsg, setSaveMsg] = useState('')
+  const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const loadMigrations = async () => {
     try {
@@ -32,7 +32,7 @@ export default function SchemaMigrationsPage() {
   const handleRecord = async () => {
     if (!version.trim()) return
     setSaving(true)
-    setSaveMsg('')
+    setSaveMsg(null)
     try {
       await api.migrations.create({
         version: version.trim(),
@@ -45,10 +45,10 @@ export default function SchemaMigrationsPage() {
       setAppliedBy('')
       setChecksum('')
       setShowForm(false)
-      setSaveMsg('Migration recorded successfully')
+      setSaveMsg({ type: 'success', text: 'Migration recorded successfully' })
       await loadMigrations()
     } catch (e: unknown) {
-      setSaveMsg(`Error: ${e instanceof Error ? e.message : String(e)}`)
+      setSaveMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
       setSaving(false)
     }
@@ -90,8 +90,10 @@ export default function SchemaMigrationsPage() {
       )}
 
       {saveMsg && (
-        <div className={`text-sm p-3 rounded-lg border ${saveMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'}`} role="alert">
-          {saveMsg}
+        <div className={`text-sm p-3 rounded-lg border ${
+          saveMsg.type === 'error' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'
+        }`} role="alert">
+          {saveMsg.text}
         </div>
       )}
 

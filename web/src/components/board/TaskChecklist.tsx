@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react'
 import { Loader2, Plus, Trash2, CheckSquare } from 'lucide-react'
 import { api, type ChecklistItem } from '../../api'
 import { useToast } from '../../hooks/useToast'
+import { useConfirm } from '../ConfirmDialog'
 
 export function TaskChecklist({ taskId }: { taskId: string }) {
   const { addToast } = useToast()
+  const { confirm } = useConfirm()
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [newText, setNewText] = useState('')
@@ -55,7 +57,8 @@ export function TaskChecklist({ taskId }: { taskId: string }) {
   }
 
   const handleRemove = async (itemId: string) => {
-    if (!confirm('Remove this checklist item?')) return
+    const ok = await confirm({ title: 'Remove Item', message: 'Remove this checklist item?', confirmLabel: 'Remove', variant: 'danger' })
+    if (!ok) return
     setChecklist(prev => prev.filter(i => i.id !== itemId))
     try {
       await api.checklist.remove(taskId, itemId)

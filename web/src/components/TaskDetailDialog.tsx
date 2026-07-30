@@ -3,6 +3,7 @@ import { Plus, Loader2, Trash2, Play, CheckCircle2,
   Ban, RotateCcw, Link,
   Cpu, History, GitBranch, ExternalLink, X, Github,
   Tag, Archive,
+  User, Undo2, Wrench, Bot, RefreshCw, ClipboardList, Calendar, Pencil, PlusCircle,
 } from 'lucide-react'
 import { api, type KanbanLabel, type LogEntry } from '../api'
 import { type Task } from '../hooks/useRealtimeTasks'
@@ -10,6 +11,8 @@ import { Link as RouterLink } from 'react-router-dom'
 import { PRIORITY_LABELS, PRIORITY_COLORS, STATUS_LABELS } from './constants'
 import { TaskComments } from './board/TaskComments'
 import { TaskChecklist } from './board/TaskChecklist'
+import { useToast } from '../hooks/useToast'
+import { useConfirm } from './ConfirmDialog'
 
 /** Convert epoch ms to YYYY-MM-DD for a date input. */
 function epochMsToDateInput(ms: number | null | undefined): string {
@@ -32,6 +35,7 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(epochMsToDateInput(dueBy))
   const [saving, setSaving] = useState(false)
+  const { addToast } = useToast()
 
   const handleSave = async () => {
     setSaving(true)
@@ -40,7 +44,7 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
       await api.tasks.update(taskId, { due_by: ms ?? null })
       setEditing(false)
     } catch (e: unknown) {
-      alert(`Failed to update due date: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Failed to update due date: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -53,7 +57,7 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
       setValue('')
       setEditing(false)
     } catch (e: unknown) {
-      alert(`Failed to clear due date: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Failed to clear due date: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(false)
     }
@@ -72,7 +76,7 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
         <button onClick={() => { setEditing(false); setValue(epochMsToDateInput(dueBy)) }}
           aria-label="Cancel"
           className="text-[10px] px-1.5 py-1 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors"
-        ><span aria-hidden="true">✕</span></button>
+        ><X className="w-3 h-3" /></button>
       </div>
     )
   }
@@ -92,16 +96,16 @@ function DueDateEditor({ taskId, dueBy, taskStatus }: { taskId: string; dueBy?: 
     <div className="flex items-center gap-1">
       <span className={`text-xs ${overdue ? 'text-red-400 font-medium' : 'text-[var(--color-muted-foreground)]'}`}
         title={new Date(dueBy).toLocaleString()}>
-        <span aria-hidden="true">📅</span> {new Date(dueBy).toLocaleDateString()}
+        <Calendar className="w-3 h-3 inline mr-0.5 text-[var(--color-muted)]" /> {new Date(dueBy).toLocaleDateString()}
       </span>
       <button onClick={() => { setEditing(true); setValue(epochMsToDateInput(dueBy)) }}
         aria-label="Edit due date"
         className="text-[10px] text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
-      ><span aria-hidden="true">✏️</span></button>
+      ><Pencil className="w-3 h-3" /></button>
       <button onClick={handleClear} disabled={saving}
         aria-label="Clear due date"
         className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
-      ><span aria-hidden="true">✕</span></button>
+      ><X className="w-3 h-3" /></button>
     </div>
   )
 }
@@ -132,6 +136,11 @@ export function TaskDetailDialog({
   const [loadingIssue, setLoadingIssue] = useState(true)
   const [currentLabelIds, setCurrentLabelIds] = useState<Set<string>>(new Set())
   const [labelSaving, setLabelSaving] = useState(false)
+  const [showIssueForm, setShowIssueForm] = useState(false)
+  const [issueRepo, setIssueRepo] = useState('')
+  const [issueLabels, setIssueLabels] = useState('')
+  const { addToast } = useToast()
+  const { confirm } = useConfirm()
 
   const task = tasks.find(t => t.id === taskId)
   const downstream = tasks.filter(t => t.dependsOn === taskId)
@@ -173,16 +182,22 @@ export function TaskDetailDialog({
       await api.labels.setForTask(taskId, { label_ids: [...next] })
       setCurrentLabelIds(next)
     } catch (e: unknown) {
-      alert(`Failed to update labels: ${e instanceof Error ? e.message : String(e)}`)
+      addToast('❌', `Failed to update labels: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setLabelSaving(false)
     }
   }
 
-  const actionIcons: Record<string, string> = {
-    created: '🆕', claimed: '👤', unclaimed: '↩️', completed: '✅',
-    blocked: '🚧', dependency_set: '🔗', skills_set: '🛠️',
-    agent_registered: '🤖', agent_reconnected: '🔄',
+  const actionIcons: Record<string, React.ReactNode> = {
+    created: <PlusCircle className="w-3.5 h-3.5 inline" aria-hidden="true" />,
+    claimed: <User className="w-3.5 h-3.5 inline" aria-hidden="true" />,
+    unclaimed: <Undo2 className="w-3.5 h-3.5 inline" aria-hidden="true" />,
+    completed: <CheckCircle2 className="w-3.5 h-3.5 inline" aria-hidden="true" />,
+    blocked: <Ban className="w-3.5 h-3.5 inline" aria-hidden="true" />,
+    dependency_set: <Link className="w-3.5 h-3.5 inline" aria-hidden="true" />,
+    skills_set: <Wrench className="w-3.5 h-3.5 inline" aria-hidden="true" />,
+    agent_registered: <Bot className="w-3.5 h-3.5 inline" aria-hidden="true" />,
+    agent_reconnected: <RefreshCw className="w-3.5 h-3.5 inline" aria-hidden="true" />,
   }
 
   if (!task) return (
@@ -340,23 +355,49 @@ export function TaskDetailDialog({
                 </a>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="space-y-2">
                 <p className="text-xs text-[var(--color-muted)]">No GitHub issue linked</p>
-                <button onClick={async () => {
-                  const repo = task.repo || prompt('GitHub repo (owner/repo):')
-                  if (!repo) return
-                  const labels = prompt('Labels (optional, comma-separated):') || ''
-                  try {
-                    const result = await api.issues.create(task.id, repo, labels)
-                    setIssueLink({ html_url: result.html_url, issue_number: result.issue_number, repo })
-                  } catch (e: unknown) {
-                    alert(`Failed to create issue: ${e instanceof Error ? e.message : String(e)}`)
-                  }
-                }}
-                  className="text-xs px-2 py-1 rounded bg-[var(--color-primary)] text-white hover:bg-blue-600 transition-colors ml-auto"
-                >
-                  <Plus className="w-3 h-3 inline mr-0.5" /> Create Issue
-                </button>
+                {!showIssueForm ? (
+                  <button onClick={() => { setShowIssueForm(true); setIssueRepo(task.repo || ''); setIssueLabels('') }}
+                    className="text-xs px-2 py-1 rounded bg-[var(--color-primary)] text-white hover:bg-blue-600 transition-colors"
+                  >
+                    <Plus className="w-3 h-3 inline mr-0.5" /> Create Issue
+                  </button>
+                ) : (
+                  <div className="space-y-2 p-3 rounded bg-[var(--color-background)] border border-[var(--color-border)]">
+                    <input
+                      value={issueRepo}
+                      onChange={e => setIssueRepo(e.target.value)}
+                      placeholder="GitHub repo (owner/repo)"
+                      className="w-full px-2 py-1.5 text-xs rounded bg-[var(--color-background)] border border-[var(--color-border)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ring)]"
+                      autoFocus
+                    />
+                    <input
+                      value={issueLabels}
+                      onChange={e => setIssueLabels(e.target.value)}
+                      placeholder="Labels (optional, comma-separated)"
+                      className="w-full px-2 py-1.5 text-xs rounded bg-[var(--color-background)] border border-[var(--color-border)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ring)]"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button onClick={async () => {
+                        const repo = issueRepo.trim()
+                        if (!repo) { addToast('❌', 'Repository name is required'); return }
+                        try {
+                          const result = await api.issues.create(task.id, repo, issueLabels.trim())
+                          setIssueLink({ html_url: result.html_url, issue_number: result.issue_number, repo })
+                          setShowIssueForm(false)
+                        } catch (e: unknown) {
+                          addToast('❌', `Failed to create issue: ${e instanceof Error ? e.message : String(e)}`)
+                        }
+                      }}
+                        className="text-xs px-2 py-1 rounded bg-[var(--color-primary)] text-white hover:bg-blue-600 transition-colors"
+                      ><Plus className="w-3 h-3 inline mr-0.5" /> Create</button>
+                      <button onClick={() => setShowIssueForm(false)}
+                        className="text-xs px-2 py-1 rounded text-[var(--color-muted)] hover:bg-white/10 transition-colors"
+                      >Cancel</button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -415,7 +456,7 @@ export function TaskDetailDialog({
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {logs.map((log: LogEntry) => (
                   <div key={log.id} className="flex items-start gap-2 py-1.5 border-b border-[var(--color-border)] last:border-0">
-                    <span aria-hidden="true" className="text-sm shrink-0">{actionIcons[log.action] || '📋'}</span>
+                    <span className="shrink-0">{actionIcons[log.action] || <ClipboardList className="w-3.5 h-3.5 text-[var(--color-muted)]" />}</span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-medium capitalize">{log.action.replace(/_/g, ' ')}</span>
@@ -450,7 +491,7 @@ export function TaskDetailDialog({
               <button onClick={() => onSetSkills(task.id)}
                 className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
               ><Cpu className="w-3 h-3" /> Set Skills</button>
-              <button onClick={() => { if (confirm('Delete this task?')) onDelete(task.id) }}
+              <button onClick={async () => { const ok = await confirm({ title: 'Delete Task', message: 'Delete this task?', confirmLabel: 'Delete', variant: 'danger' }); if (ok) onDelete(task.id) }}
                 className="text-xs px-3 py-1.5 rounded text-red-400 hover:bg-red-500/20 transition-colors ml-auto"
               ><Trash2 className="w-3 h-3" /> Delete</button>
             </>
@@ -480,7 +521,7 @@ export function TaskDetailDialog({
                   className="flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-white/10 text-[var(--color-muted-foreground)] hover:bg-white/15 transition-colors"
                 ><Archive className="w-3 h-3" /> Archive</button>
               )}
-              <button onClick={() => { if (confirm('Delete this task?')) onDelete(task.id) }}
+              <button onClick={async () => { const ok = await confirm({ title: 'Delete Task', message: 'Delete this task?', confirmLabel: 'Delete', variant: 'danger' }); if (ok) onDelete(task.id) }}
                 className="flex items-center gap-1 text-xs px-3 py-1.5 rounded text-red-400 hover:bg-red-500/20 transition-colors ml-auto"
               ><Trash2 className="w-3 h-3" /> Delete</button>
             </>

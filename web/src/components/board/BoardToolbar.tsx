@@ -1,7 +1,7 @@
 import type { Ref } from 'react'
 import {
   Plus, Wifi, WifiOff, Lightbulb, Users, Search, Download,
-  CheckSquare, LayoutGrid, List, SlidersHorizontal, Save,
+  CheckSquare, LayoutGrid, List, SlidersHorizontal, Save, Map,
 } from 'lucide-react'
 
 interface BoardToolbarProps {
@@ -141,11 +141,11 @@ export function BoardToolbar({
             }`}
             title="Table / list view"
             aria-label="Table / list view"
-          ><span className="text-[11px] font-mono font-bold">≡</span></button>
+          ><List className="w-3 h-3" /></button>
         </div>
         <button onClick={onShowGraph}
           className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-violet-500/15 text-violet-400 hover:bg-violet-500/30 transition-colors"
-        ><span aria-hidden="true" className="text-sm">🗺️</span> Graph</button>
+        ><Map className="w-3.5 h-3.5" /> Graph</button>
         <button onClick={onSeed}
           className="text-xs px-2.5 py-1.5 rounded bg-white/5 text-[var(--color-muted-foreground)] hover:bg-white/10 transition-colors hidden sm:inline-block"
         >Seed</button>

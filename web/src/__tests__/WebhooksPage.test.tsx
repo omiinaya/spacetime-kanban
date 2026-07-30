@@ -43,6 +43,13 @@ vi.mock('../hooks/useToast', () => ({
   })),
 }))
 
+// Mock ConfirmDialog — useConfirm resolves to true by default (accepted)
+const mockConfirm = vi.hoisted(() => vi.fn().mockResolvedValue(true))
+vi.mock('../components/ConfirmDialog', () => ({
+  useConfirm: () => ({ confirm: mockConfirm }),
+  ConfirmProvider: ({ children }: any) => <>{children}</>,
+}))
+
 import { api } from '../api'
 import WebhooksPage from '../pages/WebhooksPage'
 
@@ -189,8 +196,9 @@ describe('WebhooksPage', () => {
       // Click the delete button
       fireEvent.click(screen.getByTitle('Delete'))
 
-      expect(window.confirm).toHaveBeenCalledWith('Remove this webhook?')
-      expect(api.webhooks.delete).toHaveBeenCalledWith('wh-1')
+      await waitFor(() => {
+        expect(api.webhooks.delete).toHaveBeenCalledWith('wh-1')
+      })
 
       // The component reloads the list after deletion
       await waitFor(() => {
@@ -199,8 +207,7 @@ describe('WebhooksPage', () => {
     })
 
     it('does not delete when confirm is cancelled', async () => {
-      vi.stubGlobal('confirm', vi.fn(() => false))
-
+      mockConfirm.mockResolvedValueOnce(false)
       const webhooks = [makeWebhook({ id: 'wh-1' })]
       api.webhooks.list.mockResolvedValue(webhooks)
       renderPage()
@@ -209,7 +216,8 @@ describe('WebhooksPage', () => {
 
       fireEvent.click(screen.getByTitle('Delete'))
 
-      expect(window.confirm).toHaveBeenCalledWith('Remove this webhook?')
+      // Since confirm returned false, the delete should not be called
+      await new Promise(r => setTimeout(r, 50))
       expect(api.webhooks.delete).not.toHaveBeenCalled()
 
       // List should NOT have been called again
