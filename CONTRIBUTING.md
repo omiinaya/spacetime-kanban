@@ -1,81 +1,170 @@
-# Contributing to SpacetimedbKanban
+# Contributing to spacetimedb-kanban
 
-Thank you for your interest! This is an atomic multi-agent kanban board built on SpacetimeDB.
+Thank you for your interest! This is an atomic multi-agent kanban board built on SpacetimeDB — a shared task coordination system for AI coding agents.
 
 ## Getting Started
+
+### Prerequisites
+- Python 3.11+
+- Node.js 20+
+- Docker & Docker Compose (for SpacetimeDB)
+- Rust toolchain with `wasm32-unknown-unknown` target (for STDB module builds)
+- SpacetimeDB CLI v2.6.1
+
+### Development Setup
 
 ```bash
 git clone https://github.com/omiinaya/spacetimedb-kanban.git
 cd spacetimedb-kanban
 
-# Backend
+# ── Backend ──
 cd server
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
+pip install -e .           # installs dev dependencies too
+cp .env.example .env       # review and edit
+python3 main.py            # starts FastAPI on :8727
 
-# Start server (port 8727)
-python3 main.py
-```
-
-The frontend is pre-built as part of the backend serve — the server at `:8727` serves both the API and the static frontend files from `web/dist/`. For frontend development:
-
-```bash
+# ── Frontend (development mode) ──
 cd web
 npm install
-npm run dev     # Vite dev server at :5189
+npm run dev                 # Vite dev server on :4444 (hot-reload)
+
+# ── SpacetimeDB (Docker) ──
+cd ..                      # project root
+docker compose up -d spacetime   # start STDB only
+spacetime publish spacetimedb-kanban -y  # publish WASM module from server/
 ```
 
-## AI Agent Contributors
-
-This project is specifically designed for AI coding agents. Before starting work, read [AGENTS.md](./AGENTS.md) for the full API reference, task lifecycle, and claiming workflow. For Claude Code specifically, see [CLAUDE.md](./CLAUDE.md).
+For full Docker setup (STDB + backend):
+```bash
+docker compose up -d        # starts both services
+```
 
 ## Project Structure
 
-- **server/** — FastAPI backend (port 8727), REST API for task CRUD and claiming
-  - `server/main.py` — Application entrypoint
-  - `server/routes/` — Route handlers (13 modules)
-  - `server/tests/` — Test suite (387 tests)
-  - `server/spacetimedb/` — Rust STDB module (WASM)
-- **web/** — React + shadcn kanban board UI (Vite port 5189)
-  - `web/src/` — Source code
-  - `web/dist/` — Build output (served by backend)
-- **bin/** — CLI tools (`kanban`, `check-branch`)
-
-## Commit Messages
-
 ```
-type: concise subject
+spacetimedb-kanban/
+├── server/               # Python FastAPI backend
+│   ├── main.py           # App entry point, static file serving
+│   ├── config.py         # Pydantic settings (all env vars)
+│   ├── scheduler.py      # Background scheduler loops (12 loops)
+│   ├── routes/           # REST API route modules (15 files)
+│   ├── workers/          # Worker subprocess management
+│   ├── mcp_server.py     # MCP stdio server (36 tools)
+│   ├── issue_sync.py     # GitHub issue sync logic
+│   ├── sessions/         # Session management
+│   ├── scanners/         # Repo improvement scanners
+│   └── tests/            # Test suite (449 tests)
+├── web/                  # React + Vite + shadcn frontend
+│   ├── src/pages/        # Page components (14 pages)
+│   ├── src/components/   # Shared UI components (skeletons, columns, etc.)
+│   └── src/__tests__/    # Vitest test suite (188 tests)
+├── docker-compose.yml    # STDB + backend orchestration
+├── Dockerfile            # Multi-stage build (frontend + backend)
+└── bin/                  # CLI tools
 ```
 
-Types: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `test:`, `style:`, `perf:`
+## Development Workflow
 
-## Quality Gates (run before pushing)
+### Backend
 
 ```bash
-# Backend
 cd server
-python3 -m pytest tests/ -x --tb=short
-python3 -m ruff check .
-python3 -m ruff format --check .
+source .venv/bin/activate
 
-# STDB module
+# Run tests
+python -m pytest -q                             # all non-e2e tests
+python -m pytest tests/test_api.py -x --tb=long  # API tests with debug
+
+# Type checking
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy .                                 # if configured
+
+# Run server
+python main.py                                   # :8727
+```
+
+### Frontend
+
+```bash
+cd web
+npm run dev            # Vite dev :4444 (hot-reload, proxy to :8727)
+npm run test           # Vitest (188 tests)
+npx tsc --noEmit       # Type check
+npm run build          # Production build -> dist/
+```
+
+### STDB Module (Rust WASM)
+
+```bash
+cd server/spacetimedb
+cargo check
+cargo clippy -- -D warnings
+spacetime publish spacetimedb-kanban -y   # publish module
+```
+
+### Quality Gates (run before pushing)
+
+```bash
+# ── Python ──
+cd server && source .venv/bin/activate
+python -m pytest -q --tb=short -k "not test_api and not e2e"
+python -m ruff check .
+python -m ruff format --check .
+
+# ── Frontend ──
+cd web
+npx tsc --noEmit
+npm run build
+npm run test
+
+# ── STDB Module ──
 cd server/spacetimedb
 cargo check
 cargo clippy -- -D warnings
 
-# Frontend
-cd web
-npx tsc --noEmit
-npm run build
+# ── Push ──
+cd ../..
+git push
 ```
 
-## AI Agent Guidelines
+### Code Conventions
 
-1. Always check the kanban before starting work
-2. Claim a task atomically — 409 means another agent got it
-3. Follow the branch convention: `{type}/kanban-{task_id}--{slug}`
-4. Update task status as you progress
-5. Release promptly if blocked
-6. Run all quality gates before pushing
+- Python: follows ruff rules (E,F,W,I,N,UP,B,SIM,S), line length 100, double quotes
+- TypeScript: strict mode, no unchecked index access
+- Git identity: `omiinaya <omiinaya@gmail.com>`
+- Commit format: `type: concise subject` (types: feat, fix, docs, refactor, chore, test, style, perf)
+- Branch format: `{type}/kanban-{task_id}--{slug}`
+
+## For AI Agent Contributors
+
+This project is specifically designed for AI coding agents to coordinate work on a shared roadmap.
+
+1. **Read [AGENTS.md](./AGENTS.md)** first — complete agent onboarding with API reference, state machine, and conventions
+2. **Read [CLAUDE.md](./CLAUDE.md)** if you're Claude Code
+3. **Always check the kanban** before starting work
+4. **Claim a task atomically** — `POST /api/tasks/{id}/claim` returns 409 if another agent took it
+5. **Follow branch convention** — `{type}/kanban-{task_id}--{slug}`
+6. **Update task status** as you progress
+7. **Release promptly** if blocked
+
+## Documentation Index
+
+| Document | Purpose |
+|---|---|
+| [README.md](./README.md) | Project overview, features, quick start |
+| [INSTALL.md](./INSTALL.md) | Full installation guide (Docker, manual, production) |
+| [CONFIGURATION.md](./CONFIGURATION.md) | All environment variables explained |
+| [API.md](./API.md) | Complete REST API reference |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | System architecture, data flow, design decisions |
+| [MCP.md](./MCP.md) | MCP server docs for Hermes integration |
+| [AGENTS.md](./AGENTS.md) | AI agent onboarding and workflow |
+| [SETUP.md](./SETUP.md) | Agent CLI setup and branch hooks |
+| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Common issues and solutions |
+| [ROADMAP.md](./ROADMAP.md) | Development roadmap and phase tracking |
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
