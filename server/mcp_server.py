@@ -15,8 +15,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import quote, urljoin
 
-from mcp.server.mcpserver import MCPServer
-from mcp.server.mcpserver.tools import Tool
+from mcp.server.fastmcp import FastMCP
 
 API_BASE = os.environ.get("KANBAN_API", "http://localhost:8727")
 
@@ -522,46 +521,48 @@ async def kanban_remove_checklist_item(task_id: str, item_id: str) -> str:
 
 # ── Build Tool Registration ──────────────────────────────────────────────
 
-_tools = [
-    Tool.from_function(kanban_list_tasks),
-    Tool.from_function(kanban_get_task),
-    Tool.from_function(kanban_create_task),
-    Tool.from_function(kanban_update_task),
-    Tool.from_function(kanban_claim),
-    Tool.from_function(kanban_complete),
-    Tool.from_function(kanban_block),
-    Tool.from_function(kanban_block_with_reason),
-    Tool.from_function(kanban_split_task),
-    Tool.from_function(kanban_unclaim),
-    Tool.from_function(kanban_delete_task),
-    Tool.from_function(kanban_set_dependency),
-    Tool.from_function(kanban_set_skills),
-    Tool.from_function(kanban_suggest),
-    Tool.from_function(kanban_list_agents),
-    Tool.from_function(kanban_register_agent),
-    Tool.from_function(kanban_heartbeat),
-    Tool.from_function(kanban_set_capabilities),
-    Tool.from_function(kanban_list_projects),
-    Tool.from_function(kanban_add_project),
-    Tool.from_function(kanban_update_project),
-    Tool.from_function(kanban_delete_project),
-    Tool.from_function(kanban_suggest_by_project),
-    Tool.from_function(kanban_add_log),
-    Tool.from_function(kanban_get_logs),
-    Tool.from_function(kanban_issue_link),
-    Tool.from_function(kanban_issue_create),
-    Tool.from_function(kanban_issue_status),
-    Tool.from_function(kanban_issue_list),
-    Tool.from_function(kanban_add_comment),
-    Tool.from_function(kanban_list_comments),
-    Tool.from_function(kanban_delete_comment),
-    Tool.from_function(kanban_add_checklist_item),
-    Tool.from_function(kanban_list_checklist),
-    Tool.from_function(kanban_toggle_checklist_item),
-    Tool.from_function(kanban_remove_checklist_item),
-]
+app = FastMCP("spacetimedb-kanban")
 
-app = MCPServer("spacetimedb-kanban", tools=_tools)
+# Register all tools
+for fn in [
+    kanban_list_tasks,
+    kanban_get_task,
+    kanban_create_task,
+    kanban_update_task,
+    kanban_claim,
+    kanban_complete,
+    kanban_block,
+    kanban_block_with_reason,
+    kanban_split_task,
+    kanban_unclaim,
+    kanban_delete_task,
+    kanban_set_dependency,
+    kanban_set_skills,
+    kanban_suggest,
+    kanban_list_agents,
+    kanban_register_agent,
+    kanban_heartbeat,
+    kanban_set_capabilities,
+    kanban_list_projects,
+    kanban_add_project,
+    kanban_update_project,
+    kanban_delete_project,
+    kanban_suggest_by_project,
+    kanban_add_log,
+    kanban_get_logs,
+    kanban_issue_link,
+    kanban_issue_create,
+    kanban_issue_status,
+    kanban_issue_list,
+    kanban_add_comment,
+    kanban_list_comments,
+    kanban_delete_comment,
+    kanban_add_checklist_item,
+    kanban_list_checklist,
+    kanban_toggle_checklist_item,
+    kanban_remove_checklist_item,
+]:
+    app.add_tool(fn)
 
 
 # ── Main entry point ─────────────────────────────────────────────────────
