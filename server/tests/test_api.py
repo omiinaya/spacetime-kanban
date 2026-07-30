@@ -3016,3 +3016,261 @@ async def test_create_issue_from_task_success(client, mock_all):
     data = resp.json()
     assert data["status"] == "created"
     assert data["issue_number"] == 100
+
+
+# ════════════════════════════════════════════════════════════════════════
+# ═══ TASK ROUTE EDGE CASES — suggest, clear, bulk, block variants ════
+# ════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_suggest_tasks_empty(client, mock_all):
+    """GET /api/tasks/suggest should return empty list when no tasks."""
+    mock_all["sql"].return_value = []
+    resp = await client.get("/api/tasks/suggest", params={"limit": 5})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
+@pytest.mark.asyncio
+async def test_suggest_tasks_with_data(client, mock_all):
+    """GET /api/tasks/suggest should return scored tasks."""
+    mock_all["sql"].return_value = [
+        _make_task("t1", "High priority", priority=0, repo="sample-repo-q"),
+        _make_task("t2", "Low priority", priority=5, repo="other"),
+    ]
+    resp = await client.get("/api/tasks/suggest", params={"limit": 5})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) <= 2
+    for item in data:
+        assert "task" in item
+        assert "score" in item
+        assert "reason" in item
+
+
+@pytest.mark.asyncio
+async def test_suggest_tasks_with_agent(client, mock_all):
+    """GET /api/tasks/suggest with agent_id should attempt capability matching."""
+    mock_all["sql"].return_value = [
+        _make_task("t1", "Task A", priority=0, repo="test"),
+    ]
+    mock_all["param"].return_value = [
+        {"capabilities": "python,typescript"},
+    ]
+    resp = await client.get("/api/tasks/suggest", params={"agent_id": "agent-1", "limit": 5})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+
+
+@pytest.mark.asyncio
+async def test_clear_all_tasks_success(client, mock_all):
+    """POST /api/tasks/clear should delete all tasks."""
+    mock_all["sql"].return_value = [
+        {"id": "task_1"},
+        {"id": "task_2"},
+    ]
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post("/api/tasks/clear")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "cleared"
+    assert data["deleted"] == 2
+
+
+@pytest.mark.asyncio
+async def test_clear_all_tasks_empty(client, mock_all):
+    """POST /api/tasks/clear with no tasks should return 0 deleted."""
+    mock_all["sql"].return_value = []
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post("/api/tasks/clear")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["deleted"] == 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_action_claim(client, mock_all):
+    """POST /api/tasks/bulk with claim action should claim tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [_make_task("task_1", "Test", status="in_progress")]
+    resp = await client.post(
+        "/api/tasks/bulk",
+        json={"action": "claim", "task_ids": ["task_1"], "agent_id": "test-agent"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["results"][0]["status"] == "claimed"
+
+
+@pytest.mark.asyncio
+async def test_bulk_action_complete(client, mock_all):
+    """POST /api/tasks/bulk with complete action should complete tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [_make_task("task_1", "Test", status="done")]
+    resp = await client.post(
+        "/api/tasks/bulk",
+        json={"action": "complete", "task_ids": ["task_1"], "result_notes": "Done!"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_bulk_action_block(client, mock_all):
+    """POST /api/tasks/bulk with block action should block tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].side_effect = [
+        [_make_task("task_1", "Test", status="in_progress")],
+        [_make_task("task_1", "Test", status="blocked")],
+    ]
+    resp = await client.post(
+        "/api/tasks/bulk",
+        json={"action": "block", "task_ids": ["task_1"], "reason": "Blocked for testing"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_bulk_action_unclaim(client, mock_all):
+    """POST /api/tasks/bulk with unclaim action should unclaim tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [_make_task("task_1", "Test", status="available")]
+    resp = await client.post(
+        "/api/tasks/bulk",
+        json={"action": "unclaim", "task_ids": ["task_1"]},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_bulk_action_delete(client, mock_all):
+    """POST /api/tasks/bulk with delete action should delete tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [_make_task("task_1", "Test")]
+    resp = await client.post(
+        "/api/tasks/bulk",
+        json={"action": "delete", "task_ids": ["task_1"]},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["results"][0]["status"] == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_bulk_action_unknown(client, mock_all):
+    """POST /api/tasks/bulk with unknown action should return error."""
+    resp = await client.post(
+        "/api/tasks/bulk",
+        json={"action": "invalid", "task_ids": ["task_1"]},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["results"][0]["status"] == "error"
+    assert "Unknown action" in data["results"][0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_permanent_block_task(client, mock_all):
+    """POST /api/tasks/{id}/permanent-block should block permanently."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [_make_task("task_1", "Test", status="blocked")]
+    resp = await client.post(
+        "/api/tasks/task_1/permanent-block",
+        json={"reason": "Cannot fix"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "permanently_blocked"
+    # Verify set_max_attempts was called (fail_count handling)
+    max_attempts_calls = [
+        c for c in mock_all["call"].call_args_list if c[0][0] == "set_max_attempts"
+    ]
+    assert len(max_attempts_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_set_max_attempts(client, mock_all):
+    """POST /api/tasks/{id}/max-attempts should update max attempts."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post(
+        "/api/tasks/task_1/max-attempts",
+        json={"max_attempts": 5},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["max_attempts"] == 5
+
+
+@pytest.mark.asyncio
+async def test_set_dependency(client, mock_all):
+    """POST /api/tasks/{id}/dependency should set a dependency."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post(
+        "/api/tasks/task_2/dependency",
+        json={"depends_on": "task_1"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["depends_on"] == "task_1"
+
+
+@pytest.mark.asyncio
+async def test_clear_dependency(client, mock_all):
+    """POST /api/tasks/{id}/dependency with empty string should clear."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post(
+        "/api/tasks/task_1/dependency",
+        json={"depends_on": ""},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["depends_on"] is None
+
+
+@pytest.mark.asyncio
+async def test_split_task(client, mock_all):
+    """POST /api/tasks/{id}/split should split task into children."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post(
+        "/api/tasks/task_1/split",
+        json={"child_titles": ["Child 1", "Child 2"]},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "split"
+    assert data["child_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_reset_fail_count(client, mock_all):
+    """POST /api/tasks/{id}/reset-fails should reset fail count."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post("/api/tasks/task_1/reset-fails")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "reset"
+
+
+@pytest.mark.asyncio
+async def test_add_task_log(client, mock_all):
+    """POST /api/tasks/{id}/log should add a log entry."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post(
+        "/api/tasks/task_1/log",
+        json={"action": "commented", "agent_id": "test", "notes": "Test comment"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "logged"
+    log_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "add_log"]
+    assert len(log_calls) == 1
