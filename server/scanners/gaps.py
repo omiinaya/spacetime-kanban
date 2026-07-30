@@ -108,6 +108,7 @@ def scan_test_gaps(repo_name: str, repo_path: str) -> list[dict]:
                     ),
                     "priority": 3,
                     "scanner": "test_gaps",
+                    "skip_verify": True,
                 }
             )
 
@@ -130,6 +131,7 @@ def scan_test_gaps(repo_name: str, repo_path: str) -> list[dict]:
                     ),
                     "priority": 3,
                     "scanner": "test_gaps",
+                    "skip_verify": True,
                 }
             )
 

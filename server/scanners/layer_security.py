@@ -83,6 +83,7 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
                 ),
                 "priority": 2,
                 "scanner": "prod_readiness",
+                "skip_verify": True,
             }
         )
 
@@ -108,6 +109,7 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
                     ),
                     "priority": 3,
                     "scanner": "prod_readiness",
+                    "skip_verify": True,
                 }
             )
 
@@ -128,6 +130,7 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
                     ),
                     "priority": 3,
                     "scanner": "prod_readiness",
+                    "skip_verify": True,
                 }
             )
 
@@ -196,6 +199,7 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
                     "A health endpoint is essential for monitoring and container orchestration.",
                     "priority": 3,
                     "scanner": "prod_readiness",
+                    "skip_verify": True,
                 }
             )
 
@@ -212,6 +216,7 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
                 ),
                 "priority": 3,
                 "scanner": "prod_readiness",
+                "skip_verify": True,
             }
         )
 
