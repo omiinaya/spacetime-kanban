@@ -1,63 +1,167 @@
 # spacetimedb-kanban
 
-**Atomic multi-agent kanban board** built on SpacetimeDB. Multiple AI agents can simultaneously grab tasks from a shared queue without conflicts.
+**Atomic multi-agent kanban board** — a shared task coordination system built on SpacetimeDB.  
+Multiple AI agents (or humans) can simultaneously discover, claim, complete, and manage tasks on a shared board without conflicts.
 
-## Architecture
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python)](server/pyproject.toml)
+[![TypeScript](https://img.shields.io/badge/typescript-5.6+-blue?logo=typescript)](web/tsconfig.json)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker)](docker-compose.yml)
 
-```
-SpacetimeDB (v2.6.1) — source of truth, atomic reducers
-     ↓
-FastAPI REST server (:8727) — HTTP bridge + scheduler loops + static frontend
-```
+---
 
-- **Single process** — server-side scheduler replaces all cron jobs. Scheduler loops (stale_watcher, dead_board_monitor, metrics_collector, task_dispatcher, template_trigger) run as asyncio background tasks inside the FastAPI process
-- **Atomic claim** — STDB's sequential reducer processing ensures only one agent can claim a task at a time
-- **No polling conflicts** — claim returns 409 if already taken, agent moves to next task
-- **Full audit log** — every claim/completion/block event is recorded
-- **Web dashboard** — React + shadcn UI served by FastAPI static files at port 8727
+## ✨ Features
 
-## Quick Start
+| Capability | Description |
+|---|---|
+| **Atomic task claiming** | STDB sequential reducers guarantee no two agents claim the same task |
+| **Full state machine** | `available → claimed → completed / blocked → unclaimed` with dependency enforcement |
+| **Self-healing scheduler** | Built-in loops handle stale task recovery, dead board detection, metrics, and task dispatch — no cron jobs needed |
+| **Web dashboard** | Full React + shadcn UI — board view, analytics, logs, labels, webhooks, agent health, and more |
+| **Hermes MCP integration** | Expose the entire kanban as MCP tools — Hermes agents claim and complete tasks natively |
+| **GitHub issue sync** | Link kanban tasks to GitHub issues, create issues from tasks, bidirectional status tracking |
+| **Webhook alerts** | Discord, Slack, Telegram, or custom webhook notifications on state changes |
+| **Branch validation** | Pre-push hooks enforce `feature/kanban-{task_id}` branch naming |
+| **Audit logging** | Every claim, completion, block, and state change is recorded with agent attribution and timestamps |
+| **REST API** | Full REST API for task CRUD, claiming, agent management, analytics, and more |
+| **Docker support** | One-command `docker compose up` with health-chained services |
+
+---
+
+## 🚀 Quick Start (Docker — 2 minutes)
 
 ```bash
-# Publish the STDB module
-cd server/spacetimedb
-spacetime publish spacetimedb-kanban -y
-
-# Start the API server (serves API + frontend)
-cd ..
-python3 main.py
+git clone https://github.com/omiinaya/spacetimedb-kanban.git
+cd spacetimedb-kanban
+cp server/.env.example server/.env   # review and edit
+docker compose up -d                  # starts STDB + backend
 ```
 
-> **Important:** Never use `--delete-data` when publishing — data loss is permanent. If you encounter auth issues, fix them by getting a server-issued token. See `ROADMAP.md` for details.
+Open [http://localhost:8727](http://localhost:8727) for the web dashboard.
 
-The server runs under the hermes-agent systemd service in production. For local dev, just run `python3 main.py` from `server/`.
+See [INSTALL.md](INSTALL.md) for manual setup, production deployment, and detailed options.
 
-## API Overview
+---
 
-| Endpoint | Method | Purpose |
+## 🏗️ Architecture at a Glance
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                    Docker / Host                             │
+│                                                              │
+│  ┌──────────────────┐     ┌──────────────────────────────┐  │
+│  │  SpacetimeDB      │     │  FastAPI Backend (:8727)      │  │
+│  │  (v2.6.1)         │◄────│  ┌────────────────────────┐  │  │
+│  │  HTTP :3001       │     │  │ Scheduler (asyncio)    │  │  │
+│  │  WS   :3002       │     │  │ ├ stale_watcher (120s) │  │  │
+│  │                   │     │  │ ├ dead_board_monitor   │  │  │
+│  │  Tables:          │     │  │ ├ metrics_collector    │  │  │
+│  │  ├ tasks          │     │  │ ├ task_dispatcher      │  │  │
+│  │  ├ task_logs      │     │  │ ├ template_trigger     │  │  │
+│  │  ├ agents         │     │  │ ├ zombie_cleaner       │  │  │
+│  │  ├ webhooks       │     │  │ ├ self_improver        │  │  │
+│  │  ├ labels         │     │  │ └ ... (7 more loops)   │  │  │
+│  │  ├ comments       │     │  ├────────────────────────┤  │  │
+│  │  ├ checklists     │     │  │ REST API (/api/*)      │  │  │
+│  │  ├ issues         │     │  │ Static Frontend (/)    │  │  │
+│  │  └ projects       │     │  │ MCP Server (stdio)     │  │  │
+│  │                   │     │  └────────────────────────┘  │  │
+│  └──────────────────┘     └──────────────────────────────┘  │
+│                                                              │
+│  ┌──────────────────┐     ┌──────────────────────────────┐  │
+│  │  Hermes Agent     │     │  Web Browser (:8727)         │  │
+│  │  (via MCP/API)    │────►│  React + shadcn UI          │  │
+│  └──────────────────┘     └──────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed data flow, scheduler reference, and component design.
+
+---
+
+## 📚 Documentation
+
+| Document | For | Covers |
 |---|---|---|
-| `/api/tasks` | GET | List tasks (filterable by status, repo) |
-| `/api/tasks` | POST | Create a new task |
-| `/api/tasks/{id}` | GET | Get task details |
-| `/api/tasks/{id}` | PATCH | Update task fields |
-| `/api/tasks/{id}/claim` | POST | **Atomically** claim a task |
-| `/api/tasks/{id}/unclaim` | POST | Release a task back to available |
-| `/api/tasks/{id}/complete` | POST | Mark task as done |
-| `/api/tasks/{id}/block` | POST | Mark task as blocked |
-| `/api/tasks/{id}/dependency` | POST | Set/clear a task dependency |
-| `/api/tasks/{id}/delete` | DELETE | Delete a task |
-| `/api/tasks/seed` | POST | Seed sample data |
-| `/api/roadmap/import` | POST | Bulk-import tasks from ROADMAP.md |
-| `/api/webhook/github` | POST | GitHub webhook for PR linking |
-| `/api/logs` | GET | List audit log entries |
-| `/api/agents` | GET | List active agents |
+| [INSTALL.md](INSTALL.md) | Everyone | Full install guide — Docker, manual, production |
+| [CONFIGURATION.md](CONFIGURATION.md) | Operators | All environment variables, STDB config, scheduler tuning |
+| [API.md](API.md) | Developers | Complete REST API reference with examples |
+| [MCP.md](MCP.md) | Hermes Users | MCP server setup, tool reference, agent integration |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Contributors | System design, data flow, component reference |
+| [AGENTS.md](AGENTS.md) | AI Agents | Agent onboarding — task lifecycle, claiming, conventions |
+| [SETUP.md](SETUP.md) | CLI Users | Agent CLI setup, branch hooks, workflow |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Everyone | Common issues and solutions |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contributors | Development setup, testing, PR workflow |
 
-See [AGENTS.md](AGENTS.md) for the full agent API guide with state machine and conventions.
+---
 
-## Cleanup — Legacy Cron Scripts
+## 📦 Project Structure
 
-The following scripts have been replaced by the server-side scheduler and are removed:
+```
+spacetimedb-kanban/
+├── server/               # Python FastAPI backend
+│   ├── main.py           # App entry point, static file serving
+│   ├── config.py         # Pydantic settings (all env vars)
+│   ├── models.py         # Pydantic data models
+│   ├── auth.py           # API key authentication
+│   ├── shared.py         # STDB connection helpers
+│   ├── scheduler.py      # All background scheduler loops
+│   ├── mcp_server.py     # MCP stdio server (36 tools)
+│   ├── issue_sync.py     # GitHub issue sync logic
+│   ├── routes/           # FastAPI route modules
+│   │   ├── __init__.py
+│   │   ├── tasks.py      # Task CRUD + state machine
+│   │   ├── agents.py     # Agent registration, heartbeat
+│   │   ├── analytics.py  # Analytics endpoints
+│   │   ├── ops.py        # Health, schema migrations
+│   │   └── webhooks.py   # Webhook CRUD + dispatch
+│   └── workers/          # Worker subprocess management
+│       ├── base.py       # Base worker class
+│       ├── llm.py        # LLM-driven workers
+│       ├── run.py        # Worker entry point
+│       └── mechanical/   # Regex-based mechanical workers
+├── web/                  # React + Vite frontend
+│   └── src/
+│       ├── App.tsx       # Root component + routing
+│       ├── pages/        # Page components (14 pages)
+│       ├── components/   # Shared UI components
+│       ├── hooks/        # Custom React hooks
+│       └── api.ts        # API client
+├── docker-compose.yml    # STDB + backend orchestration
+├── Dockerfile            # Multi-stage build
+├── docker-entrypoint.sh  # Container entrypoint
+└── bin/                  # CLI utilities
+    ├── kanban            # kanban CLI binary
+    └── check-branch      # Branch name validator
+```
 
-- `server/watchdog.py` — replaced by `scheduler.stale_watcher` (120s loop)
-- `server/kanban_heartbeat.py` — replaced by agent heartbeat API + scheduler
-- `server/kanban_improver.py` — replaced by scheduler dispatcher + worker spawning
+---
+
+## 🧪 Test Summary
+
+| Layer | Tests | Status |
+|---|---|---|
+| Python backend | 449 + 12 skipped | ✅ |
+| Frontend (Vitest) | 188 | ✅ |
+| E2E (Playwright) | — | ⚪ Requires STDB |
+| TypeScript (tsc) | Clean | ✅ |
+| Ruff lint | 72 files clean | ✅ |
+| Pre-commit hooks | Ruff check + format | ✅ |
+
+---
+
+## 🔗 Related Projects
+
+- [sample-repo-n](https://github.com/omiinaya/sample-repo-n) — LLM proxy with STDB memory
+- [sample-repo-q](https://github.com/omiinaya/sample-repo-q) — Flight search engine
+- [sample-repo-p](https://github.com/omiinaya/sample-repo-p) — DNS ad-blocker
+
+---
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE).
+
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, testing, and PR guidelines.

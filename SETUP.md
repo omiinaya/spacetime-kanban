@@ -1,22 +1,26 @@
-# Setup — for agents
+# Setup — Agent CLI Guide
 
-This document tells any AI agent (or human) how to install and configure the kanban coordination system. Follow these steps in order.
+This document tells AI agents (and humans) how to install the `kanban` CLI tool, configure their identity, set up branch validation hooks, and follow the task workflow.
+
+**For full project installation (Docker, manual, production), see [INSTALL.md](./INSTALL.md).**
+
+---
 
 ## Prerequisites
 
-- Python 3.10+
-- Access to the kanban server at `localhost:8727` (the API server must be running)
-- Git (for hook installation)
+- Python 3.11+ (for the backend — the CLI is standalone)
+- Access to a running kanban server at `localhost:8727`
+- Git (for branch hook installation)
 
 ## Step 1: Install the CLI
 
 ```bash
-# Clone the repo
+# Clone the repo (or copy bin/kanban from an existing clone)
 git clone https://github.com/omiinaya/spacetimedb-kanban.git
 cd spacetimedb-kanban
 
 # Install the kanban CLI to PATH
-cp kanban ~/.local/bin/
+cp bin/kanban ~/.local/bin/
 chmod +x ~/.local/bin/kanban
 ```
 
@@ -32,23 +36,22 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-## Step 2: Configure your identity
+## Step 2: Configure Your Identity
 
 The CLI auto-detects your agent ID from:
 1. `KANBAN_AGENT_ID` environment variable (highest priority)
 2. Output of `whoami`
-3. `git config user.name` (lowercased, spaces→hyphens)
+3. `git config user.name` (lowercased, spaces → hyphens)
 
-Set it explicitly if needed:
+Set it explicitly:
 ```bash
-export KANBAN_AGENT_ID=claude-vscode
-# or
-export KANBAN_AGENT_ID=hermes
+export KANBAN_AGENT_ID=claude-vscode   # for Claude in VS Code
+export KANBAN_AGENT_ID=hermes          # for Hermes Agent
 ```
 
 Add to `~/.bashrc` to persist.
 
-## Step 3: Verify connectivity
+## Step 3: Verify Connectivity
 
 ```bash
 kanban info
@@ -60,13 +63,12 @@ Expected output:
 Repo: spacetimedb-kanban
 Agent: your-agent-name
 
-You have no tasks in progress.
-Run:  kanban list --status=available
+No tasks matching filters.
 ```
 
-If you see connection errors, the API server at `localhost:8727` may not be running.
+If you see connection errors, ensure the API server is running on `localhost:8727`.
 
-## Step 4: Opt in a repo for branch validation (per-repo)
+## Step 4: Install Branch Hooks (per repo)
 
 Only do this for repos that participate in the kanban coordination:
 
@@ -75,31 +77,30 @@ cd ~/sample-repo-p   # the repo you want to protect
 kanban install-hooks
 ```
 
-This writes a `pre-push` hook to `.git/hooks/pre-push` that validates every branch name against the kanban on push. To remove:
+This installs a `pre-push` hook that validates every branch name against the kanban before push. To remove:
 
 ```bash
 cd ~/sample-repo-p
 kanban uninstall-hooks
 ```
 
-The hook only runs `kanban check-branch` — it does nothing else. Main/master branches are skipped.
-
-## Step 5: Workflow
+## Step 5: Task Workflow
 
 ```bash
-# See what's available
+# See what's available in your repo
 kanban list --status=available --repo=sample-repo-p
 
-# Claim a task (atomic — fails if another agent already grabbed it)
+# Claim a task (atomic — fails with 409 if another agent already grabbed it)
 kanban claim task_1748397912_abc12345
 
 # Create a branch referencing the task
 git checkout -b "feature/kanban-task_1748397912_abc12345--my-feature"
 
 # Do the work, commit, push
+# The pre-push hook auto-validates the branch name
 
-# Mark complete
-kanban complete task_1748397912_abc12345 --notes="Implemented + tests passed"
+# Mark complete when done
+kanban complete task_1748397912_abc12345 --notes="Implemented feature + tests"
 ```
 
 ## Branch Convention
@@ -108,24 +109,58 @@ kanban complete task_1748397912_abc12345 --notes="Implemented + tests passed"
 {type}/kanban-{task_id}--{slug}
 ```
 
-The task ID is the `id` field from `kanban list` output (e.g. `task_1748397912_abc12345`). The `--` separator distinguishes the task ID from the human-readable slug.
+- `type`: `feature`, `fix`, `chore`, `docs`, `refactor`, `perf`, `test`
+- `task_id`: from `kanban list` output (e.g., `task_1748397912_abc12345`)
+- `--`: separator between task ID and slug
+- `slug`: short kebab-case description
 
 ```bash
-# Valid:
+# Valid
 feature/kanban-task_1748397912_abc12345--doh-fallback
 fix/kanban-task_1748397913_abc12345--auth-bug
 
-# Check before push:
+# Validate a branch before push
 kanban check-branch "$(git branch --show-current)"
 ```
+
+## CLI Command Reference
+
+| Command | Description |
+|---|---|
+| `kanban list` | List tasks (filter with --status, --repo) |
+| `kanban claim <task_id>` | Atomically claim a task |
+| `kanban unclaim <task_id>` | Release a task |
+| `kanban complete <task_id>` | Mark task as done |
+| `kanban block <task_id>` | Mark task as blocked |
+| `kanban info` | Show agent status and connection info |
+| `kanban check-branch <name>` | Validate a branch name |
+| `kanban install-hooks` | Install pre-push hook in current repo |
+| `kanban uninstall-hooks` | Remove pre-push hook |
+
+## API Reference
+
+For the full REST API reference, see [API.md](./API.md).
+
+For MCP server integration with Hermes Agent, see [MCP.md](./MCP.md).
 
 ## Uninstall
 
 ```bash
-# Remove hooks from repos where they were installed
+# Remove hooks from all repos where they were installed
 cd ~/sample-repo-p
 kanban uninstall-hooks
 
 # Remove the CLI
 rm ~/.local/bin/kanban
 ```
+
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `Connection refused` | Server at :8727 not running. Start with `python server/main.py` or `docker compose up` |
+| `409 Conflict` | Another agent claimed the task. Run `kanban list` to find another |
+| `404 Not Found` | Task ID doesn't exist. List tasks to find valid IDs |
+| Branch name rejected by hook | Format must be `{type}/kanban-{task_id}--{slug}`. Use `kanban check-branch` to debug |
+
+For more, see [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).

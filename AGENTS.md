@@ -11,7 +11,15 @@ stdb: true
 
 # Agent Onboarding Guide
 
-This file is read by AI coding agents. For Claude Code specifically, also see [CLAUDE.md](./CLAUDE.md). Complements [README.md](./README.md).
+This file is read by AI coding agents. For Claude Code specifically, also see [CLAUDE.md](./CLAUDE.md).
+
+**Complementary documentation:**
+- [INSTALL.md](./INSTALL.md) — Full installation guide (Docker, manual, production)
+- [CONFIGURATION.md](./CONFIGURATION.md) — All environment variables explained
+- [API.md](./API.md) — Complete REST API reference
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — System architecture and data flow
+- [MCP.md](./MCP.md) — MCP server docs for Hermes integration
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) — Common issues and solutions
 
 ## 📌 Architecture (Jul 2026)
 
