@@ -1,8 +1,7 @@
 """Tests for server/shared.py — STDB helpers, validation, SATS parsing, scoring."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-import httpx
 import pytest
 
 from server.shared import (
@@ -17,7 +16,6 @@ from server.shared import (
     _sql_param,
     validate_webhook_url,
 )
-
 
 # ════════════════════════════════════════════════════════════════════════
 # _sanitize
@@ -146,7 +144,7 @@ class TestParseSatsRows:
             }
         ]
         result = _parse_sats_rows(data)
-        assert result == [{"?": "val1", "?": "val2"}]
+        assert result == [{"?": "val2"}]
 
     def test_extra_row_values(self):
         """When row has more values than column definitions, use col_N fallback."""

@@ -46,12 +46,12 @@ async def test_ops_schema_migration_alias():
         "applied_by": "tester", "checksum": "abc",
     })()
 
-    with patch("routes.ops._call", new_callable=AsyncMock) as mock_call:
-        with patch("routes.ops._sql", new_callable=AsyncMock):
-            mock_call.return_value = {"status": "ok"}
-            result = await record_schema_migration(body)
-            assert result["status"] == "recorded"
-            assert result["version"] == "v2"
+    with patch("routes.ops._call", new_callable=AsyncMock) as mock_call, \
+         patch("routes.ops._sql", new_callable=AsyncMock):
+        mock_call.return_value = {"status": "ok"}
+        result = await record_schema_migration(body)
+        assert result["status"] == "recorded"
+        assert result["version"] == "v2"
 
 
 # ── routes/projects.py lines 115-117: suggest_by_project except ──
@@ -125,12 +125,12 @@ async def test_projects_create_empty_id():
         "color": "#fff", "priority": 2, "active": True,
     })()
 
-    with patch("routes.projects._call", new_callable=AsyncMock):
-        with patch("routes.projects._sql", new_callable=AsyncMock):
-            with patch("routes.projects._sql_param", new_callable=AsyncMock):
-                with pytest.raises(HTTPException) as exc_info:
-                    await create_project(body)
-                assert exc_info.value.status_code == 400
+    with patch("routes.projects._call", new_callable=AsyncMock), \
+         patch("routes.projects._sql", new_callable=AsyncMock), \
+         patch("routes.projects._sql_param", new_callable=AsyncMock), \
+         pytest.raises(HTTPException) as exc_info:
+        await create_project(body)
+        assert exc_info.value.status_code == 400
 
 
 # ── routes/ops.py: calendar and cross-project endpoints ──

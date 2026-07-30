@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 import pytest
+
 from server.scheduler_low_backlog import (
     CRITICAL_BACKLOG_THRESHOLD,
     LOW_BACKLOG_THRESHOLD,
