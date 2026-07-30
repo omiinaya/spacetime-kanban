@@ -334,10 +334,10 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_spa_root_served_when_built(self):
         """When web dist exists, / should serve index.html."""
-        from main import app, WEB_DIST
-
         # Only test if the dist actually exists
         import os
+
+        from main import WEB_DIST, app
 
         if os.path.isdir(WEB_DIST) and os.path.isfile(os.path.join(WEB_DIST, "index.html")):
             transport = ASGITransport(app=app)
@@ -351,9 +351,9 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_spa_root_returns_json_when_not_built(self):
         """When web dist doesn't exist, / should return a JSON message."""
-        from main import app, WEB_DIST
-
         import os
+
+        from main import WEB_DIST, app
 
         if not os.path.isdir(WEB_DIST):
             transport = ASGITransport(app=app)
@@ -370,9 +370,9 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_non_api_404_serves_spa_when_built(self):
         """Non-API 404 should serve index.html when web dist exists."""
-        from main import app, WEB_DIST
-
         import os
+
+        from main import WEB_DIST, app
 
         if os.path.isdir(WEB_DIST) and os.path.isfile(os.path.join(WEB_DIST, "index.html")):
             transport = ASGITransport(app=app)
@@ -386,9 +386,9 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_non_api_404_returns_json_when_not_built(self):
         """Non-API 404 should return JSON when web dist doesn't exist."""
-        from main import app, WEB_DIST
-
         import os
+
+        from main import WEB_DIST, app
 
         if not os.path.isdir(WEB_DIST):
             transport = ASGITransport(app=app)
@@ -565,9 +565,8 @@ class TestMain:
 
     def test_web_dist_message_built(self):
         """Verify the WEB_DIST path and the messages printed when dist is missing."""
-        from main import WEB_DIST
 
-        import os
+        from main import WEB_DIST
 
         assert isinstance(WEB_DIST, str)
         assert "web" in WEB_DIST

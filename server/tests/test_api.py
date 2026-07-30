@@ -3287,6 +3287,7 @@ async def test_add_task_log(client, mock_all):
 async def test_health_uptime_with_scheduler(client):
     """Health endpoint should include uptime when scheduler has start_time."""
     import time as _time
+
     import scheduler as sched_mod
     orig = sched_mod.scheduler_start_time
     sched_mod.scheduler_start_time = _time.time() - 7200

@@ -539,7 +539,7 @@ async def test_ops_cross_project(client, mock_all):
          "fail_count": 0, "max_attempts": 3, "fail_reason": None,
          "subtask_of": None, "subtasks": None, "due_by": None,
          "sprint": None, "roadmap_item": "",
-         "archived": False, "estimated_hours": None, "spent_hours": None},
+         "estimated_hours": None, "spent_hours": None},
     ]
     resp = await client.get("/api/cross-project")
     assert resp.status_code == 200

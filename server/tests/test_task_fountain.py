@@ -457,7 +457,7 @@ def test_run_no_git_repos():
         mock_isdir = stack.enter_context(
             patch("_task_fountain.os.path.isdir", return_value=False)
         )
-        mock_fetch = stack.enter_context(
+        stack.enter_context(
             patch.object(m, "fetch_existing_titles", return_value=set())
         )
         mock_post = stack.enter_context(
@@ -632,7 +632,7 @@ def test_main_block_structure():
     assert hasattr(m, "run")
     # Verify run() returns an int (0 here because no repos have .git dirs
     # in the test environment)
-    with patch.object(m, "fetch_existing_titles", return_value=set()):
-        with patch.object(m, "api_post", return_value=None):
-            n = m.run()
+    with patch.object(m, "fetch_existing_titles", return_value=set()), \
+         patch.object(m, "api_post", return_value=None):
+        n = m.run()
     assert isinstance(n, int)

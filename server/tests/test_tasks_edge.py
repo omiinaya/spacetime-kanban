@@ -472,10 +472,10 @@ async def test_sync_to_github_no_token():
     """_sync_to_github returns early when no token configured."""
     from routes.tasks import _sync_to_github
 
-    with patch("issue_sync.get_link", return_value={"repo": "test/test", "issue_number": 1}):
-        with patch("config.settings.github_token", ""):
-            result = await _sync_to_github("task_1", "completed", "Done")
-            assert result is None
+    with patch("issue_sync.get_link", return_value={"repo": "test/test", "issue_number": 1}), \
+         patch("config.settings.github_token", ""):
+        result = await _sync_to_github("task_1", "completed", "Done")
+        assert result is None
 
 
 # ── Bulk archive with failure (lines 622-623) ──
