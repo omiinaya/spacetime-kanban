@@ -72,7 +72,7 @@ def mock_all():
         "routes.projects": ["_sql", "_sql_param", "_call"],
         "routes.tasks": ["_sql", "_sql_param", "_call", "_notify"],
         "routes.templates": ["_sql", "_sql_param", "_call"],
-        "routes.ops": ["_sql", "_call"],
+        "routes.ops": ["_sql", "_sql_param", "_call"],
         "routes.dispatcher": ["_sql", "_sql_param", "_call"],
         "routes.rules": ["_sql", "_sql_param", "_call"],
         "routes.apikeys": ["_sql", "_call"],
@@ -2156,3 +2156,863 @@ async def test_list_agents_with_data(client, mock_all):
     assert len(data) == 1
     assert data[0]["id"] == "agent-1"
     assert data[0]["status"] == "idle"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# ═══ ROUTE COVERAGE GAP TESTS — Agents, Projects, Templates, etc. ════
+# ════════════════════════════════════════════════════════════════════════
+
+
+# ── Agents ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_register_agent(client, mock_all):
+    """POST /api/agents/register should register a new agent."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post(
+        "/api/agents/register",
+        json={
+            "agent_id": "new-agent",
+            "host": "localhost",
+            "capabilities": "python",
+            "repo_focus": "test",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "registered"
+    # Verify the reducer was called with the right args
+    register_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "register_agent"]
+    assert len(register_calls) == 1
+    args = register_calls[0][0][1]
+    assert args[0] == "new-agent"
+
+
+@pytest.mark.asyncio
+async def test_agent_heartbeat(client, mock_all):
+    """POST /api/agents/{agent_id}/heartbeat should update heartbeat."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post(
+        "/api/agents/agent-1/heartbeat",
+        json={"agent_id": "agent-1", "status": "busy", "current_task_id": "task_1"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    heartbeat_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "agent_heartbeat"]
+    assert len(heartbeat_calls) == 1
+    args = heartbeat_calls[0][0][1]
+    assert args[0] == "agent-1"
+    assert args[1] == "busy"
+
+
+@pytest.mark.asyncio
+async def test_set_agent_capabilities(client, mock_all):
+    """PUT /api/agents/{agent_id}/capabilities should update capabilities."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.put(
+        "/api/agents/agent-1/capabilities",
+        json={"capabilities": "rust,python", "repo_focus": "sample-repo-p"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "updated"
+    cap_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "set_agent_capabilities"]
+    assert len(cap_calls) == 1
+    args = cap_calls[0][0][1]
+    assert args[0] == "agent-1"
+    assert args[1] == "rust,python"
+
+
+@pytest.mark.asyncio
+async def test_get_agent_success(client, mock_all):
+    """GET /api/agents/{id} should return agent data when found."""
+    mock_all["param"].return_value = [
+        {
+            "id": "agent-1",
+            "host": "host1.local",
+            "capabilities": "python",
+            "repo_focus": "test",
+            "current_task_id": "task_1",
+            "status": "busy",
+            "last_heartbeat": 2000000,
+            "first_seen": 1000000,
+        },
+    ]
+    resp = await client.get("/api/agents/agent-1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == "agent-1"
+    assert data["status"] == "busy"
+    assert data["current_task_id"] == "task_1"
+
+
+@pytest.mark.asyncio
+async def test_agent_health_empty(client, mock_all):
+    """GET /api/agents/health should return empty list when no agents."""
+    mock_all["sql"].return_value = []  # no agents, no tasks
+    resp = await client.get("/api/agents/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
+@pytest.mark.asyncio
+async def test_agent_health_with_stale_agent(client, mock_all):
+    """GET /api/agents/health should mark stale agents (no heartbeat >5min)."""
+    mock_all["sql"].side_effect = [
+        # First call: agents
+        [
+            {
+                "id": "agent-1",
+                "host": "host1.local",
+                "capabilities": "python",
+                "repo_focus": "test",
+                "current_task_id": "task_1",
+                "status": "idle",
+                "last_heartbeat": 1000,  # very old heartbeat — should be stale
+                "first_seen": 1000,
+            },
+        ],
+        # Second call: tasks
+        [
+            {
+                "id": "task_1",
+                "title": "Test task",
+                "description": "A test task",
+                "priority": 0,
+                "status": "available",
+                "repo": "test",
+            },
+        ],
+    ]
+    resp = await client.get("/api/agents/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["id"] == "agent-1"
+    # The agent should be marked as stale since time.time() is way past last_heartbeat
+    assert data[0].get("stale", False) is True
+
+
+# ── Projects ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_project_empty_id(client, mock_all):
+    """POST /api/projects with empty id should return 400."""
+    resp = await client.post("/api/projects", json={"id": ""})
+    assert resp.status_code == 400
+    data = resp.json()
+    assert "required" in data["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_create_project_success(client, mock_all):
+    """POST /api/projects should create a project and return its data."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [
+        {
+            "id": "test-repo",
+            "name": "Test Repo",
+            "description": "A test project",
+            "color": "#0ea5e9",
+            "priority": 1,
+            "active": True,
+            "created_at": 1000,
+            "updated_at": 1000,
+        },
+    ]
+    resp = await client.post(
+        "/api/projects",
+        json={"id": "test-repo", "name": "Test Repo", "priority": 1},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["id"] == "test-repo"
+    assert data["priority"] == 1
+    assert data["active"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_project_fallback_created(client, mock_all):
+    """POST /api/projects should return fallback when fetch returns empty."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = []  # fetch after create returns empty
+    resp = await client.post(
+        "/api/projects",
+        json={"id": "fallback-repo", "name": "Fallback"},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "created"
+
+
+@pytest.mark.asyncio
+async def test_update_project_with_priority(client, mock_all):
+    """PATCH /api/projects/{id} with priority should update the project."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [
+        {
+            "id": "test-repo",
+            "name": "Updated Repo",
+            "description": "Updated description",
+            "color": "#ff0000",
+            "priority": 3,
+            "active": True,
+            "created_at": 1000,
+            "updated_at": 2000,
+        },
+    ]
+    resp = await client.patch(
+        "/api/projects/test-repo",
+        json={
+            "name": "Updated Repo",
+            "priority": 3,
+            "description": "Updated description",
+            "color": "#ff0000",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["priority"] == 3
+
+
+@pytest.mark.asyncio
+async def test_update_project_no_priority(client, mock_all):
+    """PATCH /api/projects/{id} without priority should fetch current from DB."""
+    mock_all["call"].return_value = {"status": "ok"}
+    # First call to param is the priority fetch, second is the full fetch
+    mock_all["param"].side_effect = [
+        [{"priority": 2}],  # current priority from DB
+        [
+            {
+                "id": "test-repo",
+                "name": "Test Repo",
+                "description": "",
+                "color": "#6b7280",
+                "priority": 2,
+                "active": True,
+                "created_at": 1000,
+                "updated_at": 2000,
+            }
+        ],
+    ]
+    resp = await client.patch(
+        "/api/projects/test-repo",
+        json={"name": "Test Repo"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == "test-repo"
+    # Verify priority fetch happened
+    assert len([c for c in mock_all["param"].call_args_list if "SELECT priority" in str(c)]) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_project_no_priority_default(client, mock_all):
+    """PATCH when project not found and no priority provided should default to 2."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].side_effect = [
+        [],  # priority fetch returns empty (project doesn't exist)
+        [],  # full fetch returns empty
+    ]
+    resp = await client.patch(
+        "/api/projects/nonexistent",
+        json={"name": "Ghost"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "updated"
+
+
+@pytest.mark.asyncio
+async def test_delete_project(client, mock_all):
+    """DELETE /api/projects/{id} should delete the project."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.delete("/api/projects/test-repo")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "deleted"
+    delete_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "delete_project"]
+    assert len(delete_calls) == 1
+    assert delete_calls[0][0][1][0] == "test-repo"
+
+
+@pytest.mark.asyncio
+async def test_suggest_by_project_empty(client, mock_all):
+    """GET /api/suggest-by-project fallback should return empty when no tasks or projects."""
+    # Raise HTTPException to trigger the fallback scoring path
+    mock_all["call"].side_effect = HTTPException(502, "reducer failed")
+    mock_all["sql"].return_value = []  # no tasks, no projects
+    resp = await client.get("/api/suggest-by-project", params={"limit": 5})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
+@pytest.mark.asyncio
+async def test_suggest_by_project_with_data(client, mock_all):
+    """GET /api/suggest-by-project should score and sort tasks via fallback."""
+    # Raise HTTPException to trigger the fallback scoring path
+    mock_all["call"].side_effect = HTTPException(502, "reducer failed")
+    mock_all["sql"].side_effect = [
+        # First call: tasks
+        [
+            {
+                "id": "t1",
+                "title": "High priority task",
+                "priority": 0,
+                "repo": "repo-a",
+                "created_at": 1000,
+            },
+            {
+                "id": "t2",
+                "title": "Old stale task",
+                "priority": 5,
+                "repo": "repo-a",
+                "created_at": 100,
+            },
+            {"id": "t3", "title": "No repo task", "priority": 2, "repo": "", "created_at": 5000},
+        ],
+        # Second call: projects
+        [
+            {"id": "repo-a", "priority": 1, "active": True},
+        ],
+    ]
+    resp = await client.get("/api/suggest-by-project", params={"limit": 10})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) <= 3
+    # All should have score and reason
+    for item in data:
+        assert "score" in item
+        assert "reason" in item
+
+
+# ── Templates ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_update_template_success(client, mock_all):
+    """PATCH /api/task-templates/{id} should update a template."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = [
+        {
+            "id": "tpl_1",
+            "title": "Updated Template",
+            "description": "",
+            "priority": 2,
+            "repo": "test",
+            "roadmap_item": "",
+            "required_skills": "",
+            "cron_schedule": "0 9 * * *",
+            "created_by": "test",
+            "created_at": 1000,
+            "last_triggered_at": 0,
+            "active": True,
+        },
+    ]
+    resp = await client.patch(
+        "/api/task-templates/tpl_1",
+        json={"title": "Updated Template", "priority": 3},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Updated Template"
+
+
+@pytest.mark.asyncio
+async def test_update_template_404(client, mock_all):
+    """PATCH /api/task-templates/{id} for non-existent template should return 404."""
+    mock_all["param"].return_value = []  # template not found
+    resp = await client.patch(
+        "/api/task-templates/nonexistent",
+        json={"title": "Ghost"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_template_success(client, mock_all):
+    """DELETE /api/task-templates/{id} should delete a template."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.delete("/api/task-templates/tpl_1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_delete_template_404(client, mock_all):
+    """DELETE /api/task-templates/{id} for non-existent should return 404."""
+    mock_all["call"].side_effect = RuntimeError("not found")
+    resp = await client.delete("/api/task-templates/nonexistent")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_template_500(client, mock_all):
+    """DELETE /api/task-templates/{id} with non-404 error should return 500."""
+    mock_all["call"].side_effect = RuntimeError("database connection failed")
+    resp = await client.delete("/api/task-templates/tpl_1")
+    assert resp.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_trigger_templates_success(client, mock_all):
+    """POST /api/task-templates/trigger should trigger template processing."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["sql"].return_value = [
+        {
+            "id": "log_1",
+            "task_id": "__trigger__",
+            "action": "template_trigger",
+            "agent_id": "system",
+            "notes": "Triggered at 1000",
+            "created_at": 1000,
+        },
+    ]
+    resp = await client.post("/api/task-templates/trigger")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "triggered"
+
+
+# ── Dispatcher State ─────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_dispatcher_state_all_empty(client, mock_all):
+    """GET /api/dispatcher/state should return empty dict when no state."""
+    mock_all["sql"].return_value = []
+    resp = await client.get("/api/dispatcher/state")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == {}
+
+
+@pytest.mark.asyncio
+async def test_get_dispatcher_state_all_with_data(client, mock_all):
+    """GET /api/dispatcher/state should return all state entries."""
+    mock_all["sql"].return_value = [
+        {"key": "mode", "value": '"auto"'},
+        {"key": "count", "value": "42"},
+    ]
+    resp = await client.get("/api/dispatcher/state")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["mode"] == "auto"
+    # 42 as number since json.loads("42") returns int
+    assert data["count"] == 42
+
+
+@pytest.mark.asyncio
+async def test_get_dispatcher_state_invalid_json(client, mock_all):
+    """GET /api/dispatcher/state should handle JSON decode errors gracefully."""
+    mock_all["sql"].return_value = [
+        {"key": "bad", "value": "not-json{"},
+    ]
+    resp = await client.get("/api/dispatcher/state")
+    assert resp.status_code == 200
+    data = resp.json()
+    # Should return raw value when JSON decode fails
+    assert data["bad"] == "not-json{"
+
+
+@pytest.mark.asyncio
+async def test_get_dispatcher_state_by_key_found(client, mock_all):
+    """GET /api/dispatcher/state?key=xxx should return that key's value."""
+    mock_all["param"].return_value = [
+        {"key": "mode", "value": '"production"'},
+    ]
+    resp = await client.get("/api/dispatcher/state", params={"key": "mode"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["mode"] == "production"
+
+
+@pytest.mark.asyncio
+async def test_get_dispatcher_state_by_key_not_found(client, mock_all):
+    """GET /api/dispatcher/state?key=xxx for missing key should return null."""
+    mock_all["param"].return_value = []
+    resp = await client.get("/api/dispatcher/state", params={"key": "nonexistent"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["nonexistent"] is None
+
+
+@pytest.mark.asyncio
+async def test_set_dispatcher_state(client, mock_all):
+    """POST /api/dispatcher/state should set a state entry."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post(
+        "/api/dispatcher/state",
+        json={"key": "mode", "value": "auto"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["key"] == "mode"
+
+
+@pytest.mark.asyncio
+async def test_delete_dispatcher_state(client, mock_all):
+    """DELETE /api/dispatcher/state/{key} should delete a state entry."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.delete("/api/dispatcher/state/mode")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "deleted"
+    assert data["key"] == "mode"
+
+
+@pytest.mark.asyncio
+async def test_delete_dispatcher_state_404(client, mock_all):
+    """DELETE /api/dispatcher/state/{key} for missing key should return 404."""
+    mock_all["call"].side_effect = RuntimeError("Key not found: nonexistent")
+    resp = await client.delete("/api/dispatcher/state/nonexistent")
+    assert resp.status_code == 404
+
+
+# ── Ops (Roadmap Import, Cross-Project) ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_roadmap_import_empty(client, mock_all):
+    """POST /api/roadmap/import with empty content should return 0 tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    resp = await client.post(
+        "/api/roadmap/import",
+        json={"content": "", "repo": "test-repo"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["task_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_roadmap_import_one_phase(client, mock_all):
+    """POST /api/roadmap/import with one phase should create tasks."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = []  # no existing tasks (no dedup)
+    resp = await client.post(
+        "/api/roadmap/import",
+        json={
+            "content": (
+                "## Phase 1 \u2014 Setup\n\n"
+                "- [ ] Install dependencies\n"
+                "- [ ] Configure CI\n"
+                "- [x] Already done\n"
+            ),
+            "repo": "test-repo",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["task_count"] == 2  # 2 open tasks, 1 skipped (done)
+
+
+@pytest.mark.asyncio
+async def test_roadmap_import_multiple_phases(client, mock_all):
+    """POST /api/roadmap/import with multiple phases should assign different priorities."""
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = []  # no dedup
+    content = """## Phase 1 — Core
+
+- [ ] Task A
+- [ ] Task B
+
+## Phase 2 — Features
+
+- [ ] Task C
+"""
+    resp = await client.post(
+        "/api/roadmap/import",
+        json={"content": content, "repo": "multi-repo"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["task_count"] == 3
+    # Verify we can see the calls
+    add_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "add_task"]
+    # Phase 1 tasks should have priority 0
+    phase1_count = sum(1 for c in add_calls if c[0][1][3] == 0)
+    # Phase 2 task should have priority 1
+    phase2_count = sum(1 for c in add_calls if c[0][1][3] == 1)
+    assert phase1_count == 2
+    assert phase2_count == 1
+
+
+@pytest.mark.asyncio
+async def test_roadmap_import_dedup(client, mock_all):
+    """POST /api/roadmap/import should skip existing non-done tasks but still count them."""
+    mock_all["call"].return_value = {"status": "ok"}
+    # Simulate existing task with same title+repo
+    mock_all["param"].return_value = [{"id": "existing_t1", "status": "available"}]
+    resp = await client.post(
+        "/api/roadmap/import",
+        json={
+            "content": "## Phase 1 — Core\n\n- [ ] Task A\n",
+            "repo": "test-repo",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["task_count"] == 1  # parsed from markdown (1 task)
+    # Verify no tasks were CREATED (dedup skipped it)
+    add_calls = [c for c in mock_all["call"].call_args_list if c[0][0] == "add_task"]
+    assert len(add_calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_cross_project_with_data(client, mock_all):
+    """GET /api/cross-project should aggregate tasks by repo."""
+    mock_all["sql"].return_value = [
+        {"id": "t1", "repo": "repo-a", "status": "available"},
+        {"id": "t2", "repo": "repo-a", "status": "inProgress"},
+        {"id": "t3", "repo": "repo-b", "status": "done"},
+        {"id": "t4", "repo": "repo-b", "status": "done"},
+        {"id": "t5", "repo": "repo-c", "status": "blocked"},
+    ]
+    resp = await client.get("/api/cross-project")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    repos = {d["repo"] for d in data}
+    assert "repo-a" in repos
+    assert "repo-b" in repos
+    assert "repo-c" in repos
+    repo_a = next(d for d in data if d["repo"] == "repo-a")
+    assert repo_a["available"] == 1
+    assert repo_a["inProgress"] == 1
+    repo_b = next(d for d in data if d["repo"] == "repo-b")
+    assert repo_b["done"] == 2
+
+
+# ── Scanner ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_scan_endpoint_empty(client, mock_all):
+    """POST /api/scanner/scan should return empty results when scanners find nothing."""
+    with patch("scanners.runner.run_all_scanners", return_value={}):
+        resp = await client.post("/api/scanner/scan")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_findings"] == 0
+    assert data["total_created"] == 0
+
+
+@pytest.mark.asyncio
+async def test_scan_endpoint_with_findings(client, mock_all):
+    """POST /api/scanner/scan should aggregate scanner results."""
+    with patch(
+        "scanners.runner.run_all_scanners",
+        return_value={
+            "stdb_index": {"finding_count": 2, "created": 1},
+            "todos": {"finding_count": 5, "created": 3},
+        },
+    ):
+        resp = await client.post("/api/scanner/scan")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_findings"] == 7
+    assert data["total_created"] == 4
+
+
+# ── GitHub Issues (no webhook) ───────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_issues(client, mock_all):
+    """GET /api/issues should list issue links."""
+    with patch(
+        "routes.github.issue_sync.list_links",
+        return_value=[
+            {
+                "task_id": "t1",
+                "repo": "test/repo",
+                "issue_number": 1,
+                "html_url": "https://github.com/test/repo/issues/1",
+            },
+        ],
+    ):
+        resp = await client.get("/api/issues")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["issue_number"] == 1
+
+
+@pytest.mark.asyncio
+async def test_list_issues_with_repo(client, mock_all):
+    """GET /api/issues?repo=xxx should filter by repo."""
+    with patch("routes.github.issue_sync.list_links", return_value=[]):
+        resp = await client.get("/api/issues", params={"repo": "test/repo"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+
+
+@pytest.mark.asyncio
+async def test_get_issue_found(client, mock_all):
+    """GET /api/issues/{task_id} should return the linked issue."""
+    with patch(
+        "routes.github.issue_sync.get_link",
+        return_value={
+            "repo": "test/repo",
+            "issue_number": 42,
+            "html_url": "https://github.com/test/repo/issues/42",
+        },
+    ):
+        resp = await client.get("/api/issues/task_1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["kanban_task_id"] == "task_1"
+    assert data["issue_number"] == 42
+
+
+@pytest.mark.asyncio
+async def test_get_issue_not_found(client, mock_all):
+    """GET /api/issues/{task_id} for unlinked task should return 404."""
+    with patch("routes.github.issue_sync.get_link", return_value=None):
+        resp = await client.get("/api/issues/task_1")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_link_issue_success(client, mock_all):
+    """POST /api/issues/link should link a task to a GitHub issue."""
+    with (
+        patch("routes.github.issue_sync.get_link", return_value=None),
+        patch(
+            "routes.github.issue_sync.link_issue",
+            return_value={
+                "task_id": "task_1",
+                "issue_number": 42,
+                "html_url": "https://github.com/test/repo/issues/42",
+            },
+        ),
+    ):
+        resp = await client.post(
+            "/api/issues/link",
+            json={"task_id": "task_1", "repo": "test/repo", "issue_number": 42},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "linked"
+
+
+@pytest.mark.asyncio
+async def test_link_issue_already_linked(client, mock_all):
+    """POST /api/issues/link for already-linked task should return 409."""
+    with patch(
+        "routes.github.issue_sync.get_link",
+        return_value={
+            "html_url": "https://github.com/test/repo/issues/1",
+        },
+    ):
+        resp = await client.post(
+            "/api/issues/link",
+            json={"task_id": "task_1", "repo": "test/repo", "issue_number": 42},
+        )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_unlink_issue_success(client, mock_all):
+    """POST /api/issues/unlink should remove the link."""
+    with patch("routes.github.issue_sync.unlink_issue", return_value=True):
+        resp = await client.post("/api/issues/unlink?task_id=task_1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "unlinked"
+
+
+@pytest.mark.asyncio
+async def test_unlink_issue_404(client, mock_all):
+    """POST /api/issues/unlink for unlinked task should return 404."""
+    with patch("routes.github.issue_sync.unlink_issue", return_value=False):
+        resp = await client.post("/api/issues/unlink?task_id=task_1")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_issue_from_task_task_not_found(client, mock_all):
+    """POST /api/issues/create for missing task should return 404."""
+    mock_all["param"].return_value = []  # task not found
+    with (
+        patch("config.settings.github_token", "test-token"),
+        patch("config.settings.github_default_repo", ""),
+    ):
+        resp = await client.post(
+            "/api/issues/create",
+            json={"task_id": "nonexistent"},
+        )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_issue_from_task_no_token(client, mock_all):
+    """POST /api/issues/create without GitHub token should return 400."""
+    mock_all["param"].return_value = [_make_task("task_1", "Test task")]
+    with patch("config.settings.github_token", ""):
+        resp = await client.post(
+            "/api/issues/create",
+            json={"task_id": "task_1"},
+        )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_issue_from_task_no_repo(client, mock_all):
+    """POST /api/issues/create without repo should return 400."""
+    mock_all["param"].return_value = [_make_task("task_1", "Test task")]
+    with (
+        patch("config.settings.github_token", "test-token"),
+        patch("config.settings.github_default_repo", ""),
+    ):
+        resp = await client.post(
+            "/api/issues/create",
+            json={"task_id": "task_1", "repo": ""},
+        )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_issue_from_task_success(client, mock_all):
+    """POST /api/issues/create should create and link a GitHub issue."""
+    mock_all["param"].return_value = [_make_task("task_1", "Test task", description="A test task")]
+    mock_all["call"].return_value = {"status": "ok"}
+    with (
+        patch("config.settings.github_token", "test-token"),
+        patch("config.settings.github_default_repo", "test/repo"),
+        patch(
+            "routes.github.issue_sync.create_issue",
+            return_value={
+                "issue_number": 100,
+                "html_url": "https://github.com/test/repo/issues/100",
+                "issue_url": "https://api.github.com/repos/test/repo/issues/100",
+                "state": "open",
+            },
+        ),
+        patch("routes.github.issue_sync.link_issue", return_value={"task_id": "task_1"}),
+        patch("routes.github.issue_sync.update_issue_status", return_value={"status": "updated"}),
+    ):
+        resp = await client.post(
+            "/api/issues/create",
+            json={
+                "task_id": "task_1",
+                "repo": "test/repo",
+                "labels": "bug,urgent",
+                "assignee": "test-user",
+            },
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "created"
+    assert data["issue_number"] == 100
