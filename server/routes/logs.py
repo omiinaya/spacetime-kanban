@@ -88,14 +88,16 @@ async def batch_logs(
 
     # Build indexed OR query on task_id (each id is sanitized via _sql_param).
     # Using task_id OR conditions hits the btree index instead of scanning
-    # every row for the action column.
-    or_conds = " OR ".join(f"task_id = '{{{tid_i}}}'" for tid_i in range(len(tids)))
-    params: dict[str, str] = {str(i): tid for i, tid in enumerate(tids)}
+    # every row for the action column. Placeholders MUST be named (tid_0,
+    # tid_1, ...) — _sql_param formats with **kwargs, and positional {0}
+    # placeholders raise IndexError at format time.
+    or_conds = " OR ".join(f"task_id = '{{tid_{tid_i}}}'" for tid_i in range(len(tids)))
+    params: dict[str, str] = {f"tid_{i}": tid for i, tid in enumerate(tids)}
     sql = f"SELECT * FROM task_logs WHERE {or_conds}"  # noqa: S608 — values sanitized by _sql_param below
     if action:
         action_val = action.split(",")[0].strip()
-        sql += f" AND action = '{{{len(tids)}}}'"
-        params[str(len(tids))] = action_val
+        sql += " AND action = '{action_val}'"
+        params["action_val"] = action_val
     # Safety cap — a task's log volume is bounded by the scheduler's
     # heartbeat cadence; 100 tasks × few hundred logs each is generous.
     sql += " LIMIT 5000"

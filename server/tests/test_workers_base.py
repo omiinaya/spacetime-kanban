@@ -275,6 +275,27 @@ class TestHeartbeatLoop:
         thread.join(timeout=3)
         assert mock_heartbeat.called
 
+    @patch("workers.base.time.sleep", side_effect=[OSError("sleep failed"), None, InterruptedError])
+    @patch("workers.base.WorkerContext.heartbeat", return_value=True)
+    def test_survives_transient_sleep_failure(self, mock_heartbeat, mock_sleep):
+        """A non-Interrupted sleep exception must not kill the loop."""
+        ctx = WorkerContext("task_123")
+        ctx.task = {"id": "task_123"}
+        thread = heartbeat_loop(ctx)
+        thread.join(timeout=3)
+        # After the OSError the loop keeps beating, then InterruptedError exits.
+        assert mock_heartbeat.called
+
+    @patch("workers.base.time.sleep", side_effect=[None, InterruptedError])
+    @patch("workers.base.WorkerContext.heartbeat", side_effect=[RuntimeError("api down")])
+    def test_survives_heartbeat_failure(self, mock_heartbeat, mock_sleep):
+        """A failed heartbeat must not kill the loop (fire-and-forget)."""
+        ctx = WorkerContext("task_123")
+        ctx.task = {"id": "task_123"}
+        thread = heartbeat_loop(ctx)
+        thread.join(timeout=3)
+        assert not thread.is_alive()
+
 
 class TestRunWorker:
     """run_worker() orchestrates the full worker lifecycle."""

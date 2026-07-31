@@ -77,29 +77,54 @@ def _api_post(path: str, data: dict) -> dict | None:
 
 # ── Dedup & health ──────────────────────────────────────────────────
 
+# Board-scale fetch limit for dedup. The API applies `limit` client-side
+# AFTER fetching every matching row from the DB, so one request with a
+# limit >= total board size returns the whole board in a single snapshot.
+# The old per-status limit=500 capped dedup coverage at ~2,000 titles on
+# a 22K-task board (~9%), so older done tasks (e.g. "Replace bare
+# except:") were invisible to dedup and the scanner kept re-creating
+# them. Same convention as _task_fountain.DEDUP_LIMIT.
+DEDUP_LIMIT = 100_000
 
-def _fetch_existing_titles() -> set[str]:
-    """Fetch all task titles from the board (including done tasks) for dedup."""
+
+def _dedup_key(repo: str, title: str) -> tuple[str, str]:
+    """Normalize (repo, title) into a case-insensitive dedup key.
+
+    Dedup is scoped per-repo: a title like "Replace bare except:" is
+    legitimate once per repo, but duplicates WITHIN a repo are bugs the
+    scanner must not re-create. Keying on bare title alone also let one
+    repo's task block an unrelated repo's task with the same title.
+    """
+    return (repo.strip().lower(), title.strip().lower())
+
+
+def _fetch_existing_titles() -> set[tuple[str, str]]:
+    """Fetch all task (repo, title) keys from the board (incl. done) for dedup.
+
+    One unfiltered call (no status= filter) with a board-scale limit
+    covers every status — available/inProgress/blocked/done/archived —
+    in a single snapshot: no pagination, no per-status truncation.
+    """
     existing = set()
-    for status in ("available", "inProgress", "blocked", "done"):
-        tasks = _api_get(f"/api/tasks?status={status}&limit=500")
-        if tasks:
-            for t in tasks:
-                title = t.get("title", "")
-                if title:
-                    existing.add(title.strip().lower())
+    tasks = _api_get(f"/api/tasks?limit={DEDUP_LIMIT}")
+    if not tasks:
+        return existing
+    for t in tasks:
+        title = t.get("title", "")
+        if title:
+            existing.add(_dedup_key(t.get("repo", ""), title))
     return existing
 
 
-def _is_duplicate(title: str, existing: set[str]) -> bool:
-    return title.strip().lower() in existing
+def _is_duplicate(repo: str, title: str, existing: set[tuple[str, str]]) -> bool:
+    return _dedup_key(repo, title) in existing
 
 
 def _compute_project_layer_scores(repo_name: str) -> dict[int, float]:
     """Compute what % of each layer's tasks are done for a project."""
     from collections import Counter
 
-    all_tasks = _api_get(f"/api/tasks?repo={repo_name}&limit=500")
+    all_tasks = _api_get(f"/api/tasks?repo={repo_name}&limit={DEDUP_LIMIT}")
     if not all_tasks:
         return {}
 
@@ -130,18 +155,26 @@ def _compute_project_layer_scores(repo_name: str) -> dict[int, float]:
 # ── Completion verifier ─────────────────────────────────────────────
 
 
-def _verify_completed_tasks(repos: list[tuple[str, str]], existing: set[str]) -> int:
+def _verify_completed_tasks(
+    repos: list[tuple[str, str]], existing: set[tuple[str, str]], deadline: float | None = None
+) -> int:
     """Re-check done tasks to ensure the underlying issue is still fixed.
 
     Only checks tasks done in the last 7 days. Only re-runs the exact
     scanner that originally created each task (not all scanners).
+    ``deadline`` (monotonic) bounds the whole verification pass.
     """
     regressed = 0
     now_ms = int(time.time() * 1000)
     seven_days_ms = 7 * 86400 * 1000
 
+    def _over_budget() -> bool:
+        return deadline is not None and time.monotonic() >= deadline
+
     for repo_name, repo_path in repos:
-        done_tasks = _api_get(f"/api/tasks?status=done&repo={repo_name}&limit=200")
+        if _over_budget():
+            break
+        done_tasks = _api_get(f"/api/tasks?status=done&repo={repo_name}&limit={DEDUP_LIMIT}")
         if not done_tasks:
             continue
 
@@ -165,6 +198,8 @@ def _verify_completed_tasks(repos: list[tuple[str, str]], existing: set[str]) ->
 
         # Find each scanner once and check all its done tasks
         for scanner_fn in SCANNERS:
+            if _over_budget():
+                break
             sname = get_scanner_name(scanner_fn)
             tasks_to_check = by_scanner.get(sname)
             if not tasks_to_check:
@@ -193,7 +228,7 @@ def _verify_completed_tasks(repos: list[tuple[str, str]], existing: set[str]) ->
                     continue
                 _api_post(f"/api/tasks/{tid}/unarchive", {})
                 # Unarchive transitions done→available; skip 409 errors silently
-                existing.add(title)
+                existing.add(_dedup_key(repo_name, title))
                 regressed += 1
                 print(f"[scanner] ⚠ Re-opened regressed: {title[:60]}...", file=sys.stderr)
 
@@ -203,26 +238,43 @@ def _verify_completed_tasks(repos: list[tuple[str, str]], existing: set[str]) ->
 # ── Main scan function ──────────────────────────────────────────────
 
 
-def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
+def run_all_scanners(repos: list[tuple[str, str]] | None = None, time_budget: float = 90.0) -> dict:
     """Run all scanners against all repos with progressive layer escalation.
 
     1. Verifies completed tasks (re-opens regressed ones)
     2. Computes layer scores per project
     3. Skips scanners above the highest unresolved layer
     4. Deduplicates and creates tasks
+
+    ``time_budget`` bounds the WHOLE run in seconds. Scanners run inside
+    the server process (low-backlog trigger → run_in_executor); an
+    unbounded run (50 repos × cargo check / npx / git log with per-call
+    timeouts up to 60s) can peg CPU for 20+ minutes and starve /api/health.
+    The budget is checked between repos AND between scanners, so even one
+    pathological repo cannot stall the server.
     """
     if repos is None:
         repos = discover_repos()
 
     print(
-        f"[scanner] Scanning {len(repos)} repos with {len(SCANNERS)} scanner(s)...", file=sys.stderr
+        f"[scanner] Scanning {len(repos)} repos with {len(SCANNERS)} scanner(s) "
+        f"(budget {time_budget}s)...",
+        file=sys.stderr,
     )
+
+    deadline = time.monotonic() + time_budget
+
+    def _over_budget() -> bool:
+        if time.monotonic() >= deadline:
+            print("[scanner] Time budget exhausted — stopping scan early", file=sys.stderr)
+            return True
+        return False
 
     existing = _fetch_existing_titles()
     print(f"[scanner] Found {len(existing)} existing tasks for dedup", file=sys.stderr)
 
     # Step 1: Verify completed tasks
-    regressed = _verify_completed_tasks(repos, existing)
+    regressed = _verify_completed_tasks(repos, existing, deadline=deadline)
     if regressed:
         print(f"[scanner] Re-opened {regressed} regressed task(s)", file=sys.stderr)
 
@@ -231,6 +283,8 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
     total_created = 0
 
     for repo_name, repo_path in repos:
+        if _over_budget():
+            break
         print(f"[scanner] Scanning {repo_name}...", file=sys.stderr)
 
         # Compute layer scores for progressive escalation
@@ -242,6 +296,8 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
                 break
 
         for scanner_fn in SCANNERS:
+            if _over_budget():
+                break
             scanner_name = get_scanner_name(scanner_fn)
             layer = SCANNER_LAYER.get(scanner_name, 0)
 
@@ -270,7 +326,7 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
             for finding in findings:
                 title = finding["title"]
 
-                if _is_duplicate(title, existing):
+                if _is_duplicate(repo_name, title, existing):
                     continue
 
                 result = _api_post(
@@ -285,7 +341,7 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None) -> dict:
                 )
 
                 if result:
-                    existing.add(title.strip().lower())
+                    existing.add(_dedup_key(repo_name, title))
                     results[scanner_name]["created"] += 1
                     total_created += 1
                     print(f"[scanner]  ✨ Created: {title[:70]}...", file=sys.stderr)

@@ -61,25 +61,33 @@ async def test_deathwatch_block_after_3_crashes():
     assert ctrl.calls == 2
 
 
-# ── deathwatch stderr read failure ──────────────────────────────────
+# ── deathwatch stderr from drain buffer ──────────────────────────────
 
 
 @pytest.mark.asyncio
 async def test_deathwatch_stderr_read_failure():
-    """Lines 792-793: stderr read raises exception."""
+    """Death watcher reads stderr from the drain buffer, not the raw pipe.
+
+    Regression guard: the old code did a blocking ``proc.stderr.read()`` on
+    the event loop, which froze ALL API requests when a crashed worker had a
+    large stderr backlog. The buffer is populated by the background drain
+    thread (_drain_worker_stderr); the watcher must never touch the pipe.
+    """
     ctrl = SC()
     import time
 
     now = time.monotonic()
     mock_proc = mock.MagicMock()
     mock_proc.poll.return_value = 2
-    mock_proc.stderr.read.side_effect = Exception("Stderr broken")
+    # The raw pipe read is NOT used anymore — make it raise if it is called
+    mock_proc.stderr.read.side_effect = Exception("Stderr broken — must not be read")
     import scheduler as sched_mod
 
     sched_mod._worker_spawn_times = {"bad_2": now}
     sched_mod._worker_processes = {"bad_2": mock_proc}
     sched_mod._worker_crash_counts = {}
-    sched_mod._worker_stderr_data = {}
+    # Drain buffer has the diagnostics — watcher should read from here
+    sched_mod._worker_stderr_data = {"bad_2": b"worker crashed: boom"}
     with mock.patch("scheduler.settings") as ms:
         ms.agent_id = "test"
         with mock.patch.object(scheduler.asyncio, "sleep", ctrl):
@@ -89,6 +97,8 @@ async def test_deathwatch_stderr_read_failure():
                 with mock.patch.object(scheduler, "_api_post", return_value={}):
                     await scheduler.worker_death_watcher(15)
     assert ctrl.calls == 2
+    # The raw pipe read must never be called from the event loop
+    mock_proc.stderr.read.assert_not_called()
 
 
 # ── low_backlog edge cases ──────────────────────────────────────────

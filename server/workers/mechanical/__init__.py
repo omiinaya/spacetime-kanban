@@ -69,7 +69,9 @@ def handle_add_index_btree(ctx: WorkerContext) -> tuple[bool, str]:
         table_files = []
         import glob
 
-        for root, _dirs, files in os.walk(repo_path):
+        from scanners import walk_repo
+
+        for root, _dirs, files in walk_repo(repo_path):
             for f in files:
                 if f in ("tables.rs", "lib.rs") and "spacetimedb" in root:
                     table_files.append(os.path.join(root, f))
@@ -702,13 +704,9 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
     }
 
     # ── 1. Scan Python files ──────────────────────────────────────
-    for root, dirs, files in os.walk(repo_path):
-        # Skip noise directories
-        dirs[:] = [
-            d
-            for d in dirs
-            if d not in (".venv", "node_modules", ".git", "target", "__pycache__", "build", "dist")
-        ]
+    from scanners import walk_repo
+
+    for root, _dirs, files in walk_repo(repo_path):
         for f in files:
             if not f.endswith(".py"):
                 continue
@@ -743,8 +741,7 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
     # ── 2. Scan Rust files ────────────────────────────────────────
     rust_src = os.path.join(repo_path, "server", "spacetimedb", "src")
     if os.path.isdir(rust_src):
-        for root, dirs, files in os.walk(rust_src):
-            dirs[:] = [d for d in dirs if d not in ("target",)]
+        for root, _dirs, files in walk_repo(rust_src):
             for f in files:
                 if not f.endswith(".rs"):
                     continue

@@ -60,8 +60,12 @@ from webhook_dispatcher import (
 )
 
 # TTL cache for GET /api/tasks (hot path — agents + scheduler poll it constantly).
+# TTL is 30s: long enough to absorb the poll burst (dispatcher 30s, fountain 60s,
+# agents) WITHOUT stale reads, because every mutating endpoint invalidates the
+# cache on success. A shorter TTL (5s) caused a full 22K-row re-parse on almost
+# every poll — the SATS conversion is CPU-bound and froze the event loop.
 _TASK_LIST_CACHE: dict[tuple, tuple[float, list]] = {}
-_TASK_LIST_CACHE_TTL = 5.0
+_TASK_LIST_CACHE_TTL = 30.0
 _TASK_LIST_CACHE_LOCK = threading.Lock()
 
 
@@ -102,7 +106,9 @@ router = APIRouter()
 @router.get("/api/tasks/suggest", response_model=list[SuggestResult])
 async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
     """Return top-N recommended tasks based on priority scoring."""
-    rows = await _sql("SELECT * FROM tasks")
+    # Reuse the list_tasks TTL cache (raw rows, keyed on no-filter) so we
+    # don't re-pull + re-parse the full 22K-row table on every suggest call.
+    rows = await _get_cached_task_rows()
 
     # Get agent capabilities if agent_id provided
     agent_caps = None
@@ -131,6 +137,20 @@ async def suggest_tasks(agent_id: str | None = None, limit: int = 5):
     return results[:limit]
 
 
+async def _get_cached_task_rows() -> list[dict]:
+    """Return raw task rows from the list_tasks TTL cache (no-filter key)."""
+    cache_key: tuple = ("", None)
+    now = time.monotonic()
+    with _TASK_LIST_CACHE_LOCK:
+        cached = _TASK_LIST_CACHE.get(cache_key)
+        if cached and cached[0] > now:
+            return cached[1]
+    rows = await _sql("SELECT * FROM tasks")
+    with _TASK_LIST_CACHE_LOCK:
+        _TASK_LIST_CACHE[cache_key] = (now + _TASK_LIST_CACHE_TTL, rows)
+    return rows
+
+
 # ── Task List (MUST be before /api/tasks/{task_id}) ────────────────────
 
 
@@ -147,14 +167,18 @@ async def list_tasks(
     # TTL cache for the hot list path. The raw SELECT * FROM tasks returns
     # ~22K rows (~12MB) and the Python SATS parse takes ~3s; with agents +
     # scheduler polling every 30s the board collapses under concurrent
-    # parses. Cache the converted rows keyed by the SQL-affecting params
-    # (repo/archived) and apply the Python-side filters per request on the
-    # cached list. 5s TTL keeps data fresh while collapsing read volume.
+    # parses. Cache the RAW row dicts keyed by the SQL-affecting params
+    # (repo/archived) — the SATS parse is already offloaded inside _sql —
+    # and apply the Python-side filters + TaskOut conversion per request on
+    # the cached rows. Converting only the final slice (instead of all 22K
+    # rows) keeps even a cold miss fast. TTL is 30s: every mutating
+    # endpoint invalidates the cache on success, so reads can never go stale
+    # beyond the invalidation guarantee.
     cache_key: tuple = (repo or "", archived)
     cached = _TASK_LIST_CACHE.get(cache_key)
     now = time.monotonic()
     if cached and cached[0] > now:
-        tasks = cached[1]
+        rows = cached[1]
     else:
         sql = "SELECT * FROM tasks"
         filters = []
@@ -173,41 +197,42 @@ async def list_tasks(
             rows = await _sql_param(sql, **params)
         else:
             rows = await _sql(sql)
-        tasks = [_row_to_task(r) for r in rows]
         with _TASK_LIST_CACHE_LOCK:
-            _TASK_LIST_CACHE[cache_key] = (now + _TASK_LIST_CACHE_TTL, tasks)
+            _TASK_LIST_CACHE[cache_key] = (now + _TASK_LIST_CACHE_TTL, rows)
 
     # Apply status filter client-side (STDB enum types can't be compared with SQL strings)
     if status:
-        tasks = [t for t in tasks if t.status == status]
+        rows = [t for t in rows if t.get("status") == status]
     if label:
-        # label_task_ids was computed inside the cache miss branch only;
-        # recompute here when the cache hit (cheap join on labels table)
-        rows = await _sql_param(
+        # label_task_ids computed from the labels table (cheap join)
+        label_rows = await _sql_param(
             "SELECT task_id FROM task_label_assignments WHERE label_id = '{label}'",
             label=label,
         )
-        label_task_ids = {r["task_id"] for r in rows}
-        tasks = [t for t in tasks if t.id in label_task_ids]
+        label_task_ids = {r["task_id"] for r in label_rows}
+        rows = [t for t in rows if t.get("id") in label_task_ids]
     # Apply client-side search filter (STDB SQL has no ILIKE — do it in Python)
     if search:
         q = search.lower()
-        tasks = [
+        rows = [
             t
-            for t in tasks
-            if q in t.title.lower()
-            or q in t.description.lower()
-            or q in t.repo.lower()
-            or (t.assigned_to and q in t.assigned_to.lower())
-            or q in t.id.lower()
+            for t in rows
+            if q in (t.get("title") or "").lower()
+            or q in (t.get("description") or "").lower()
+            or q in (t.get("repo") or "").lower()
+            or (t.get("assigned_to") and q in t["assigned_to"].lower())
+            or q in (t.get("id") or "").lower()
         ]
-    tasks.sort(key=lambda t: (t.priority, -t.created_at))
+    rows.sort(key=lambda t: (t.get("priority", 5), -t.get("created_at", 0)))
     # Apply offset + limit client-side
     if offset:
-        tasks = tasks[offset:]
-    if limit and limit < len(tasks):
-        tasks = tasks[:limit]
-    return tasks
+        rows = rows[offset:]
+    if limit and limit < len(rows):
+        rows = rows[:limit]
+    # Convert ONLY the returned slice to TaskOut models, off the event loop.
+    # The old code converted all 22K rows synchronously — ~3-25s of event-loop
+    # freeze on every cache miss.
+    return await asyncio.to_thread(lambda: [_row_to_task(r) for r in rows])
 
 
 # ── Seed / Clear / Export (MUST be before /api/tasks/{task_id}) ────────

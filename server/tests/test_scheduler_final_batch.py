@@ -319,7 +319,9 @@ async def test_fountain_loop_timeout_kills_child():
 
     async def timeout_wait_for(aw, timeout):
         # Simulate a hung fountain: raise TimeoutError once, then allow the
-        # post-kill communicate to complete.
+        # post-kill communicate to complete. Close the pending coroutine so
+        # it isn't left dangling (avoids "coroutine never awaited" warning).
+        aw.close()
         raise TimeoutError("hung")
 
     with (
@@ -348,7 +350,11 @@ async def test_fountain_loop_cancelled_kills_child():
     mock_proc.communicate = mock.AsyncMock(return_value=(b"", b""))
     mock_proc.kill = mock.MagicMock()
 
-    async def raise_cancel(*_args, **_kwargs):
+    async def raise_cancel(*args, **_kwargs):
+        # Close the pending coroutine (the inner communicate()) so it isn't
+        # left dangling — real wait_for cancels it, our fake must too.
+        if args and hasattr(args[0], "close"):
+            args[0].close()
         raise asyncio.CancelledError()
 
     with (
@@ -471,8 +477,16 @@ async def test_low_backlog_actionable_count_exception():
 
 @pytest.mark.asyncio
 async def test_low_backlog_check_backlog_no_overview():
-    """check_backlog_and_trigger returns False when no overview."""
-    result = await scheduler_low_backlog.check_backlog_and_trigger(None)
+    """check_backlog_and_trigger returns False when no overview.
+
+    MUST mock _api_get: without the mock this test hits the live server
+    (when one is running) and can cascade into triggering the REAL
+    scanner, hanging the suite. Mocking _api_get to return None keeps the
+    test hermetic — the function must short-circuit to False.
+    """
+    scheduler_low_backlog._last_trigger_ms = 0
+    with mock.patch.object(scheduler_low_backlog, "_api_get", return_value=None):
+        result = await scheduler_low_backlog.check_backlog_and_trigger(None)
     assert result is False
 
 

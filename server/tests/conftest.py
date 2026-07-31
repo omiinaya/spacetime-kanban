@@ -43,6 +43,21 @@ def _clear_task_list_cache():
     tasks_mod._TASK_LIST_CACHE.clear()
 
 
+@pytest.fixture(autouse=True)
+def _clear_health_board_cache():
+    """Clear the /api/health board-summary TTL cache between tests.
+
+    Same reasoning as _clear_task_list_cache — health.py caches the board
+    summary module-wide, and a warm cache would make later tests observe
+    another test's mocked rows instead of their own _sql side_effects.
+    """
+    import routes.health as health_mod
+
+    health_mod._BOARD_SUMMARY_CACHE.clear()
+    yield
+    health_mod._BOARD_SUMMARY_CACHE.clear()
+
+
 def _patch_route_modules(stack: ExitStack):
     """Patch STDB helpers in all route modules so tests can mock them."""
     for mod, names in _ROUTE_HELPER_MAP.items():

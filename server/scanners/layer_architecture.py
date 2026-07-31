@@ -15,7 +15,7 @@ import os
 import re
 import subprocess
 
-from scanners import register_scanner
+from scanners import register_scanner, walk_repo
 
 
 def _check_rust_unwraps(repo_path: str) -> list[str]:
@@ -28,7 +28,7 @@ def _check_rust_unwraps(repo_path: str) -> list[str]:
     for src_dir in stdb_dirs:
         if not os.path.isdir(src_dir):
             continue
-        for root, _dirs, files in os.walk(src_dir):
+        for root, _dirs, files in walk_repo(src_dir):
             for f in files:
                 if not f.endswith(".rs"):
                     continue
@@ -48,13 +48,7 @@ def _check_rust_unwraps(repo_path: str) -> list[str]:
 def _check_bare_excepts(repo_path: str) -> list[str]:
     """Find Python files with bare except: clauses."""
     results = []
-    for root, dirs, files in os.walk(repo_path):
-        # Skip hidden dirs and venvs
-        dirs[:] = [
-            d
-            for d in dirs
-            if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__")
-        ]
+    for root, _dirs, files in walk_repo(repo_path):
         for f in files:
             if not f.endswith(".py"):
                 continue
@@ -75,13 +69,7 @@ def _check_large_files(repo_path: str) -> list[tuple[str, int]]:
     """Find source files over 500 lines."""
     extensions = (".py", ".rs", ".ts", ".tsx", ".js", ".jsx")
     large = []
-    for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [
-            d
-            for d in dirs
-            if not d.startswith(".")
-            and d not in ("venv", ".venv", "node_modules", "__pycache__", "dist", "build", "target")
-        ]
+    for root, _dirs, files in walk_repo(repo_path):
         for f in files:
             if not f.endswith(extensions):
                 continue
@@ -100,12 +88,7 @@ def _check_large_files(repo_path: str) -> list[tuple[str, int]]:
 def _check_missing_init_py(repo_path: str) -> list[str]:
     """Find Python packages without __init__.py."""
     missing = []
-    for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [
-            d
-            for d in dirs
-            if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__")
-        ]
+    for root, _dirs, files in walk_repo(repo_path):
         # Check if this directory has .py files but no __init__.py
         has_py = any(f.endswith(".py") for f in files)
         has_init = "__init__.py" in files

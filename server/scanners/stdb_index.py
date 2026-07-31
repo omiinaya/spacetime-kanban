@@ -13,7 +13,7 @@ indexes. False positives waste worker time and clutter the board.
 import os
 import re
 
-from scanners import register_scanner
+from scanners import register_scanner, walk_repo
 
 
 def _scan_rust_file(filepath: str) -> list[dict]:
@@ -146,7 +146,7 @@ def scan_stdb_index(repo_name: str, repo_path: str) -> list[dict]:
         return []
 
     findings = []
-    for root, _dirs, files in os.walk(stdb_src):
+    for root, _dirs, files in walk_repo(stdb_src):
         for f in files:
             if f.endswith(".rs"):
                 filepath = os.path.join(root, f)
