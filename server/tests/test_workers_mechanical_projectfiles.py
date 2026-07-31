@@ -2,7 +2,6 @@
 
 import os
 import sys
-import time
 from unittest.mock import patch
 
 import pytest
@@ -31,6 +30,7 @@ def ctx(repo_dir):
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_add_project_files — needs specific title to trigger each block
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestAddProjectFilesTitles:
     def test_create_license(self, repo_dir):
@@ -164,6 +164,7 @@ class TestAddProjectFilesTitles:
 # handle_stale_todos — needs description with file paths
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestStaleTodosProper:
     def test_no_description(self, repo_dir):
         """No description in task."""
@@ -177,7 +178,12 @@ class TestStaleTodosProper:
     def test_empty_description(self, repo_dir):
         """Empty description."""
         ctx = WorkerContext("task_s2")
-        ctx.task = {"id": "task_s2", "title": "review stale todo", "repo": "test-repo", "description": ""}
+        ctx.task = {
+            "id": "task_s2",
+            "title": "review stale todo",
+            "repo": "test-repo",
+            "description": "",
+        }
         with patch.object(WorkerContext, "repo_path", repo_dir):
             success, msg = handle_stale_todos(ctx)
             assert not success

@@ -19,7 +19,6 @@ from workers.mechanical import (
     handle_bare_except_scanner,
     handle_ci_pipeline,
     handle_extract_module,
-    handle_fix_clippy,
     handle_git_maintenance,
     handle_lint_code,
     handle_remove_unused_imports,
@@ -27,7 +26,6 @@ from workers.mechanical import (
     handle_run_tests,
     handle_scan_todos,
     handle_stale_todos,
-    handle_sync_env,
     handle_typed_errors,
     handle_update_deps,
 )
@@ -66,12 +64,15 @@ def stdb_dir(repo_dir):
 # Lines 107, 155: handle_add_index_btree edge cases
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestAddIndexBtreeFinal:
     def test_struct_detection_no_brace_on_same_line(self, mock_ctx, stdb_dir):
         """Line 107: struct with brace on next line (pub struct Foo\\n{)"""
         tables_rs = os.path.join(stdb_dir, "tables.rs")
         with open(tables_rs, "w") as f:
-            f.write("#[table(name=tasks, public)]\npub struct Tasks\n{\n    pub user_id: String,\n}\n")
+            f.write(
+                "#[table(name=tasks, public)]\npub struct Tasks\n{\n    pub user_id: String,\n}\n"
+            )
         success, msg = handle_add_index_btree(mock_ctx)
         assert isinstance(success, bool)
 
@@ -79,7 +80,9 @@ class TestAddIndexBtreeFinal:
         """Line 107: struct with inner braces correctly tracked."""
         tables_rs = os.path.join(stdb_dir, "tables.rs")
         with open(tables_rs, "w") as f:
-            f.write("pub struct Tasks {\n    pub name: String { get; }\n    pub user_id: String,\n}\n")
+            f.write(
+                "pub struct Tasks {\n    pub name: String { get; }\n    pub user_id: String,\n}\n"
+            )
         success, msg = handle_add_index_btree(mock_ctx)
         assert isinstance(success, bool)
 
@@ -97,6 +100,7 @@ class TestAddIndexBtreeFinal:
 # Line 253: handle_remove_unused_imports
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestRemoveUnusedImportsFinal:
     def test_no_changes_and_no_errors(self, mock_ctx, repo_dir):
         """Ruff returns empty output, no cargo dir. Line 253: returns false."""
@@ -113,6 +117,7 @@ class TestRemoveUnusedImportsFinal:
 # ═══════════════════════════════════════════════════════════════════════════
 # Lines 350-351: handle_extract_module — no valid files
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestExtractModuleFinal:
     def test_wc_output_parse_skips_total_line(self, mock_ctx, repo_dir):
@@ -138,6 +143,7 @@ class TestExtractModuleFinal:
         wc_output = f"10 {rs_file}\n10 total\n"
 
         call_count = 0
+
         def smart_mock(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -156,6 +162,7 @@ class TestExtractModuleFinal:
 # ═══════════════════════════════════════════════════════════════════════════
 # _find_rust_top_level_items lines 587, 617-618
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestFindRustItemsFinal:
     def test_type_part_extraction_with_generics(self):
@@ -177,6 +184,7 @@ class TestFindRustItemsFinal:
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_typed_errors lines 744-747, 757, 859-861, 864-865, 880-881, etc.
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestTypedErrorsFinal:
     def test_rust_file_with_no_stdb_src(self, mock_ctx, repo_dir):
@@ -209,6 +217,7 @@ class TestTypedErrorsFinal:
 # handle_run_tests lines 1045, 1068-1069, 1087, 1090-1091
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestRunTestsFinal:
     def test_cargo_not_found(self, mock_ctx, stdb_dir):
         """Line 1045: Cargo not found."""
@@ -230,7 +239,7 @@ class TestRunTestsFinal:
         pkg = os.path.join(repo_dir, "package.json")
         with open(pkg, "w") as f:
             f.write('{"scripts": {"test": "jest"}}\n')
-        with patch("subprocess.run", side_effect=RuntimeError("npm broke")):
+        with patch("subprocess.run", side_effect=OSError("npm broke")):
             success, msg = handle_run_tests(mock_ctx)
             assert "Node" in msg
 
@@ -239,11 +248,14 @@ class TestRunTestsFinal:
 # handle_update_deps lines 1127-1132, 1146-1151
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestUpdateDepsFinal:
     def test_cargo_update_parse(self, mock_ctx, stdb_dir):
         """Line 1127-1132: Cargo update parsing output."""
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="Updating serde v1.0 -> v1.1\n", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="Updating serde v1.0 -> v1.1\n", stderr=""
+            )
             success, msg = handle_update_deps(mock_ctx)
             assert isinstance(success, bool)
             assert "Rust" in msg
@@ -254,7 +266,9 @@ class TestUpdateDepsFinal:
         with open(pkg, "w") as f:
             f.write('{"dependencies": {"express": "^4"}}\n')
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="+ express@4.18.2\nadded 1 package\n", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="+ express@4.18.2\nadded 1 package\n", stderr=""
+            )
             success, msg = handle_update_deps(mock_ctx)
             assert isinstance(success, bool)
 
@@ -262,6 +276,7 @@ class TestUpdateDepsFinal:
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_git_maintenance line 1176
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestGitMaintenanceFinal:
     def test_git_timeout(self, mock_ctx, repo_dir):
@@ -283,11 +298,14 @@ class TestGitMaintenanceFinal:
 # handle_scan_todos lines 1207-1209, 1211
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestScanTodosFinal:
     def test_parse_todo_line_with_colons(self, mock_ctx, repo_dir):
         """Line 1207-1209: Parse line with colon separator."""
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="file1.py:5\nfile2.py:3\n", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="file1.py:5\nfile2.py:3\n", stderr=""
+            )
             success, msg = handle_scan_todos(mock_ctx)
             assert success
             assert "Found" in msg
@@ -304,6 +322,7 @@ class TestScanTodosFinal:
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_lint_code lines 1287, 1339
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestLintCodeFinal:
     def test_cargo_fmt_check_ok(self, mock_ctx, stdb_dir):
@@ -326,6 +345,7 @@ class TestLintCodeFinal:
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_add_init_py lines 1376, 1394
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestAddInitPyFinal:
     def test_duplicate_dash_prefix(self, mock_ctx, repo_dir):
@@ -353,12 +373,13 @@ class TestAddInitPyFinal:
             success, msg = handle_add_init_py(mock_ctx)
             assert isinstance(success, bool)
         finally:
-            os.chmod(pkg_dir, 0o755)
+            os.chmod(pkg_dir, 0o700)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_add_project_files large block
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestAddProjectFilesFinal:
     def test_creates_all_project_files(self, mock_ctx, repo_dir):
@@ -377,6 +398,7 @@ class TestAddProjectFilesFinal:
 # handle_stale_todos large block
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestStaleTodosFinal:
     def test_stale_todo_scan_with_results(self, mock_ctx, repo_dir):
         """Scan for stale TODOs, find some."""
@@ -384,6 +406,7 @@ class TestStaleTodosFinal:
         with open(py_file, "w") as f:
             f.write("# TODO: very old task\n")
         import time
+
         old_time = time.time() - 400 * 86400  # More than a year
         os.utime(py_file, (old_time, old_time))
         success, msg = handle_stale_todos(mock_ctx)
@@ -393,6 +416,7 @@ class TestStaleTodosFinal:
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_add_test_scaffold lines 1581-1582, 1634-1635, 1656-1657, etc.
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestAddTestScaffoldFinal:
     def test_python_test_oserror(self, mock_ctx, repo_dir):
@@ -454,6 +478,7 @@ class TestAddTestScaffoldFinal:
 # handle_replace_unwrap_scanner lines 1726, 1730, 1758, 1764-1766
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestReplaceUnwrapFinal:
     def test_unwrap_file_not_found(self, mock_ctx, repo_dir):
         """Line 1730: File listed in description doesn't exist."""
@@ -470,7 +495,9 @@ class TestReplaceUnwrapFinal:
         os.makedirs(rs_dir, exist_ok=True)
         rs_file = os.path.join(rs_dir, "main.rs")
         with open(rs_file, "w") as f:
-            f.write('// TODO: Replace unwrap() calls with proper error handling\nfn main() {\n    result.unwrap();\n}\n')
+            f.write(
+                "// TODO: Replace unwrap() calls with proper error handling\nfn main() {\n    result.unwrap();\n}\n"
+            )
         mock_ctx.task = {
             **mock_ctx.task,
             "description": "- server/spacetimedb/src/main.rs: 1 unwrap() calls\n",
@@ -484,7 +511,7 @@ class TestReplaceUnwrapFinal:
         os.makedirs(rs_dir, exist_ok=True)
         rs_file = os.path.join(rs_dir, "main.rs")
         with open(rs_file, "w") as f:
-            f.write('//! Module docs\nfn main() {\n    result.unwrap();\n}\n')
+            f.write("//! Module docs\nfn main() {\n    result.unwrap();\n}\n")
         mock_ctx.task = {
             **mock_ctx.task,
             "description": "- server/spacetimedb/src/main.rs: 1 unwrap() calls\n",
@@ -498,6 +525,7 @@ class TestReplaceUnwrapFinal:
 # handle_bare_except_scanner line 1839
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestBareExceptFinal:
     def test_bare_except_write_oserror(self, mock_ctx, repo_dir):
         """Line 1839: OSError writing back file."""
@@ -505,7 +533,7 @@ class TestBareExceptFinal:
         os.makedirs(src, exist_ok=True)
         py_file = os.path.join(src, "handlers.py")
         with open(py_file, "w") as f:
-            f.write('try:\n    pass\nexcept:\n    pass\n')
+            f.write("try:\n    pass\nexcept:\n    pass\n")
         mock_ctx.task = {
             **mock_ctx.task,
             "description": "Files:\n  - server/handlers.py\n",
@@ -518,6 +546,7 @@ class TestBareExceptFinal:
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_ci_pipeline lines 1888-1891
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestCiPipelineFinal:
     def test_ci_workflow_created(self, mock_ctx, repo_dir):

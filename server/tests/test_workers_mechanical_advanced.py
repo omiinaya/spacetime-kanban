@@ -3,7 +3,7 @@
 import os
 import subprocess
 import sys
-from unittest.mock import MagicMock, PropertyMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,11 +11,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from workers.base import WorkerContext
 from workers.mechanical import (
-    HANDLERS,
     _find_python_top_level_items,
     _find_rust_top_level_items,
     handle_add_index_btree,
-    handle_add_init_py,
     handle_add_project_files,
     handle_add_test_scaffold,
     handle_bare_except_scanner,
@@ -32,9 +30,7 @@ from workers.mechanical import (
     handle_sync_env,
     handle_typed_errors,
     handle_update_deps,
-    sh_quote,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -200,12 +196,15 @@ class TestHandleExtractModuleAdvanced:
             if isinstance(cmd, list) and len(cmd) > 2 and "cat >" in cmd[2]:
                 # Write an EMPTY file so the handler detects it as empty
                 filepath = cmd[2].split("cat >")[1].strip().strip("'")
-                with open(filepath, "w") as f:
+                with open(filepath, "w"):
                     pass  # Empty file!
-            return MagicMock(returncode=0, stdout=wc_output if "find" in str(cmd) or "wc" in str(cmd) else "", stderr="")
+            return MagicMock(
+                returncode=0,
+                stdout=wc_output if "find" in str(cmd) or "wc" in str(cmd) else "",
+                stderr="",
+            )
 
-        with patch("subprocess.run", side_effect=smart_mock), \
-             patch("os.remove") as mock_remove:
+        with patch("subprocess.run", side_effect=smart_mock), patch("os.remove") as mock_remove:
             success, msg = handle_extract_module(mock_ctx)
             assert not success, f"Expected failure but got: {msg}"
             assert "empty" in msg
@@ -221,6 +220,7 @@ class TestHandleExtractModuleAdvanced:
         wc_output = f"10 {rs_file}\n10 total\n"
 
         call_count = 0
+
         def mock_run_side_effect(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -234,8 +234,7 @@ class TestHandleExtractModuleAdvanced:
             else:
                 raise subprocess.TimeoutExpired("sh", 10)  # write-back times out
 
-        with patch("subprocess.run", side_effect=mock_run_side_effect), \
-             patch("os.remove"):
+        with patch("subprocess.run", side_effect=mock_run_side_effect), patch("os.remove"):
             success, msg = handle_extract_module(mock_ctx)
             assert not success
             assert "timed out" in msg.lower() or "Timed out" in msg
@@ -250,6 +249,7 @@ class TestHandleExtractModuleAdvanced:
         wc_output = f"10 {rs_file}\n10 total\n"
 
         call_count = 0
+
         def mock_run_side_effect(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -262,8 +262,7 @@ class TestHandleExtractModuleAdvanced:
             else:
                 raise PermissionError("denied")
 
-        with patch("subprocess.run", side_effect=mock_run_side_effect), \
-             patch("os.remove"):
+        with patch("subprocess.run", side_effect=mock_run_side_effect), patch("os.remove"):
             success, msg = handle_extract_module(mock_ctx)
             assert not success
             assert "Failed to" in msg or "failed to" in msg
@@ -274,7 +273,9 @@ class TestHandleExtractModuleAdvanced:
         os.makedirs(src_dir, exist_ok=True)
         rs_file = os.path.join(src_dir, "main.rs")
         with open(rs_file, "w") as f:
-            f.write("use std::collections::HashMap;\n\npub fn hello() {\n    let x = 1;\n}\n\npub fn world() {\n    let y = 2;\n}\n")
+            f.write(
+                "use std::collections::HashMap;\n\npub fn hello() {\n    let x = 1;\n}\n\npub fn world() {\n    let y = 2;\n}\n"
+            )
         wc_output = f"10 {rs_file}\n10 total\n"
 
         # The handler will:
@@ -311,18 +312,18 @@ class TestHandleExtractModuleAdvanced:
             # But we need the first call to return wc output, and subsequent
             # calls to actually write files
             actual_calls = []
+
             def smart_mock(*args, **kwargs):
                 actual_calls.append((args, kwargs))
                 cmd = args[0] if args else kwargs.get("args", [])
-                if isinstance(cmd, list):
-                    if cmd[0] == "sh" and len(cmd) > 2 and "cat >" in cmd[2]:
-                        # Perform the actual file write
-                        cat_cmd = cmd[2]
-                        filepath = cat_cmd.split("cat >")[1].strip().strip("'\"")
-                        input_data = kwargs.get("input", "")
-                        with open(filepath, "w") as f:
-                            f.write(input_data)
-                        return MagicMock(returncode=0, stdout="", stderr="")
+                if isinstance(cmd, list) and cmd[0] == "sh" and len(cmd) > 2 and "cat >" in cmd[2]:
+                    # Perform the actual file write
+                    cat_cmd = cmd[2]
+                    filepath = cat_cmd.split("cat >")[1].strip().strip("'\"")
+                    input_data = kwargs.get("input", "")
+                    with open(filepath, "w") as f:
+                        f.write(input_data)
+                    return MagicMock(returncode=0, stdout="", stderr="")
                 return MagicMock(returncode=0, stdout=wc_output, stderr="")
 
             mock_run.side_effect = smart_mock
@@ -338,19 +339,20 @@ class TestHandleExtractModuleAdvanced:
         os.makedirs(src_dir, exist_ok=True)
         py_file = os.path.join(src_dir, "module.py")
         with open(py_file, "w") as f:
-            f.write('"""Module docstring."""\n\ndef hello():\n    pass\n\n\ndef world():\n    pass\n')
+            f.write(
+                '"""Module docstring."""\n\ndef hello():\n    pass\n\n\ndef world():\n    pass\n'
+            )
         wc_output = f"10 {py_file}\n10 total\n"
 
         def smart_mock(*args, **kwargs):
             cmd = args[0] if args else kwargs.get("args", [])
-            if isinstance(cmd, list):
-                if cmd[0] == "sh" and len(cmd) > 2 and "cat >" in cmd[2]:
-                    cat_cmd = cmd[2]
-                    filepath = cat_cmd.split("cat >")[1].strip().strip("'\"")
-                    input_data = kwargs.get("input", "")
-                    with open(filepath, "w") as f:
-                        f.write(input_data)
-                    return MagicMock(returncode=0, stdout="", stderr="")
+            if isinstance(cmd, list) and cmd[0] == "sh" and len(cmd) > 2 and "cat >" in cmd[2]:
+                cat_cmd = cmd[2]
+                filepath = cat_cmd.split("cat >")[1].strip().strip("'\"")
+                input_data = kwargs.get("input", "")
+                with open(filepath, "w") as f:
+                    f.write(input_data)
+                return MagicMock(returncode=0, stdout="", stderr="")
             return MagicMock(returncode=0, stdout=wc_output, stderr="")
 
         with patch("subprocess.run", side_effect=smart_mock):
@@ -381,7 +383,9 @@ class TestAddIndexBtreeAdvanced:
         """Field with comment lines above (not #[]) — line 107 handled."""
         tables_rs = os.path.join(stdb_dir, "tables.rs")
         with open(tables_rs, "w") as f:
-            f.write("pub struct Tasks {\n    // The user ID for this task\n    pub user_id: String,\n}\n")
+            f.write(
+                "pub struct Tasks {\n    // The user ID for this task\n    pub user_id: String,\n}\n"
+            )
         success, msg = handle_add_index_btree(mock_ctx)
         assert success or "Added" in msg or "found" in msg.lower()
 
@@ -464,9 +468,7 @@ class TestRemoveUnusedImportsEdge:
             f.write("[tool.ruff]\n")
 
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="Fixed 5 errors\n", stderr=""
-            )
+            mock_run.return_value = MagicMock(returncode=0, stdout="Fixed 5 errors\n", stderr="")
             success, msg = handle_remove_unused_imports(mock_ctx)
             assert success
             assert "Removed" in msg
@@ -474,11 +476,13 @@ class TestRemoveUnusedImportsEdge:
     def test_cargo_fix_success_reported(self, mock_ctx, stdb_dir):
         """Cargo fix succeeds adding to change count — line 253."""
         with patch("subprocess.run") as mock_run:
+
             def cargo_fix_side(*args, **kwargs):
                 cmd = args[0] if args else kwargs.get("args", [])
                 if "cargo" in str(cmd):
                     return MagicMock(returncode=0, stdout="Fixed", stderr="")
                 return MagicMock(returncode=0, stdout="", stderr="")
+
             mock_run.side_effect = cargo_fix_side
             success, msg = handle_remove_unused_imports(mock_ctx)
             assert isinstance(success, bool)
@@ -486,11 +490,13 @@ class TestRemoveUnusedImportsEdge:
     def test_cargo_fix_fails_gracefully(self, mock_ctx, stdb_dir):
         """Cargo fix fails, error recorded — line 247-248 edge."""
         with patch("subprocess.run") as mock_run:
+
             def cargo_side(*args, **kwargs):
                 cmd = args[0] if args else kwargs.get("args", [])
                 if "cargo" in str(cmd):
                     raise subprocess.TimeoutExpired("cargo", 120)
                 return MagicMock(returncode=0, stdout="", stderr="")
+
             mock_run.side_effect = cargo_side
             success, msg = handle_remove_unused_imports(mock_ctx)
             assert isinstance(success, bool)
@@ -586,7 +592,9 @@ class TestTypedErrorsAdvanced:
     def test_rust_ok_or_else_format(self, mock_ctx, stdb_dir):
         """Rust ok_or_else with format!(...) — line 794-806."""
         with open(os.path.join(stdb_dir, "reducers.rs"), "w") as f:
-            f.write('fn do() -> Result<(), String> {\n    get().ok_or_else(|| format!("nope: {}", x))\n}\n')
+            f.write(
+                'fn do() -> Result<(), String> {\n    get().ok_or_else(|| format!("nope: {}", x))\n}\n'
+            )
         success, msg = handle_typed_errors(mock_ctx)
         assert success
         assert "Rust" in msg or "string-based" in msg
@@ -594,7 +602,9 @@ class TestTypedErrorsAdvanced:
     def test_rust_ok_or_else_literal(self, mock_ctx, stdb_dir):
         """Rust ok_or_else(|| 'literal'.to_string()) — line 774-780."""
         with open(os.path.join(stdb_dir, "reducers.rs"), "w") as f:
-            f.write('fn do() -> Result<(), String> {\n    get().ok_or_else(|| "failed".to_string())\n}\n')
+            f.write(
+                'fn do() -> Result<(), String> {\n    get().ok_or_else(|| "failed".to_string())\n}\n'
+            )
         success, msg = handle_typed_errors(mock_ctx)
         assert success
         assert "Rust" in msg or "string-based" in msg
@@ -604,14 +614,14 @@ class TestTypedErrorsAdvanced:
         with open(os.path.join(stdb_dir, "reducers.rs"), "w") as f:
             f.write('fn do() -> Result<(), String> {\n    Err("oops".to_string())\n}\n')
         # Ensure error.rs doesn't exist but write fails
-        with patch("builtins.open") as mock_open_patch:
-            # First read operations succeed, write to error.rs fails
-            real_open = open
-            def selective_open(path, *args, **kwargs):
-                if "error.rs" in str(path) and "w" in args and "w" not in str(kwargs.get("mode", "")):
-                    raise PermissionError("denied")
-                return real_open(path, *args, **kwargs)
-            mock_open_patch.side_effect = selective_open
+        real_open = open  # capture BEFORE patching
+
+        def selective_open(path, *args, **kwargs):
+            if "error.rs" in str(path) and "w" in args:
+                raise PermissionError("denied")
+            return real_open(path, *args, **kwargs)
+
+        with patch("builtins.open", side_effect=selective_open):
             success, msg = handle_typed_errors(mock_ctx)
             # Should handle write error gracefully
             assert isinstance(success, bool)
@@ -628,7 +638,7 @@ class TestTypedErrorsAdvanced:
 
     def test_no_src_dir_for_python(self, mock_ctx, repo_dir):
         """Python files exist but no server/ directory — lines 744-747."""
-        # Files are at root, not in server/ 
+        # Files are at root, not in server/
         with open(os.path.join(repo_dir, "test.py"), "w") as f:
             f.write('raise ValueError("test")\n')
         success, msg = handle_typed_errors(mock_ctx)
@@ -655,7 +665,7 @@ class TestRunTestsAdvanced:
     def test_cargo_test_exception(self, mock_ctx, stdb_dir):
         """Cargo test raises generic exception — line 1046-1047."""
         with patch("subprocess.run") as mock_run:
-            mock_run.side_effect = RuntimeError("something broke")
+            mock_run.side_effect = OSError("something broke")
             success, msg = handle_run_tests(mock_ctx)
             assert "Rust" in msg
 
@@ -665,9 +675,7 @@ class TestRunTestsAdvanced:
         with open(pkg, "w") as f:
             f.write('{"scripts": {"test": "jest"}}\n')
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=1, stdout="FAIL Tests", stderr=""
-            )
+            mock_run.return_value = MagicMock(returncode=1, stdout="FAIL Tests", stderr="")
             success, msg = handle_run_tests(mock_ctx)
             assert "Node" in msg or "failure" in msg
 
@@ -677,9 +685,7 @@ class TestRunTestsAdvanced:
         with open(pyproject, "w") as f:
             f.write("[project]\n")
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="no test output here", stderr=""
-            )
+            mock_run.return_value = MagicMock(returncode=0, stdout="no test output here", stderr="")
             success, msg = handle_run_tests(mock_ctx)
             assert "Python" in msg or "Tests" in msg or "No" in msg
 
@@ -706,6 +712,7 @@ class TestRemainingSingleBranches:
             f.write("# TODO: old\n")
         # Set mtime far in the past
         import time
+
         old_time = time.time() - 365 * 86400  # 1 year ago
         os.utime(py_file, (old_time, old_time))
         success, msg = handle_stale_todos(mock_ctx)
@@ -752,7 +759,7 @@ class TestRemainingSingleBranches:
         os.makedirs(stdb_dir, exist_ok=True)
         cargo = os.path.join(stdb_dir, "Cargo.toml")
         with open(cargo, "w") as f:
-            f.write("[dependencies]\nserde = \"1.0\"\n")
+            f.write('[dependencies]\nserde = "1.0"\n')
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             success, msg = handle_update_deps(mock_ctx)
