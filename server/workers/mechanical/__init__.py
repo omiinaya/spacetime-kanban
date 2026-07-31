@@ -146,7 +146,7 @@ def handle_add_index_btree(ctx: WorkerContext) -> tuple[bool, str]:
                 with open(filepath, "w") as f:
                     f.write(content)
 
-        except Exception as e:
+        except OSError as e:
             errors.append(f"{os.path.basename(filepath)}: {e}")
 
     if changes > 0:
@@ -583,8 +583,6 @@ def _find_rust_top_level_items(content: str) -> list[dict]:
                     if type_part:
                         # Handle generics
                         name = type_part.split("<")[0].strip()
-                        if not name:
-                            name = f"impl_{kind}"
                     else:
                         name = f"impl_block_{len(items)}"
 
@@ -611,17 +609,12 @@ def _find_rust_top_level_items(content: str) -> list[dict]:
         # when we're at top level)
         brace_depth += stripped.count("{") - stripped.count("}")
 
-        if in_item:
-            # Guard against type-checker confusion (current is always set when in_item)
-            if current is None:
-                in_item = False
-                continue
-            if brace_depth <= 0:
-                in_item = False
-                brace_depth = 0
-                current["end_line"] = i
-                items.append(current)
-                current = None
+        if in_item and brace_depth <= 0:
+            in_item = False
+            brace_depth = 0
+            current["end_line"] = i  # type: ignore[union-attr]
+            items.append(current)
+            current = None
 
     return items
 
@@ -744,7 +737,7 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
                         msg = m.group(1)[:80]
                         if len(msg) > 3:  # skip trivial matches
                             findings["python"].append((rel, i, "raise X(...)", msg))
-            except Exception:
+            except OSError:
                 pass
 
     # ── 2. Scan Rust files ────────────────────────────────────────
@@ -803,7 +796,7 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
                             (rel, line_no, "ok_or_else(format!())", msg)
                         )
 
-                except Exception:
+                except OSError:
                     pass
 
     # ── 3. Aggregate results ──────────────────────────────────────
@@ -924,7 +917,7 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
                 with open(error_rs_path, "w") as fh:
                     fh.write("\n".join(lines_out))
                 created_msg = "created skeleton at server/spacetimedb/src/error.rs"
-            except Exception as e:
+            except OSError as e:
                 created_msg = f"failed to create error.rs: {e}"
         else:
             created_msg = "error.rs already exists"
@@ -969,7 +962,7 @@ def handle_typed_errors(ctx: WorkerContext) -> tuple[bool, str]:
                 with open(errors_py_path, "w") as fh:
                     fh.write("\n".join(lines_out) + "\n")
                 created_msg = "created skeleton at server/errors.py"
-            except Exception as e:
+            except OSError as e:
                 created_msg = f"failed to create errors.py: {e}"
         else:
             created_msg = "errors.py already exists"
@@ -1087,7 +1080,7 @@ def handle_run_tests(ctx: WorkerContext) -> tuple[bool, str]:
             results.append("Node: timed out")
         except FileNotFoundError:
             results.append("Node: npm not found")
-        except Exception as e:
+        except OSError as e:
             results.append(f"Node: {e}")
 
     if results:
@@ -1128,7 +1121,7 @@ def handle_update_deps(ctx: WorkerContext) -> tuple[bool, str]:
             results.append("Rust: timed out")
         except FileNotFoundError:
             results.append("Rust: cargo not found")
-        except Exception as e:
+        except OSError as e:
             results.append(f"Rust: {e}")
 
     # npm update
@@ -1147,7 +1140,7 @@ def handle_update_deps(ctx: WorkerContext) -> tuple[bool, str]:
             results.append("Node: timed out")
         except FileNotFoundError:
             results.append("Node: npm not found")
-        except Exception as e:
+        except OSError as e:
             results.append(f"Node: {e}")
 
     if results:
@@ -1336,7 +1329,7 @@ def handle_lint_code(ctx: WorkerContext) -> tuple[bool, str]:
                 results.append(f"Prettier: {changed} file(s) formatted")
             else:
                 results.append("Prettier: OK")
-        except Exception:
+        except (subprocess.TimeoutExpired, OSError):
             pass
 
     if results:
@@ -1372,8 +1365,6 @@ def handle_add_init_py(ctx: WorkerContext) -> tuple[bool, str]:
     dirs_to_fix = []
     for line in description.split("\n"):
         stripped = line.strip()
-        if stripped.startswith("- ") and not stripped.startswith("- "):
-            stripped = stripped[2:]
         if stripped and not stripped.startswith("Found") and not stripped.startswith("These"):
             path = stripped.strip().lstrip("- ").strip()
             if path and "/" in path:
@@ -1539,7 +1530,7 @@ def handle_stale_todos(ctx: WorkerContext) -> tuple[bool, str]:
             if count > 0:
                 todo_count += count
                 files_with_todos.append(rel_path)
-        except Exception:
+        except OSError:
             pass
 
     if todo_count > 0:
@@ -1722,8 +1713,6 @@ def handle_replace_unwrap_scanner(ctx: WorkerContext) -> tuple[bool, str]:
     for entry in unwrap_files:
         # Extract filename from entry like "  - server/spacetimedb/src/user.rs: 12 unwrap() calls"
         parts = entry.split(":", 1)
-        if not parts:
-            continue
         rel_path = parts[0].strip().lstrip("- ")
         abs_path = os.path.join(repo_path, rel_path)
         if not os.path.isfile(abs_path):
@@ -1763,7 +1752,7 @@ def handle_replace_unwrap_scanner(ctx: WorkerContext) -> tuple[bool, str]:
                     changed = True
                 except OSError:
                     pass
-        except Exception:
+        except OSError:
             pass
 
     if changed:
@@ -1838,7 +1827,7 @@ def handle_bare_except_scanner(ctx: WorkerContext) -> tuple[bool, str]:
                     changed = True
                 except OSError:
                     pass
-        except Exception:
+        except OSError:
             pass
 
     if changed:
@@ -1869,13 +1858,13 @@ def handle_ci_pipeline(ctx: WorkerContext) -> tuple[bool, str]:
                 f"CI already configured ({len(existing)} workflow(s): {', '.join(existing[:3])})",
             )
 
-    # Create basic CI
+    # Create basic CI (the early return above already handled existing
+    # workflows, so we can safely write ci.yml here)
     os.makedirs(github_actions, exist_ok=True)
     ci_path = os.path.join(github_actions, "ci.yml")
-    if not os.path.isfile(ci_path):
-        try:
-            with open(ci_path, "w") as f:
-                f.write("""name: CI
+    try:
+        with open(ci_path, "w") as f:
+            f.write("""name: CI
 on: [push, pull_request]
 jobs:
   test:
@@ -1884,8 +1873,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: echo \"Tests would run here\"
 """)
-            return True, "Created basic CI workflow (.github/workflows/ci.yml)"
-        except OSError:
-            return False, "Failed to create CI workflow"
-
-    return True, "CI workflow already exists"
+    except OSError:
+        return False, "Failed to create CI workflow"
+    return True, "Created basic CI workflow (.github/workflows/ci.yml)"

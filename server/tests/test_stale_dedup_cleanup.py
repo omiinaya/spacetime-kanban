@@ -1,4 +1,5 @@
 """Test stale-worker alert dedup — cleanup coverage."""
+
 from scheduler import _should_alert_stale, _stale_alerted_tasks
 
 

@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from workers.base import WorkerContext
 from workers.mechanical import (
+    _find_rust_top_level_items,
     handle_add_index_btree,
     handle_add_init_py,
     handle_add_project_files,
@@ -22,16 +23,11 @@ from workers.mechanical import (
     handle_ci_pipeline,
     handle_extract_module,
     handle_git_maintenance,
-    handle_lint_code,
-    handle_remove_unused_imports,
     handle_replace_unwrap_scanner,
     handle_run_tests,
-    handle_scan_todos,
     handle_stale_todos,
-    handle_sync_env,
     handle_typed_errors,
     handle_update_deps,
-    _find_rust_top_level_items,
 )
 
 
@@ -68,6 +64,7 @@ def stdb_dir(repo_dir):
 # handle_add_index_btree line 155
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestAddIndex155:
     def test_no_indexable_fields_message(self, mock_ctx, stdb_dir):
         """Line 155: All foreign keys already indexed — returns specific message."""
@@ -82,6 +79,7 @@ class TestAddIndex155:
 # ═══════════════════════════════════════════════════════════════════════════
 # _find_rust_top_level_items lines 587, 617-618
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestFindRust587:
     def test_impl_with_generic_type_part(self):
@@ -100,6 +98,7 @@ class TestFindRust587:
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_extract_module lines 350-351, 534-536
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestExtract350:
     def test_no_valid_files_after_parsing(self, mock_ctx, repo_dir):
@@ -142,6 +141,7 @@ class TestExtract350:
 # handle_typed_errors lines 744-747, 757, 859-887, 927-928, 965
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestTypedErrorsFinal:
     def test_python_file_with_return_err_in_root(self, mock_ctx, repo_dir):
         """Line 757: Python file at root level."""
@@ -154,10 +154,10 @@ class TestTypedErrorsFinal:
     def test_rust_multiple_error_patterns(self, mock_ctx, stdb_dir):
         """Rust with mixed error patterns."""
         with open(os.path.join(stdb_dir, "reducers.rs"), "w") as f:
-            f.write('''
+            f.write("""
 fn a() -> Result<(), String> { Err("a".to_string()) }
 fn b() -> Result<(), String> { get().ok_or_else(|| "b".to_string()) }
-''')
+""")
         success, msg = handle_typed_errors(mock_ctx)
         assert isinstance(success, bool)
 
@@ -166,10 +166,10 @@ fn b() -> Result<(), String> { get().ok_or_else(|| "b".to_string()) }
         src = os.path.join(repo_dir, "server")
         os.makedirs(src, exist_ok=True)
         with open(os.path.join(src, "routes.py"), "w") as f:
-            f.write('''
+            f.write("""
 def a(): raise ValueError("x")
 def b(): raise RuntimeError("y")
-''')
+""")
         success, msg = handle_typed_errors(mock_ctx)
         assert isinstance(success, bool)
 
@@ -178,13 +178,14 @@ def b(): raise RuntimeError("y")
 # handle_run_tests lines 1068-1069, 1087
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestRunTestsFinal:
     def test_pytest_exception(self, mock_ctx, repo_dir):
         """Line 1068-1069: Generic pytest exception."""
         pyproject = os.path.join(repo_dir, "pyproject.toml")
         with open(pyproject, "w") as f:
             f.write("[project]\n")
-        with patch("subprocess.run", side_effect=RuntimeError("fail")):
+        with patch("subprocess.run", side_effect=OSError("fail")):
             success, msg = handle_run_tests(mock_ctx)
             assert "Python" in msg
 
@@ -193,7 +194,7 @@ class TestRunTestsFinal:
         pkg = os.path.join(repo_dir, "package.json")
         with open(pkg, "w") as f:
             f.write('{"scripts": {"test": "jest"}}\n')
-        with patch("subprocess.run", side_effect=RuntimeError("fail")):
+        with patch("subprocess.run", side_effect=OSError("fail")):
             success, msg = handle_run_tests(mock_ctx)
             assert "Node" in msg
 
@@ -202,10 +203,11 @@ class TestRunTestsFinal:
 # handle_update_deps lines 1127-1132, 1146-1151
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestUpdateDepsFinal:
     def test_cargo_update_fails(self, mock_ctx, stdb_dir):
         """Cargo update throws generic exception."""
-        with patch("subprocess.run", side_effect=RuntimeError("rust broke")):
+        with patch("subprocess.run", side_effect=OSError("rust broke")):
             success, msg = handle_update_deps(mock_ctx)
             assert isinstance(success, bool)
 
@@ -232,6 +234,7 @@ class TestUpdateDepsFinal:
 # handle_git_maintenance line 1176
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestGit1176:
     def test_git_error(self, mock_ctx, repo_dir):
         """Line 1176: Generic git error."""
@@ -243,6 +246,7 @@ class TestGit1176:
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_add_init_py lines 1376, 1394
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestInitPyFinal:
     def test_double_dash_strip(self, mock_ctx, repo_dir):
@@ -263,12 +267,13 @@ class TestInitPyFinal:
             success, msg = handle_add_init_py(mock_ctx)
             assert isinstance(success, bool)
         finally:
-            os.chmod(pkg, 0o755)
+            os.chmod(pkg, 0o700)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_add_project_files (many lines)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestProjectFilesFinal:
     def test_create_license(self, mock_ctx, repo_dir):
@@ -294,6 +299,7 @@ class TestProjectFilesFinal:
 # handle_stale_todos
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestStaleTodosFinal:
     def test_stale_scan(self, mock_ctx, repo_dir):
         py_file = os.path.join(repo_dir, "code.py")
@@ -308,6 +314,7 @@ class TestStaleTodosFinal:
 # ═══════════════════════════════════════════════════════════════════════════
 # handle_add_test_scaffold lines 1581-1582, 1685
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestScaffoldFinal:
     def test_continuation_with_dot(self, mock_ctx, repo_dir):
@@ -343,6 +350,7 @@ class TestScaffoldFinal:
 # handle_replace_unwrap_scanner lines 1726, 1758, 1764
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestReplaceUnwrapOmega:
     def test_empty_parts(self, mock_ctx, repo_dir):
         """Line 1726: parts is empty after split."""
@@ -362,7 +370,7 @@ class TestReplaceUnwrapOmega:
             f.write("//! Module docs\n/## pragma\nfn main() {\n    result.unwrap();\n}\n")
         mock_ctx.task = {
             **mock_ctx.task,
-            "description": f"- server/spacetimedb/src/main.rs: 1 unwrap() calls\n",
+            "description": "- server/spacetimedb/src/main.rs: 1 unwrap() calls\n",
         }
         success, msg = handle_replace_unwrap_scanner(mock_ctx)
         assert success
@@ -376,7 +384,7 @@ class TestReplaceUnwrapOmega:
             f.write("fn main() {\n    result.unwrap();\n}\n")
         mock_ctx.task = {
             **mock_ctx.task,
-            "description": f"- server/spacetimedb/src/main.rs: 1 unwrap() calls\n",
+            "description": "- server/spacetimedb/src/main.rs: 1 unwrap() calls\n",
         }
         with patch("builtins.open", side_effect=PermissionError("denied")):
             success, msg = handle_replace_unwrap_scanner(mock_ctx)
@@ -387,6 +395,7 @@ class TestReplaceUnwrapOmega:
 # handle_bare_except_scanner line 1839
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestBareExceptOmega:
     def test_oserror_catch(self, mock_ctx, repo_dir):
         """Line 1839: OSError silently caught."""
@@ -394,7 +403,7 @@ class TestBareExceptOmega:
         os.makedirs(src, exist_ok=True)
         py_file = os.path.join(src, "app.py")
         with open(py_file, "w") as f:
-            f.write('try:\n    pass\nexcept:\n    pass\n')
+            f.write("try:\n    pass\nexcept:\n    pass\n")
         mock_ctx.task = {
             **mock_ctx.task,
             "description": "Files:\n  - server/app.py\n",
@@ -408,6 +417,7 @@ class TestBareExceptOmega:
 # handle_ci_pipeline lines 1888-1891
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestCiOmega:
     def test_ci_yaml_created(self, mock_ctx, repo_dir):
         success, msg = handle_ci_pipeline(mock_ctx)
@@ -417,5 +427,6 @@ class TestCiOmega:
         handle_ci_pipeline(mock_ctx)
         success, msg = handle_ci_pipeline(mock_ctx)
         assert isinstance(success, bool)
-"""The end."""
 
+
+"""The end."""

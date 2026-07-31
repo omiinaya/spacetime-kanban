@@ -4,7 +4,6 @@ import importlib
 import importlib.util
 import os
 import sys
-
 from unittest.mock import patch as mock_patch
 
 import pytest
@@ -28,6 +27,7 @@ class TestMainWebDistElse:
 
         real_isdir = os.path.isdir
         with mock_patch.object(os.path, "isdir") as mock_isdir:
+
             def selective_isdir(path):
                 normed = os.path.normpath(str(path))
                 if normed == os.path.normpath(web_dist):
@@ -63,9 +63,7 @@ class TestWorkersRunPathBranch:
             assert server_dir not in sys.path, "server_dir must not be on sys.path"
 
             # Load the module via its file path — executes module-level code
-            spec = importlib.util.spec_from_file_location(
-                "workers._run_test", workers_run_path
-            )
+            spec = importlib.util.spec_from_file_location("workers._run_test", workers_run_path)
             assert spec is not None, f"No spec for {workers_run_path}"
             mod = importlib.util.module_from_spec(spec)
 
@@ -88,9 +86,10 @@ class TestWorkersRunMainBranch:
 
     def test_main_no_args_sys_exit(self):
         """Test that main() with no args calls sys.exit(2)."""
-        import workers.run as wr_mod
-        import io
         import contextlib
+        import io
+
+        import workers.run as wr_mod
 
         old_argv = sys.argv
         sys.argv = ["workers/run.py"]
@@ -108,8 +107,10 @@ class TestWorkersRunMainBranch:
         """Test that main() with a task ID calls run_worker."""
         import workers.run as wr_mod
 
-        with mock_patch("workers.run.run_worker") as mock_run, \
-             mock_patch("workers.run.sys.exit") as mock_exit, \
-             mock_patch.object(sys, "argv", ["workers/run.py", "task_123"]):
+        with (
+            mock_patch("workers.run.run_worker") as mock_run,
+            mock_patch("workers.run.sys.exit"),
+            mock_patch.object(sys, "argv", ["workers/run.py", "task_123"]),
+        ):
             wr_mod.main()
             mock_run.assert_called_once_with("task_123", wr_mod.route_task)

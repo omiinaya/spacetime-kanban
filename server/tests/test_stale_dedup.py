@@ -1,6 +1,4 @@
 """Test stale-worker alert dedup."""
-import time
-from unittest.mock import patch
 
 from scheduler import _should_alert_stale, _stale_alerted_tasks
 

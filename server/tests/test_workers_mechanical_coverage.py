@@ -3,7 +3,7 @@
 import os
 import subprocess
 import sys
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -32,10 +32,8 @@ from workers.mechanical import (
     handle_sync_env,
     handle_typed_errors,
     handle_update_deps,
-    match_handler,
     sh_quote,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -93,7 +91,7 @@ class TestFindRustTopLevelItems:
         assert _find_rust_top_level_items("") == []
 
     def test_single_fn(self):
-        content = "pub fn hello() {\n    println!(\"hi\");\n}\n"
+        content = 'pub fn hello() {\n    println!("hi");\n}\n'
         items = _find_rust_top_level_items(content)
         assert len(items) == 1
         assert items[0]["name"] == "hello"
@@ -221,14 +219,18 @@ class TestHandleAddIndexBtree:
         """Skip fields with #[primary_key]."""
         tables_rs = os.path.join(stdb_dir, "tables.rs")
         with open(tables_rs, "w") as f:
-            f.write("#[table(name = tasks, public)]\npub struct Tasks {\n    #[primary_key]\n    pub user_id: String,\n}\n")
+            f.write(
+                "#[table(name = tasks, public)]\npub struct Tasks {\n    #[primary_key]\n    pub user_id: String,\n}\n"
+            )
         success, msg = handle_add_index_btree(ctx_with_repo)
         assert "already indexed" in msg or "No indexable" in msg
 
     def test_error_reading_file(self, ctx_with_repo):
         """Exception reading file."""
-        with patch("glob.glob", return_value=["/nonexistent/tables.rs"]), \
-             patch("builtins.open", side_effect=PermissionError("denied")):
+        with (
+            patch("glob.glob", return_value=["/nonexistent/tables.rs"]),
+            patch("builtins.open", side_effect=PermissionError("denied")),
+        ):
             success, msg = handle_add_index_btree(ctx_with_repo)
             assert not success
 
@@ -296,9 +298,7 @@ class TestHandleRemoveUnusedImports:
         with open(pyproject, "w") as f:
             f.write("[tool.ruff]\n")
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="Fixed 3 errors", stderr=""
-            )
+            mock_run.return_value = MagicMock(returncode=0, stdout="Fixed 3 errors", stderr="")
             success, msg = handle_remove_unused_imports(ctx_with_repo)
             assert success
             assert "Removed" in msg
@@ -366,7 +366,9 @@ class TestHandleExtractModule:
         os.makedirs(src_dir, exist_ok=True)
         rs_file = os.path.join(src_dir, "main.rs")
         with open(rs_file, "w") as f:
-            f.write("pub fn hello() {\n    println!(\"hi\");\n}\n\npub fn world() {\n    println!(\"earth\");\n}\n")
+            f.write(
+                'pub fn hello() {\n    println!("hi");\n}\n\npub fn world() {\n    println!("earth");\n}\n'
+            )
 
         # Mock the find command to return our file
         wc_output = f"5 {rs_file}\n5 total\n"
@@ -446,7 +448,7 @@ class TestHandleTypedErrors:
         """Rust file with Err('literal'.to_string())."""
         rs_file = os.path.join(stdb_dir, "reducers.rs")
         with open(rs_file, "w") as f:
-            f.write("fn do_thing() -> Result<(), String> {\n    Err(\"failed\".to_string())\n}\n")
+            f.write('fn do_thing() -> Result<(), String> {\n    Err("failed".to_string())\n}\n')
         success, msg = handle_typed_errors(ctx_with_repo)
         assert success
         assert "string-based error" in msg or "Rust" in msg
@@ -459,7 +461,7 @@ class TestHandleTypedErrors:
         # Create a Rust file with error patterns
         rs_file = os.path.join(stdb_dir, "reducers.rs")
         with open(rs_file, "w") as f:
-            f.write("fn do_thing() -> Result<(), String> {\n    Err(\"failed\".to_string())\n}\n")
+            f.write('fn do_thing() -> Result<(), String> {\n    Err("failed".to_string())\n}\n')
         success, msg = handle_typed_errors(ctx_with_repo)
         assert success
 
@@ -494,7 +496,9 @@ class TestHandleRunTests:
             f.write("[project]\n")
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
-                returncode=0, stdout="collected 10 items\n10 passed in 0.50s\nPASSED PASSED PASSED", stderr=""
+                returncode=0,
+                stdout="collected 10 items\n10 passed in 0.50s\nPASSED PASSED PASSED",
+                stderr="",
             )
             success, msg = handle_run_tests(ctx_with_repo)
             assert "Python" in msg
@@ -566,7 +570,9 @@ class TestHandleUpdateDeps:
         with open(pyproject, "w") as f:
             f.write("[project]\ndependencies = []\n")
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="All packages up to date", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="All packages up to date", stderr=""
+            )
             success, msg = handle_update_deps(ctx_with_repo)
             assert isinstance(success, bool)
 
@@ -722,7 +728,10 @@ class TestHandleAddInitPy:
 
     def test_no_dirs_in_description(self, ctx_with_repo, repo_dir):
         """Description but no dirs."""
-        ctx_with_repo.task = {**ctx_with_repo.task, "description": "- Found no issues\n- Everything is fine\n"}
+        ctx_with_repo.task = {
+            **ctx_with_repo.task,
+            "description": "- Found no issues\n- Everything is fine\n",
+        }
         success, msg = handle_add_init_py(ctx_with_repo)
         assert not success
 
