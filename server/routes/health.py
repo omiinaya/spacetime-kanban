@@ -107,12 +107,17 @@ async def _get_board_summary(sql_fn) -> dict:
     if total > 0:
         # Slow path only on cache miss: pull the raw table once and count
         # statuses in Python (STDB's enum can't be compared to SQL strings).
+        # Archived tasks are hidden from the board and must NOT inflate the
+        # active counts — before this fix a 7K archived blocked backlog
+        # showed up as "~32% of the board blocked" forever.
         tasks = await sql_fn("SELECT * FROM tasks")
         for t in tasks or []:
+            if t.get("archived", False):
+                continue
             s = t.get("status", "unknown")
             by_status[s] = by_status.get(s, 0) + 1
 
-    summary = {"total": total, "by_status": by_status}
+    summary = {"total": sum(by_status.values()), "by_status": by_status}
     with _BOARD_SUMMARY_LOCK:
         _BOARD_SUMMARY_CACHE["board"] = (now + _BOARD_SUMMARY_TTL, summary)
     return summary

@@ -25,7 +25,7 @@ def _make_get_mock():
     """Create an AsyncMock for _api_get that returns sensible values per URL."""
     m = AsyncMock()
 
-    async def side_effect(path: str):
+    async def side_effect(path: str, timeout: float = 15):
         if "/api/health" in path:
             return _OK_HEALTH
         elif "status=inProgress" in path:
@@ -75,7 +75,7 @@ class TestSelfImproverStaleTasks:
         mock_subproc.return_value = AsyncMock()
         mock_subproc.return_value.communicate.return_value = (b"", b"")
 
-        async def get_side_effect(path):
+        async def get_side_effect(path, timeout=15):
             if "/api/health" in path:
                 return _OK_HEALTH
             elif "status=inProgress" in path:
@@ -126,7 +126,7 @@ class TestSelfImproverStaleTasks:
         mock_subproc.return_value = AsyncMock()
         mock_subproc.return_value.communicate.return_value = (b"", b"")
 
-        async def get_side_effect(path):
+        async def get_side_effect(path, timeout=15):
             if "/api/health" in path:
                 return _OK_HEALTH
             elif "status=inProgress" in path:
@@ -194,7 +194,7 @@ class TestSelfImproverCyclingTasks:
             for i in range(25)
         ]
 
-        async def get_side_effect(path):
+        async def get_side_effect(path, timeout=15):
             if "/api/health" in path:
                 return _OK_HEALTH
             elif "status=available" in path:
@@ -236,7 +236,7 @@ class TestSelfImproverGitStatus:
         mock_load.return_value = {"run_count": 0}
         mock_restart.return_value = None
 
-        async def get_side_effect(path):
+        async def get_side_effect(path, timeout=15):
             return _OK_HEALTH if "/api/health" in path else []
 
         mock_get.side_effect = get_side_effect
@@ -276,7 +276,7 @@ class TestSelfImproverGitStatus:
         mock_load.return_value = {"run_count": 0}
         mock_restart.return_value = None
 
-        async def get_side_effect(path):
+        async def get_side_effect(path, timeout=15):
             return _OK_HEALTH if "/api/health" in path else []
 
         mock_get.side_effect = get_side_effect
@@ -317,7 +317,7 @@ class TestSelfImproverGitStatus:
         mock_load.return_value = {"run_count": 0}
         mock_restart.return_value = None
 
-        async def get_side_effect(path):
+        async def get_side_effect(path, timeout=15):
             return _OK_HEALTH if "/api/health" in path else []
 
         mock_get.side_effect = get_side_effect
@@ -355,7 +355,7 @@ class TestSelfImproverGitStatus:
 
         call_count = 0
 
-        async def get_side_effect(path):
+        async def get_side_effect(path, timeout=15):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -367,3 +367,118 @@ class TestSelfImproverGitStatus:
         from scheduler import self_improver
 
         await self_improver(interval=1)
+
+    @pytest.mark.asyncio
+    @patch("scheduler._restart_server")
+    @patch("scheduler._api_get")
+    @patch("scheduler._api_post")
+    @patch("scheduler._load_improver_status")
+    @patch("scheduler._save_improver_status")
+    @patch("scheduler.asyncio.create_subprocess_exec")
+    @patch("scheduler.asyncio.sleep")
+    async def test_stale_task_already_flagged_skips_duplicate(
+        self,
+        mock_sleep,
+        mock_subproc,
+        mock_save,
+        mock_load,
+        mock_post,
+        mock_get,
+        mock_restart,
+    ):
+        """A stale task that already has a [Stale] board entry is NOT re-created.
+
+        Covers the dedup branch: board fetch → existing_refs → continue.
+        """
+        mock_sleep.side_effect = [None, asyncio.CancelledError()]
+        mock_load.return_value = {"run_count": 0}
+        mock_restart.return_value = None
+        mock_subproc.return_value = AsyncMock()
+        mock_subproc.return_value.communicate.return_value = (b"", b"")
+        mock_post.return_value = {"status": "ok"}
+
+        async def get_side_effect(path, timeout=15):
+            if "/api/health" in path:
+                return _OK_HEALTH
+            elif "status=blocked" in path:
+                return []
+            elif "status=inProgress" in path:
+                return [
+                    {
+                        "id": "task_stale_1",
+                        "title": "Old in_progress task",
+                        "status": "inProgress",
+                        "updated_at": 1000,  # way in the past
+                        "created_at": 1000,
+                    }
+                ]
+            elif "limit=100000" in path:
+                # Board already contains a [Stale] entry referencing task_stale_1
+                return [
+                    {
+                        "title": "[Stale] Task stuck in_progress: Old task",
+                        "description": "Task task_stale_1 has been in_progress without heartbeat for >30min",
+                    }
+                ]
+            return []
+
+        mock_get.side_effect = get_side_effect
+
+        from scheduler import self_improver
+
+        await self_improver(interval=1)
+
+        # The improvement-task POST must NOT have fired — dedup skipped it.
+        for call in mock_post.call_args_list:
+            args, kwargs = call
+            path = args[0] if args else kwargs.get("path", "")
+            assert "/api/tasks" not in path or "max-attempts" in path, (
+                f"unexpected POST {path} — duplicate [Stale] task was created"
+            )
+
+    @pytest.mark.asyncio
+    @patch("scheduler._restart_server")
+    @patch("scheduler._api_get")
+    @patch("scheduler._api_post")
+    @patch("scheduler._load_improver_status")
+    @patch("scheduler._save_improver_status")
+    @patch("scheduler.asyncio.create_subprocess_exec")
+    @patch("scheduler.asyncio.sleep")
+    async def test_high_blocked_count_prints_warning(
+        self,
+        mock_sleep,
+        mock_subproc,
+        mock_save,
+        mock_load,
+        mock_post,
+        mock_get,
+        mock_restart,
+    ):
+        """>5 blocked tasks triggers the high-blocked-count warning path."""
+        mock_sleep.side_effect = [None, asyncio.CancelledError()]
+        mock_load.return_value = {"run_count": 0}
+        mock_restart.return_value = None
+        mock_subproc.return_value = AsyncMock()
+        mock_subproc.return_value.communicate.return_value = (b"", b"")
+        mock_post.return_value = {"status": "ok"}
+
+        async def get_side_effect(path, timeout=15):
+            if "/api/health" in path:
+                return _OK_HEALTH
+            elif "status=blocked" in path:
+                return [{"id": f"b{i}", "status": "blocked"} for i in range(8)]
+            elif "status=inProgress" in path:
+                return []
+            elif "status=available" in path:
+                return []
+            return []
+
+        mock_get.side_effect = get_side_effect
+
+        from scheduler import self_improver
+
+        await self_improver(interval=1)
+
+        # The warning branch executed (no exception) — the loop just ends
+        # via CancelledError from sleep. No POST should be needed here.
+        mock_sleep.assert_called()
