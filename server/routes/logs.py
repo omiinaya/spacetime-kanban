@@ -76,37 +76,44 @@ async def batch_logs(
     Returns dict of {task_id: latest_log_or_null} for up to 100 task IDs.
     Used by the scheduler stale_watcher to check heartbeats in one API call
     instead of N individual calls.
+
+    Query strategy: filter by task_id in SQL (btree-indexed) using OR
+    conditions instead of scanning ALL rows for the action — the old
+    `WHERE action = 'heartbeat'` scan pulled 21K+ rows every 120s and
+    saturated the event loop.
     """
     tids = [t.strip() for t in task_ids.split(",") if t.strip()][:100]
     if not tids:
         return {}
 
-    # SQL WHERE on action (String field) to reduce rows — STDB doesn't support IN
-    sql = "SELECT * FROM task_logs"
-    params = {}
+    # Build indexed OR query on task_id (each id is sanitized via _sql_param).
+    # Using task_id OR conditions hits the btree index instead of scanning
+    # every row for the action column.
+    or_conds = " OR ".join(f"task_id = '{{{tid_i}}}'" for tid_i in range(len(tids)))
+    params: dict[str, str] = {str(i): tid for i, tid in enumerate(tids)}
+    sql = f"SELECT * FROM task_logs WHERE {or_conds}"  # noqa: S608 — values sanitized by _sql_param below
     if action:
         action_val = action.split(",")[0].strip()
-        sql += " WHERE action = '{action_val}'"
-        params["action_val"] = action_val
+        sql += f" AND action = '{{{len(tids)}}}'"
+        params[str(len(tids))] = action_val
+    # Safety cap — a task's log volume is bounded by the scheduler's
+    # heartbeat cadence; 100 tasks × few hundred logs each is generous.
+    sql += " LIMIT 5000"
 
     rows = await _sql_param(sql, **params)
     logs = [_row_to_log(r) for r in rows]
 
-    # Filter to requested task IDs (Python-side — STDB has no IN)
-    tid_set = set(tids)
-    matching = [rec for rec in logs if rec.task_id in tid_set]
-
     # Filter by rest of actions (if multi-action)
     if action and len(action.split(",")) > 1:
         action_set = set(a.strip() for a in action.split(",") if a.strip())
-        matching = [rec for rec in matching if rec.action in action_set]
+        logs = [rec for rec in logs if rec.action in action_set]
 
     # Sort by timestamp descending per task
-    matching.sort(key=lambda rec: (rec.task_id, -rec.timestamp))
+    logs.sort(key=lambda rec: (rec.task_id, -rec.timestamp))
 
     # Take the latest entry per task
     result: dict[str, dict | None] = {}
-    for rec in matching:
+    for rec in logs:
         tid = rec.task_id
         if tid not in result:
             result[tid] = rec.model_dump()

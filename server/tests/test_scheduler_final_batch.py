@@ -299,6 +299,59 @@ async def test_fountain_loop_failure():
     assert ctrl.calls == 2
 
 
+@pytest.mark.asyncio
+async def test_fountain_loop_timeout_kills_child():
+    """wait_for times out → child subprocess is killed (no orphan pile-up)."""
+    ctrl = SC()
+
+    mock_proc = mock.AsyncMock()
+    mock_proc.returncode = 0
+    mock_proc.communicate = mock.AsyncMock(return_value=(b"Created 1 task(s)\n", b""))
+    mock_proc.kill = mock.MagicMock()
+
+    async def timeout_wait_for(aw, timeout):
+        # Simulate a hung fountain: raise TimeoutError once, then allow the
+        # post-kill communicate to complete.
+        raise TimeoutError("hung")
+
+    with mock.patch("scheduler.settings") as ms:
+        ms.agent_id = "test"
+        with mock.patch.object(scheduler.asyncio, "sleep", ctrl):
+            with mock.patch.object(asyncio, "create_subprocess_exec", return_value=mock_proc):
+                with mock.patch.object(asyncio, "wait_for", timeout_wait_for):
+                    await scheduler._task_fountain_loop(60)
+    # Child must be killed after the timeout
+    mock_proc.kill.assert_called_once()
+    # Post-kill communicate was called (returns the log bytes)
+    assert mock_proc.communicate.await_count >= 1
+    assert ctrl.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_fountain_loop_cancelled_kills_child():
+    """CancelledError while a fountain subprocess runs → child is killed."""
+    ctrl = SC()
+
+    mock_proc = mock.AsyncMock()
+    mock_proc.returncode = None  # still running
+    mock_proc.communicate = mock.AsyncMock(return_value=(b"", b""))
+    mock_proc.kill = mock.MagicMock()
+
+    async def raise_cancel():
+        raise asyncio.CancelledError()
+
+    with mock.patch("scheduler.settings") as ms:
+        ms.agent_id = "test"
+        with mock.patch.object(scheduler.asyncio, "sleep", ctrl):
+            with mock.patch.object(asyncio, "create_subprocess_exec", return_value=mock_proc):
+                with mock.patch.object(asyncio, "wait_for", raise_cancel):
+                    # The scheduler catches CancelledError, kills the child, and
+                    # breaks the loop — so the coroutine returns normally.
+                    await scheduler._task_fountain_loop(60)
+    # Cancellation must kill the running child before breaking the loop
+    mock_proc.kill.assert_called_once()
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # scheduler_low_backlog.py
 # ═══════════════════════════════════════════════════════════════════════

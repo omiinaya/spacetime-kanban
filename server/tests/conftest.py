@@ -29,6 +29,20 @@ _ROUTE_HELPER_MAP = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _clear_task_list_cache():
+    """Clear the GET /api/tasks TTL cache between tests.
+
+    The cache is module-level state; without clearing it, an earlier test's
+    mocked rows leak into later tests that expect fresh _sql mocks.
+    """
+    import routes.tasks as tasks_mod
+
+    tasks_mod._TASK_LIST_CACHE.clear()
+    yield
+    tasks_mod._TASK_LIST_CACHE.clear()
+
+
 def _patch_route_modules(stack: ExitStack):
     """Patch STDB helpers in all route modules so tests can mock them."""
     for mod, names in _ROUTE_HELPER_MAP.items():

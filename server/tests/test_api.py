@@ -156,6 +156,26 @@ async def test_list_tasks_empty(client, mock_all):
 
 
 @pytest.mark.asyncio
+async def test_list_tasks_cache_hit(client, mock_all):
+    """Second call within the TTL reuses the cached rows (no second _sql)."""
+    mock_all["sql"].return_value = [
+        _make_task("t1", "Fix auth", repo="sample-repo-q"),
+        _make_task("t2", "Add captcha", repo="spacetime-browser"),
+    ]
+    resp1 = await client.get("/api/tasks", params={"search": "auth"})
+    assert resp1.status_code == 200
+    assert len(resp1.json()) == 1
+
+    sql_calls_after_first = mock_all["sql"].call_count
+
+    resp2 = await client.get("/api/tasks", params={"search": "captcha"})
+    assert resp2.status_code == 200
+    assert len(resp2.json()) == 1
+    # Cache hit — no additional _sql query fired
+    assert mock_all["sql"].call_count == sql_calls_after_first
+
+
+@pytest.mark.asyncio
 async def test_list_tasks_with_repo_filter(client, mock_all):
     mock_all["sql"].return_value = [
         _make_task("t1", "Fix auth", repo="sample-repo-q"),

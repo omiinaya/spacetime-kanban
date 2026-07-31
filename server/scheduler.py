@@ -381,7 +381,16 @@ async def stale_watcher(interval: int):
                     f"/api/logs/batch?task_ids={tid_param}&action=heartbeat&limit=1"
                 )
                 if batch_logs and isinstance(batch_logs, dict):
-                    heartbeat_map = batch_logs
+                    # Endpoint returns {task_id: log_record_dict_or_None}.
+                    # Extract just the timestamp (ms epoch) for age math.
+                    heartbeat_map = {}
+                    for _tid, entry in batch_logs.items():
+                        if isinstance(entry, dict) and entry.get("timestamp"):
+                            heartbeat_map[_tid] = entry["timestamp"]
+                        elif isinstance(entry, int):
+                            heartbeat_map[_tid] = entry
+                        else:
+                            heartbeat_map[_tid] = None
             except Exception as exc:
                 print(f"[scheduler] Heartbeat batch fetch failed: {exc}")
 
@@ -1110,7 +1119,13 @@ async def _create_improvement_task(
 
 async def _task_fountain_loop(interval: int):
     """Fast task-creation loop — runs the task fountain every `interval` seconds.
-    Logs to a file because service stdout is not visible."""
+    Logs to a file because service stdout is not visible.
+
+    Guards against subprocess pile-up: if a fountain run exceeds the timeout
+    (e.g. the API is slow under load), the child is killed instead of being
+    abandoned — the old code left orphaned subprocesses that stacked up
+    every 60s and eventually saturated the box.
+    """
     import sys as _sys
 
     log_path = os.path.join(os.path.dirname(__file__), "fountain.log")
@@ -1118,35 +1133,48 @@ async def _task_fountain_loop(interval: int):
         try:
             await asyncio.sleep(interval)
 
-            # Run the fountain using subprocess (isolated, reliable)
-            fountain_script = os.path.join(os.path.dirname(__file__), "_task_fountain.py")
-            proc = await asyncio.create_subprocess_exec(
-                _sys.executable,
-                fountain_script,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            _fountain_busy = True
+            proc = None
+            try:
+                # Run the fountain using subprocess (isolated, reliable)
+                fountain_script = os.path.join(os.path.dirname(__file__), "_task_fountain.py")
+                proc = await asyncio.create_subprocess_exec(
+                    _sys.executable,
+                    fountain_script,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                try:
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+                except TimeoutError:
+                    # Kill the orphaned child so it can't pile up
+                    proc.kill()
+                    stdout, stderr = await proc.communicate()
+                    print("[scheduler:fountain] Fountain timed out after 30s — killed")
 
-            # Write results to log
-            ts = time.strftime("%Y-%m-%d %H:%M:%S")
-            with open(log_path, "a") as f:
-                f.write(f"[{ts}] stdout: {stdout.decode().strip()}\n")
-                if stderr:
-                    f.write(f"[{ts}] stderr: {stderr.decode().strip()}\n")
+                # Write results to log
+                ts = time.strftime("%Y-%m-%d %H:%M:%S")
+                with open(log_path, "a") as f:
+                    f.write(f"[{ts}] stdout: {stdout.decode().strip()}\n")
+                    if stderr:
+                        f.write(f"[{ts}] stderr: {stderr.decode().strip()}\n")
 
-            if proc.returncode == 0:
-                created = 0
-                if stdout:
-                    import re
+                if proc.returncode == 0:
+                    created = 0
+                    if stdout:
+                        import re
 
-                    m = re.search(rb"Created (\d+) task", stdout)
-                    if m:
-                        created = int(m.group(1))
-                print(f"[scheduler:fountain] Created {created} task(s)")
-            else:
-                print(f"[scheduler:fountain] Fountain exited with code {proc.returncode}")
+                        m = re.search(rb"Created (\d+) task", stdout)
+                        if m:
+                            created = int(m.group(1))
+                    print(f"[scheduler:fountain] Created {created} task(s)")
+                else:
+                    print(f"[scheduler:fountain] Fountain exited with code {proc.returncode}")
+            finally:
+                _fountain_busy = False
         except asyncio.CancelledError:
+            if proc is not None and proc.returncode is None:
+                proc.kill()
             break
         except Exception as e:
             print(f"[scheduler:fountain] Error: {e}")

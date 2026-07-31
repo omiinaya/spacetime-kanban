@@ -5,6 +5,8 @@ import contextlib
 import csv
 import io
 import json
+import threading
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -55,6 +57,11 @@ from webhook_dispatcher import (
     EVENT_TASK_DELETED,
     fire_event,
 )
+
+# TTL cache for GET /api/tasks (hot path — agents + scheduler poll it constantly).
+_TASK_LIST_CACHE: dict[tuple, tuple[float, list]] = {}
+_TASK_LIST_CACHE_TTL = 5.0
+_TASK_LIST_CACHE_LOCK = threading.Lock()
 
 router = APIRouter()
 
@@ -107,36 +114,50 @@ async def list_tasks(
     limit: int = 2000,
     offset: int = 0,
 ):
-    # If label filter provided, first get task IDs with that label
-    label_task_ids: set[str] | None = None
-    if label:
-        rows = await _sql_param(
-            "SELECT task_id FROM task_label_assignments WHERE label_id = '{label}'", label=label
-        )
-        label_task_ids = {r["task_id"] for r in rows}
-
-    sql = "SELECT * FROM tasks"
-    filters = []
-    params: dict[str, str] = {}
-    if repo:
-        filters.append("repo = '{repo}'")
-        params["repo"] = repo
-    if archived is not None:
-        arch = str(archived).lower()
-        filters.append(f"archived = {arch}")
-    if filters:
-        sql += " WHERE " + " AND ".join(filters)
-    # No SQL-level LIMIT — STDB's arbitrary row ordering makes it unreliable
-    # for client-side pagination. Fetch all matching rows and paginate in Python.
-    if params:
-        rows = await _sql_param(sql, **params)
+    # TTL cache for the hot list path. The raw SELECT * FROM tasks returns
+    # ~22K rows (~12MB) and the Python SATS parse takes ~3s; with agents +
+    # scheduler polling every 30s the board collapses under concurrent
+    # parses. Cache the converted rows keyed by the SQL-affecting params
+    # (repo/archived) and apply the Python-side filters per request on the
+    # cached list. 5s TTL keeps data fresh while collapsing read volume.
+    cache_key: tuple = (repo or "", archived)
+    cached = _TASK_LIST_CACHE.get(cache_key)
+    now = time.monotonic()
+    if cached and cached[0] > now:
+        tasks = cached[1]
     else:
-        rows = await _sql(sql)
-    tasks = [_row_to_task(r) for r in rows]
+        sql = "SELECT * FROM tasks"
+        filters = []
+        params: dict[str, str] = {}
+        if repo:
+            filters.append("repo = '{repo}'")
+            params["repo"] = repo
+        if archived is not None:
+            arch = str(archived).lower()
+            filters.append(f"archived = {arch}")
+        if filters:
+            sql += " WHERE " + " AND ".join(filters)
+        # No SQL-level LIMIT — STDB's arbitrary row ordering makes it unreliable
+        # for client-side pagination. Fetch all matching rows and paginate in Python.
+        if params:
+            rows = await _sql_param(sql, **params)
+        else:
+            rows = await _sql(sql)
+        tasks = [_row_to_task(r) for r in rows]
+        with _TASK_LIST_CACHE_LOCK:
+            _TASK_LIST_CACHE[cache_key] = (now + _TASK_LIST_CACHE_TTL, tasks)
+
     # Apply status filter client-side (STDB enum types can't be compared with SQL strings)
     if status:
         tasks = [t for t in tasks if t.status == status]
-    if label_task_ids is not None:
+    if label:
+        # label_task_ids was computed inside the cache miss branch only;
+        # recompute here when the cache hit (cheap join on labels table)
+        rows = await _sql_param(
+            "SELECT task_id FROM task_label_assignments WHERE label_id = '{label}'",
+            label=label,
+        )
+        label_task_ids = {r["task_id"] for r in rows}
         tasks = [t for t in tasks if t.id in label_task_ids]
     # Apply client-side search filter (STDB SQL has no ILIKE — do it in Python)
     if search:
