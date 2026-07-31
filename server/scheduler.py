@@ -106,6 +106,17 @@ def _now_ms() -> int:
 # Dict is cleared of entries older than 2x cooldown on each check.
 STALE_ALERT_COOLDOWN_MS = 6 * 3600_000  # 6 hours in milliseconds
 
+# Fountain log path — module constant so tests can redirect it away from
+# the production log file.
+FOUNTAIN_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fountain.log")
+
+# Fountain subprocess timeout — must exceed the fountain's own API timeout
+# (_task_fountain.API_TIMEOUT = 60s) so the scheduler doesn't kill the
+# fountain mid-dedup under load (board queries take 30s+). The old 30s
+# cap made the fountain's raised API timeout pointless: the child was
+# killed before a single slow board query could complete.
+FOUNTAIN_SUBPROCESS_TIMEOUT = 120
+
 _stale_alerted_tasks: dict[str, float] = {}
 
 
@@ -1128,7 +1139,7 @@ async def _task_fountain_loop(interval: int):
     """
     import sys as _sys
 
-    log_path = os.path.join(os.path.dirname(__file__), "fountain.log")
+    log_path = FOUNTAIN_LOG_PATH
     while True:
         try:
             await asyncio.sleep(interval)
@@ -1145,12 +1156,17 @@ async def _task_fountain_loop(interval: int):
                     stderr=asyncio.subprocess.PIPE,
                 )
                 try:
-                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+                    stdout, stderr = await asyncio.wait_for(
+                        proc.communicate(), timeout=FOUNTAIN_SUBPROCESS_TIMEOUT
+                    )
                 except TimeoutError:
                     # Kill the orphaned child so it can't pile up
                     proc.kill()
                     stdout, stderr = await proc.communicate()
-                    print("[scheduler:fountain] Fountain timed out after 30s — killed")
+                    print(
+                        f"[scheduler:fountain] Fountain timed out after "
+                        f"{FOUNTAIN_SUBPROCESS_TIMEOUT}s — killed"
+                    )
 
                 # Write results to log
                 ts = time.strftime("%Y-%m-%d %H:%M:%S")
