@@ -9,13 +9,19 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
+import {
+  TaskStatus,
+} from "./types";
+
 
 export default __t.row({
   id: __t.string().primaryKey(),
   title: __t.string(),
   description: __t.string(),
   priority: __t.u8(),
-  status: __t.string(),
+  get status() {
+    return TaskStatus;
+  },
   assignedTo: __t.option(__t.string()).name("assigned_to"),
   repo: __t.string(),
   branch: __t.option(__t.string()),

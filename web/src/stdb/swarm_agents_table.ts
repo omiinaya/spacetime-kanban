@@ -9,6 +9,10 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
+import {
+  SwarmAgentStatus,
+} from "./types";
+
 
 export default __t.row({
   id: __t.string().primaryKey(),
@@ -16,7 +20,9 @@ export default __t.row({
   capabilities: __t.option(__t.string()),
   repoFocus: __t.option(__t.string()).name("repo_focus"),
   currentTaskId: __t.option(__t.string()).name("current_task_id"),
-  status: __t.string(),
+  get status() {
+    return SwarmAgentStatus;
+  },
   lastHeartbeat: __t.u64().name("last_heartbeat"),
   firstSeen: __t.u64().name("first_seen"),
 });

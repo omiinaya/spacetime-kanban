@@ -9,6 +9,10 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
+import {
+  IssueLinkStatus,
+} from "./types";
+
 
 export default __t.row({
   kanbanTaskId: __t.string().primaryKey().name("kanban_task_id"),
@@ -16,6 +20,8 @@ export default __t.row({
   repo: __t.string(),
   issueUrl: __t.string().name("issue_url"),
   htmlUrl: __t.string().name("html_url"),
-  status: __t.string(),
+  get status() {
+    return IssueLinkStatus;
+  },
   linkedAt: __t.u64().name("linked_at"),
 });

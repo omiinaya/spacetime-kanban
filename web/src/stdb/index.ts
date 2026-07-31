@@ -102,13 +102,10 @@ import UpdateWebhookSubscriptionReducer from "./update_webhook_subscription_redu
 
 // Import all table schema definitions
 import ApiKeysRow from "./api_keys_table";
-import AutomationRuleLogsRow from "./automation_rule_logs_table";
 import AutomationRulesRow from "./automation_rules_table";
-import DispatcherStateRow from "./dispatcher_state_table";
 import IssueLinksRow from "./issue_links_table";
 import KanbanLabelsRow from "./kanban_labels_table";
 import KanbanProjectsRow from "./kanban_projects_table";
-import SchemaMigrationsRow from "./schema_migrations_table";
 import SwarmAgentsRow from "./swarm_agents_table";
 import TaskChecklistsRow from "./task_checklists_table";
 import TaskCommentsRow from "./task_comments_table";
@@ -117,7 +114,6 @@ import TaskLogsRow from "./task_logs_table";
 import TaskRelationsRow from "./task_relations_table";
 import TaskTemplatesRow from "./task_templates_table";
 import TasksRow from "./tasks_table";
-import WebhookDeliveriesRow from "./webhook_deliveries_table";
 import WebhookSubscriptionsRow from "./webhook_subscriptions_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -135,17 +131,6 @@ const tablesSchema = __schema({
       { name: 'api_keys_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, ApiKeysRow),
-  automation_rule_logs: __table({
-    name: 'automation_rule_logs',
-    indexes: [
-      { accessor: 'id', name: 'automation_rule_logs_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
-      ] },
-    ],
-    constraints: [
-      { name: 'automation_rule_logs_id_key', constraint: 'unique', columns: ['id'] },
-    ],
-  }, AutomationRuleLogsRow),
   automation_rules: __table({
     name: 'automation_rules',
     indexes: [
@@ -157,17 +142,6 @@ const tablesSchema = __schema({
       { name: 'automation_rules_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, AutomationRulesRow),
-  dispatcher_state: __table({
-    name: 'dispatcher_state',
-    indexes: [
-      { accessor: 'key', name: 'dispatcher_state_key_idx_btree', algorithm: 'btree', columns: [
-        'key',
-      ] },
-    ],
-    constraints: [
-      { name: 'dispatcher_state_key_key', constraint: 'unique', columns: ['key'] },
-    ],
-  }, DispatcherStateRow),
   issue_links: __table({
     name: 'issue_links',
     indexes: [
@@ -201,17 +175,6 @@ const tablesSchema = __schema({
       { name: 'kanban_projects_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, KanbanProjectsRow),
-  schema_migrations: __table({
-    name: 'schema_migrations',
-    indexes: [
-      { accessor: 'version', name: 'schema_migrations_version_idx_btree', algorithm: 'btree', columns: [
-        'version',
-      ] },
-    ],
-    constraints: [
-      { name: 'schema_migrations_version_key', constraint: 'unique', columns: ['version'] },
-    ],
-  }, SchemaMigrationsRow),
   swarm_agents: __table({
     name: 'swarm_agents',
     indexes: [
@@ -228,6 +191,9 @@ const tablesSchema = __schema({
     indexes: [
       { accessor: 'id', name: 'task_checklists_id_idx_btree', algorithm: 'btree', columns: [
         'id',
+      ] },
+      { accessor: 'task_id', name: 'task_checklists_task_id_idx_btree', algorithm: 'btree', columns: [
+        'taskId',
       ] },
     ],
     constraints: [
@@ -251,6 +217,12 @@ const tablesSchema = __schema({
       { accessor: 'id', name: 'task_label_assignments_id_idx_btree', algorithm: 'btree', columns: [
         'id',
       ] },
+      { accessor: 'label_id', name: 'task_label_assignments_label_id_idx_btree', algorithm: 'btree', columns: [
+        'labelId',
+      ] },
+      { accessor: 'task_id', name: 'task_label_assignments_task_id_idx_btree', algorithm: 'btree', columns: [
+        'taskId',
+      ] },
     ],
     constraints: [
       { name: 'task_label_assignments_id_key', constraint: 'unique', columns: ['id'] },
@@ -261,6 +233,9 @@ const tablesSchema = __schema({
     indexes: [
       { accessor: 'id', name: 'task_logs_id_idx_btree', algorithm: 'btree', columns: [
         'id',
+      ] },
+      { accessor: 'task_id', name: 'task_logs_task_id_idx_btree', algorithm: 'btree', columns: [
+        'taskId',
       ] },
     ],
     constraints: [
@@ -292,25 +267,23 @@ const tablesSchema = __schema({
   tasks: __table({
     name: 'tasks',
     indexes: [
+      { accessor: 'assigned_to', name: 'tasks_assigned_to_idx_btree', algorithm: 'btree', columns: [
+        'assignedTo',
+      ] },
       { accessor: 'id', name: 'tasks_id_idx_btree', algorithm: 'btree', columns: [
         'id',
+      ] },
+      { accessor: 'repo', name: 'tasks_repo_idx_btree', algorithm: 'btree', columns: [
+        'repo',
+      ] },
+      { accessor: 'status', name: 'tasks_status_idx_btree', algorithm: 'btree', columns: [
+        'status',
       ] },
     ],
     constraints: [
       { name: 'tasks_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, TasksRow),
-  webhook_deliveries: __table({
-    name: 'webhook_deliveries',
-    indexes: [
-      { accessor: 'id', name: 'webhook_deliveries_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
-      ] },
-    ],
-    constraints: [
-      { name: 'webhook_deliveries_id_key', constraint: 'unique', columns: ['id'] },
-    ],
-  }, WebhookDeliveriesRow),
   webhook_subscriptions: __table({
     name: 'webhook_subscriptions',
     indexes: [

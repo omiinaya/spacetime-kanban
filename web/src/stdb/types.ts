@@ -64,10 +64,19 @@ export const IssueLink = __t.object("IssueLink", {
   repo: __t.string(),
   issueUrl: __t.string(),
   htmlUrl: __t.string(),
-  status: __t.string(),
+  get status() {
+    return IssueLinkStatus;
+  },
   linkedAt: __t.u64(),
 });
 export type IssueLink = __Infer<typeof IssueLink>;
+
+// The tagged union or sum type for the algebraic type `IssueLinkStatus`.
+export const IssueLinkStatus = __t.enum("IssueLinkStatus", {
+  Open: __t.unit(),
+  Closed: __t.unit(),
+});
+export type IssueLinkStatus = __Infer<typeof IssueLinkStatus>;
 
 export const KanbanLabel = __t.object("KanbanLabel", {
   id: __t.string(),
@@ -105,18 +114,30 @@ export const SwarmAgent = __t.object("SwarmAgent", {
   capabilities: __t.option(__t.string()),
   repoFocus: __t.option(__t.string()),
   currentTaskId: __t.option(__t.string()),
-  status: __t.string(),
+  get status() {
+    return SwarmAgentStatus;
+  },
   lastHeartbeat: __t.u64(),
   firstSeen: __t.u64(),
 });
 export type SwarmAgent = __Infer<typeof SwarmAgent>;
+
+// The tagged union or sum type for the algebraic type `SwarmAgentStatus`.
+export const SwarmAgentStatus = __t.enum("SwarmAgentStatus", {
+  Online: __t.unit(),
+  Busy: __t.unit(),
+  Offline: __t.unit(),
+});
+export type SwarmAgentStatus = __Infer<typeof SwarmAgentStatus>;
 
 export const Task = __t.object("Task", {
   id: __t.string(),
   title: __t.string(),
   description: __t.string(),
   priority: __t.u8(),
-  status: __t.string(),
+  get status() {
+    return TaskStatus;
+  },
   assignedTo: __t.option(__t.string()),
   repo: __t.string(),
   branch: __t.option(__t.string()),
@@ -185,6 +206,15 @@ export const TaskRelation = __t.object("TaskRelation", {
   createdAt: __t.u64(),
 });
 export type TaskRelation = __Infer<typeof TaskRelation>;
+
+// The tagged union or sum type for the algebraic type `TaskStatus`.
+export const TaskStatus = __t.enum("TaskStatus", {
+  Available: __t.unit(),
+  InProgress: __t.unit(),
+  Blocked: __t.unit(),
+  Done: __t.unit(),
+});
+export type TaskStatus = __Infer<typeof TaskStatus>;
 
 export const TaskTemplate = __t.object("TaskTemplate", {
   id: __t.string(),
