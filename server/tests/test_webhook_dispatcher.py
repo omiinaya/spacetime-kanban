@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from server.webhook_dispatcher import (
+    EVENT_BLOCKED_REMEDIATED,
     EVENT_BOARD_DEAD,
     EVENT_BOARD_STALLED,
     EVENT_METRICS_SNAPSHOT,
@@ -139,6 +140,42 @@ class TestWebhookDispatcher:
         )
         # The claimed event goes through the fallback if not in special handlers
         assert "task.claimed" in msg or "My Task" in msg
+
+    def test_format_message_blocked_remediated(self):
+        """_format_message for EVENT_BLOCKED_REMEDIATED shows archive counts + samples."""
+        msg = _format_message(
+            EVENT_BLOCKED_REMEDIATED,
+            {
+                "archived": 3,
+                "auto_dismissed": 2,
+                "stale_archived": 1,
+                "active_blocked": 4,
+                "samples": [
+                    {"task_id": "task_abc123", "title": "Split large file", "reason": "[Stale]"},
+                    {"task_id": "task_def456", "title": "Add index", "reason": "blocked >3d"},
+                ],
+            },
+        )
+        assert "Blocked backlog remediated" in msg
+        assert "Archived 3 blocked task(s)" in msg
+        assert "2 auto-dismissed" in msg
+        assert "1 stale" in msg
+        assert "Active blocked remaining: 4" in msg
+        assert "task_abc123" in msg
+        assert "Split large file" in msg
+        assert "[Stale]" in msg
+        assert "task_def456" in msg
+
+    def test_format_message_blocked_remediated_no_samples(self):
+        """Empty samples list must produce an empty sample section, not crash."""
+        msg = _format_message(
+            EVENT_BLOCKED_REMEDIATED,
+            {"archived": 0, "auto_dismissed": 0, "stale_archived": 0, "active_blocked": 0, "samples": []},
+        )
+        assert "Blocked backlog remediated" in msg
+        assert "Archived 0 blocked task(s)" in msg
+        assert "Active blocked remaining: 0" in msg
+        assert msg.endswith("\n")  # sample section is empty, but message still ends cleanly
 
     def test_format_telegram_claimed_with_agent(self):
         """_format_telegram for claimed action should include agent."""

@@ -33,6 +33,11 @@ async def analytics_overview():
     completions_last_hour = 0
 
     for t in all_tasks:
+        # Archived tasks are hidden from the board — they must not inflate
+        # the active by_status / repo / completion metrics. Before this fix
+        # a 7K archived blocked backlog read as "32% of the board blocked".
+        if t.get("archived", False):
+            continue
         status = t.get("status", "unknown")
         by_status[status] = by_status.get(status, 0) + 1
 
@@ -52,7 +57,7 @@ async def analytics_overview():
             if updated > hour_ago:
                 completions_last_hour += 1
 
-    total = len(all_tasks)
+    total = sum(by_status.values())  # active board size (archived excluded)
     total_done = by_status.get("done", 0)
 
     # ── Claim churn canary (last hour) — filtered in SQL ─────────────

@@ -16,10 +16,12 @@ Scheduler loops:
   metrics_collector   :300s — board metrics snapshot, fire webhook
   template_trigger    :900s — fire recurring task templates
   self_improver      :21600s — health check, codebase audit, improvement tasks
+  blocked_remediator  :3600s — audit + archive un-actionable/stale blocked tasks
 """
 
 import asyncio
 import os
+import re
 import subprocess
 import threading
 import time
@@ -29,6 +31,7 @@ from typing import Any
 
 import httpx
 
+from blocked_remediation import run_blocked_remediation
 from config import settings
 from webhook_dispatcher import (
     EVENT_BOARD_DEAD,
@@ -722,6 +725,25 @@ async def repo_scanner(interval: int):
             traceback.print_exc()
 
 
+async def _bulk_archive_tasks(task_ids: list[str], batch: int = 100, timeout: float = 300.0) -> int:
+    """Archive tasks in batches with a generous per-request timeout.
+
+    The bulk-archive endpoint processes task IDs sequentially (SELECT +
+    toggle_archive reducer per task, ~2.4s each under load), so a single
+    request with thousands of IDs takes minutes and blows past the default
+    15s timeout — the OLD code's bulk-archive POST silently no-oped and the
+    blocked backlog grew to 7K+. Batching keeps each request bounded.
+    """
+    archived = 0
+    for i in range(0, len(task_ids), batch):
+        chunk = task_ids[i : i + batch]
+        result = await _api_post("/api/tasks/bulk-archive", {"task_ids": chunk}, timeout=timeout)
+        if result:
+            archived += result.get("archived", len(chunk))
+        await asyncio.sleep(0)  # yield to the event loop between batches
+    return archived
+
+
 async def task_archiver(interval: int):
     """Archive old done/blocked tasks to prevent board bloat.
 
@@ -739,7 +761,9 @@ async def task_archiver(interval: int):
             archived = 0
 
             # Seed/sample tasks >24h → archive (created by "seed" for onboarding)
-            available_tasks = await _api_get("/api/tasks?status=available&archived=false&limit=500")
+            available_tasks = await _api_get(
+                "/api/tasks?status=available&archived=false&limit=10000", timeout=60
+            )
             if available_tasks:
                 old_seed = [
                     t["id"]
@@ -749,15 +773,16 @@ async def task_archiver(interval: int):
                     and (now_ms - t["created_at"]) > day_ms
                 ]
                 if old_seed:
-                    result = await _api_post("/api/tasks/bulk-archive", {"task_ids": old_seed})
-                    if result:
-                        archived += len(old_seed)
+                    archived += await _bulk_archive_tasks(old_seed)
+                    if archived:
                         print(
                             f"[scheduler:archiver] Archived {len(old_seed)} old seed/sample task(s)"
                         )
 
             # Done tasks >7 days
-            done_tasks = await _api_get("/api/tasks?status=done&archived=false&limit=500")
+            done_tasks = await _api_get(
+                "/api/tasks?status=done&archived=false&limit=10000", timeout=60
+            )
             if done_tasks:
                 old_done = [
                     t["id"]
@@ -765,12 +790,15 @@ async def task_archiver(interval: int):
                     if t.get("updated_at", 0) and (now_ms - t["updated_at"]) > 7 * day_ms
                 ]
                 if old_done:
-                    result = await _api_post("/api/tasks/bulk-archive", {"task_ids": old_done})
-                    if result:
-                        archived += len(old_done)
+                    archived += await _bulk_archive_tasks(old_done)
 
-            # Blocked tasks >24h
-            blocked_tasks = await _api_get("/api/tasks?status=blocked&archived=false&limit=500")
+            # Blocked tasks >24h. Uses a board-scale limit + 60s timeout —
+            # the old limit=500 (first page only) + 15s timeout silently
+            # no-oped for days: under load the board query takes 30s+, the
+            # fetch returned None, and the blocked backlog grew to 7K+.
+            blocked_tasks = await _api_get(
+                "/api/tasks?status=blocked&archived=false&limit=10000", timeout=60
+            )
             if blocked_tasks:
                 old_blocked = [
                     t["id"]
@@ -778,9 +806,7 @@ async def task_archiver(interval: int):
                     if t.get("updated_at", 0) and (now_ms - t["updated_at"]) > day_ms
                 ]
                 if old_blocked:
-                    result = await _api_post("/api/tasks/bulk-archive", {"task_ids": old_blocked})
-                    if result:
-                        archived += len(old_blocked)
+                    archived += await _bulk_archive_tasks(old_blocked)
 
                 # Auto-heal: tasks blocked without fail_reason → retry
                 # These were likely blocked by the old buggy /block endpoint
@@ -791,7 +817,9 @@ async def task_archiver(interval: int):
                     if not t.get("fail_reason") and t.get("assigned_to")
                 ]
                 if stuck_blocked:
-                    result = await _api_post("/api/tasks/bulk-retry", {"task_ids": stuck_blocked})
+                    result = await _api_post(
+                        "/api/tasks/bulk-retry", {"task_ids": stuck_blocked}, timeout=300
+                    )
                     if result:
                         retried = result.get("retried", 0)
                         if retried:
@@ -809,6 +837,53 @@ async def task_archiver(interval: int):
             print(f"[scheduler:archiver] Error: {e}")
 
     return True  # Unreachable but keeps linter happy
+
+
+async def blocked_remediator(interval: int):
+    """Audit + archive the blocked-task backlog.
+
+    Runs on startup (first tick immediately), then every `interval` seconds.
+    Delegates classification/archival to blocked_remediation so the logic is
+    unit-testable without the scheduler. Two cleanup passes:
+
+      1. Auto-dismiss un-actionable blocked tasks: "[Stale]" copies created
+         by the self_improver, scanner false positives (stdb_index "No
+         indexable fields found", task-generator "No extractable
+         functions"), tasks referencing .venv/site-packages paths, and tasks
+         whose description references files that no longer exist on disk.
+      2. Archive blocked tasks with no activity for >stale days.
+
+    Fires a webhook (EVENT_BLOCKED_REMEDIATED) per run so humans can review
+    what was archived and why.
+    """
+    first = True
+    while True:
+        try:
+            if first:
+                first = False
+            else:
+                await asyncio.sleep(interval)
+
+            summary = await run_blocked_remediation(
+                api_get=_api_get,
+                api_post=_api_post,
+                fire_event=fire_event,
+                timeout=300.0,
+            )
+            archived = summary.get("archived", 0)
+            if archived:
+                print(
+                    f"[scheduler:remediator] Archived {archived} blocked task(s) "
+                    f"({summary.get('auto_dismissed', 0)} auto-dismissed, "
+                    f"{summary.get('stale_archived', 0)} stale; "
+                    f"active blocked now {summary.get('active_blocked', '?')})"
+                )
+            else:
+                print("[scheduler:remediator] No blocked tasks need remediation")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[scheduler:remediator] Error: {e}\n{traceback.format_exc()}")
 
 
 async def template_trigger(interval: int):
@@ -1064,7 +1139,24 @@ async def self_improver(interval: int):
                 ]
                 if stale:
                     print(f"[scheduler:improver] {len(stale)} task(s) in_progress >30min")
+                    # Tag the ORIGINAL task's repo and dedupe — the old code
+                    # always filed "[Stale]" tasks under spacetimedb-kanban
+                    # (wrong repo) and re-created a new task every run for
+                    # the same stuck task.
+                    existing_refs = set()
+                    board = await _api_get("/api/tasks?limit=100000", timeout=60)
+                    if board:
+                        for row in board:
+                            if (row.get("title") or "").startswith("[Stale]"):
+                                m = re.search(
+                                    r"Task (\w+) has been in_progress",
+                                    row.get("description") or "",
+                                )
+                                if m:
+                                    existing_refs.add(m.group(1))
                     for t in stale[:3]:
+                        if t.get("id") in existing_refs:
+                            continue  # already flagged — don't re-create
                         await _create_improvement_task(
                             title=f"[Stale] Task stuck in_progress: {t.get('title', '?')[:60]}",
                             description=(
@@ -1072,6 +1164,7 @@ async def self_improver(interval: int):
                                 f"without heartbeat for >30min"
                             ),
                             priority=2,
+                            repo=t.get("repo") or "spacetimedb-kanban",
                         )
 
             # Check cycling tasks (high fail_count)
@@ -1338,6 +1431,8 @@ async def start_scheduler():
     loops.append(("deathwatch", 15, worker_death_watcher))
     # Zombie cleaner — block/archive tasks at max_attempts so they don't rot
     loops.append(("zombie", 1800, zombie_cleaner))  # every 30 min
+    # Blocked-task remediation — audit + archive un-actionable/stale blocked
+    loops.append(("remediator", settings.remediator_interval_seconds, blocked_remediator))
     # Self-improver — health checks, codebase audits, improvement tasks
     if settings.improver_interval_seconds > 0:
         loops.append(("improver", settings.improver_interval_seconds, self_improver))

@@ -27,6 +27,7 @@ EVENT_BOARD_DEAD = "board.dead"
 EVENT_BOARD_STALLED = "board.stalled"
 EVENT_WORKER_STALE = "worker.stale"
 EVENT_METRICS_SNAPSHOT = "metrics.snapshot"
+EVENT_BLOCKED_REMEDIATED = "board.blocked_remediated"
 
 
 def _format_message(event: str, data: dict) -> str:
@@ -73,6 +74,19 @@ def _format_message(event: str, data: dict) -> str:
             f"Blocked: {data.get('blocked', 0)} | Done: {data.get('done', 0)}\n"
             f"Claims/hr: {data.get('claims_last_hour', 0)} | "
             f"Completions/hr: {data.get('completions_last_hour', 0)}"
+        )
+    elif event == EVENT_BLOCKED_REMEDIATED:
+        sample_lines = "\n".join(
+            f"  - `{s.get('task_id', '?')[:24]}` {s.get('title', '?')} — {s.get('reason', '?')}"
+            for s in data.get("samples", [])
+        )
+        return (
+            f"🧹 **Blocked backlog remediated**\n"
+            f"Archived {data.get('archived', 0)} blocked task(s): "
+            f"{data.get('auto_dismissed', 0)} auto-dismissed, "
+            f"{data.get('stale_archived', 0)} stale.\n"
+            f"Active blocked remaining: {data.get('active_blocked', '?')}\n"
+            f"{sample_lines}"
         )
     return f"[{event}] {json.dumps(data)[:200]}"
 
