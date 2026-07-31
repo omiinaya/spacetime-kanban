@@ -11,6 +11,7 @@ Layer 2 checks:
 Priority: P2 — code health, prevents future bugs.
 """
 
+import ast
 import os
 import re
 import subprocess
@@ -46,7 +47,11 @@ def _check_rust_unwraps(repo_path: str) -> list[str]:
 
 
 def _check_bare_excepts(repo_path: str) -> list[str]:
-    """Find Python files with bare except: clauses."""
+    """Find Python files with bare except: clauses.
+
+    Uses AST parsing (not raw-text regex) so docstrings, comments, and
+    string literals containing "except:" are never flagged.
+    """
     results = []
     for root, _dirs, files in walk_repo(repo_path):
         for f in files:
@@ -55,12 +60,15 @@ def _check_bare_excepts(repo_path: str) -> list[str]:
             filepath = os.path.join(root, f)
             try:
                 with open(filepath) as fh:
-                    content = fh.read()
-                bare = re.findall(r"^except\s*:", content, re.MULTILINE)
-                if bare:
+                    tree = ast.parse(fh.read())
+                count = sum(
+                    1 for node in ast.walk(tree)
+                    if isinstance(node, ast.ExceptHandler) and node.type is None
+                )
+                if count:
                     rel = os.path.relpath(filepath, repo_path)
-                    results.append(f"{rel}: {len(bare)} bare except(s)")
-            except (OSError, UnicodeDecodeError):
+                    results.append(f"{rel}: {count} bare except(s)")
+            except (OSError, UnicodeDecodeError, SyntaxError):
                 pass
     return results
 
