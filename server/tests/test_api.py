@@ -176,6 +176,33 @@ async def test_list_tasks_cache_hit(client, mock_all):
 
 
 @pytest.mark.asyncio
+async def test_list_tasks_cache_invalidated_on_write(client, mock_all):
+    """A task mutation clears the cache so the next list re-queries STDB."""
+    mock_all["sql"].return_value = [
+        _make_task("t1", "Fix auth", repo="sample-repo-q"),
+        _make_task("t2", "Add captcha", repo="spacetime-browser"),
+    ]
+    # Warm the cache
+    resp = await client.get("/api/tasks")
+    assert resp.status_code == 200
+    sql_calls_after_read = mock_all["sql"].call_count
+
+    # A write (create) invalidates the cache
+    mock_all["call"].return_value = {"status": "ok"}
+    mock_all["param"].return_value = []
+    create_resp = await client.post(
+        "/api/tasks",
+        json={"title": "New task", "repo": "test", "description": "d"},
+    )
+    assert create_resp.status_code in (201, 200)
+
+    # Next read must hit STDB again (cache was cleared)
+    resp2 = await client.get("/api/tasks")
+    assert resp2.status_code == 200
+    assert mock_all["sql"].call_count > sql_calls_after_read
+
+
+@pytest.mark.asyncio
 async def test_list_tasks_with_repo_filter(client, mock_all):
     mock_all["sql"].return_value = [
         _make_task("t1", "Fix auth", repo="sample-repo-q"),

@@ -18,6 +18,8 @@ Targets (scheduler_low_backlog.py):
 """
 
 import asyncio
+import os
+import tempfile
 import time
 from unittest import mock
 
@@ -267,7 +269,10 @@ async def test_fountain_loop_subprocess():
     """Lines 1089-1121: runs fountain subprocess, handles output."""
     ctrl = SC()
 
-    with mock.patch("scheduler.settings") as ms:
+    with (
+        mock.patch("scheduler.settings") as ms,
+        mock.patch("scheduler.FOUNTAIN_LOG_PATH", os.path.join(tempfile.mkdtemp(), "fountain.log")),
+    ):
         ms.agent_id = "test"
         with mock.patch.object(scheduler.asyncio, "sleep", ctrl):
             # Mock create_subprocess_exec to return a process that outputs "Created 3 task"
@@ -287,7 +292,10 @@ async def test_fountain_loop_failure():
     """Lines 1122-1123: subprocess non-zero exit."""
     ctrl = SC()
 
-    with mock.patch("scheduler.settings") as ms:
+    with (
+        mock.patch("scheduler.settings") as ms,
+        mock.patch("scheduler.FOUNTAIN_LOG_PATH", os.path.join(tempfile.mkdtemp(), "fountain.log")),
+    ):
         ms.agent_id = "test"
         with mock.patch.object(scheduler.asyncio, "sleep", ctrl):
             mock_proc = mock.AsyncMock()
@@ -314,7 +322,10 @@ async def test_fountain_loop_timeout_kills_child():
         # post-kill communicate to complete.
         raise TimeoutError("hung")
 
-    with mock.patch("scheduler.settings") as ms:
+    with (
+        mock.patch("scheduler.settings") as ms,
+        mock.patch("scheduler.FOUNTAIN_LOG_PATH", os.path.join(tempfile.mkdtemp(), "fountain.log")),
+    ):
         ms.agent_id = "test"
         with mock.patch.object(scheduler.asyncio, "sleep", ctrl):
             with mock.patch.object(asyncio, "create_subprocess_exec", return_value=mock_proc):
@@ -337,10 +348,13 @@ async def test_fountain_loop_cancelled_kills_child():
     mock_proc.communicate = mock.AsyncMock(return_value=(b"", b""))
     mock_proc.kill = mock.MagicMock()
 
-    async def raise_cancel():
+    async def raise_cancel(*_args, **_kwargs):
         raise asyncio.CancelledError()
 
-    with mock.patch("scheduler.settings") as ms:
+    with (
+        mock.patch("scheduler.settings") as ms,
+        mock.patch("scheduler.FOUNTAIN_LOG_PATH", os.path.join(tempfile.mkdtemp(), "fountain.log")),
+    ):
         ms.agent_id = "test"
         with mock.patch.object(scheduler.asyncio, "sleep", ctrl):
             with mock.patch.object(asyncio, "create_subprocess_exec", return_value=mock_proc):
