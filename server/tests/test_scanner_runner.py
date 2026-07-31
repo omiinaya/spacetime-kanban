@@ -124,21 +124,31 @@ class TestDedup:
 
     @patch("scanners.runner._api_get")
     def test_fetch_existing_titles_all_statuses(self, mock_get):
-        """Fetches titles from all 4 statuses."""
-        mock_get.side_effect = [
-            [{"title": "task A"}, {"title": "Task B"}],
-            [{"title": "task C"}],
-            [{"title": "task D"}],
-            [{"title": "TASK A"}],
+        """Fetches ALL tasks in ONE board-scale call (no per-status cap).
+
+        Regression guard: the old code made 4 status-filtered calls at
+        limit=500 each, capping dedup coverage at ~2,000 titles on a
+        22K-task board. The fix fetches everything unfiltered at
+        DEDUP_LIMIT, so status= filters must never come back.
+        """
+        mock_get.return_value = [
+            {"title": "task A", "repo": "repo-a"},
+            {"title": "Task B", "repo": "repo-a"},
+            {"title": "task C", "repo": "repo-a"},
+            {"title": "task D", "repo": "repo-a"},
+            {"title": "TASK A", "repo": "repo-a"},
         ]
-        from scanners.runner import _fetch_existing_titles
+        from scanners.runner import DEDUP_LIMIT, _fetch_existing_titles
 
         result = _fetch_existing_titles()
-        assert "task a" in result
-        assert "task b" in result
-        assert "task c" in result
-        assert "task d" in result
-        assert mock_get.call_count == 4
+        assert ("repo-a", "task a") in result
+        assert ("repo-a", "task b") in result
+        assert ("repo-a", "task c") in result
+        assert ("repo-a", "task d") in result
+        # One unfiltered board-scale request — never a per-status call
+        assert mock_get.call_count == 1
+        assert mock_get.call_args[0][0] == f"/api/tasks?limit={DEDUP_LIMIT}"
+        assert "status=" not in mock_get.call_args[0][0]
 
     @patch("scanners.runner._api_get")
     def test_fetch_existing_titles_handles_none(self, mock_get):
@@ -153,32 +163,34 @@ class TestDedup:
     def test_fetch_skips_empty_title(self, mock_get):
         """Tasks with empty title are skipped."""
         mock_get.return_value = [
-            {"title": "real task"},
-            {"title": ""},
-            {},
+            {"title": "real task", "repo": "repo-a"},
+            {"title": "", "repo": "repo-a"},
+            {"repo": "repo-a"},
         ]
         from scanners.runner import _fetch_existing_titles
 
         result = _fetch_existing_titles()
-        assert "real task" in result
+        assert ("repo-a", "real task") in result
         assert len(result) == 1
 
     def test_is_duplicate(self):
-        """Case-insensitive duplicate detection."""
+        """Case-insensitive duplicate detection, scoped per repo."""
         from scanners.runner import _is_duplicate
 
-        # In practice _fetch_existing_titles lowercases, so existing set is lowered
-        existing = {"fix bug", "add feature"}
-        assert _is_duplicate("Fix Bug", existing)
-        assert _is_duplicate("add feature", existing)
-        assert not _is_duplicate("new thing", existing)
+        existing = {("repo-a", "fix bug"), ("repo-a", "add feature")}
+        assert _is_duplicate("repo-a", "Fix Bug", existing)
+        assert _is_duplicate("repo-a", "add feature", existing)
+        assert not _is_duplicate("repo-a", "new thing", existing)
+        # Same title in ANOTHER repo is NOT a duplicate
+        assert not _is_duplicate("repo-b", "fix bug", existing)
 
     def test_is_duplicate_strips_whitespace(self):
         """Whitespace in title is stripped before comparison."""
         from scanners.runner import _is_duplicate
 
-        existing = {"fix bug"}
-        assert _is_duplicate("  Fix Bug  ", existing)
+        existing = {("repo-a", "fix bug")}
+        assert _is_duplicate("repo-a", "  Fix Bug  ", existing)
+        assert not _is_duplicate("repo-b", "  Fix Bug  ", existing)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -389,7 +401,7 @@ class TestRunAllScanners:
         mock_scores,
     ):
         """Duplicate findings (already in existing set) are not created."""
-        mock_fetch.return_value = {"unpin serde"}
+        mock_fetch.return_value = {("test-repo", "unpin serde")}
         mock_verify.return_value = 0
         mock_scores.return_value = {0: 1.0}
 

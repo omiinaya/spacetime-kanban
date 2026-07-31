@@ -23,8 +23,6 @@ import time
 from collections import Counter
 from unittest.mock import patch
 
-import pytest
-
 from scanners import runner
 
 # ── Fake scanner ────────────────────────────────────────────────────────
@@ -35,7 +33,7 @@ def scan_fake(repo_name, repo_path):
     return [
         {
             "title": "Replace bare except:",
-            "description": "bare except in %s" % repo_name,
+            "description": f"bare except in {repo_name}",
             "priority": 2,
             "skip_verify": True,
         }
@@ -121,9 +119,7 @@ class TestDedupKey:
 class TestFetchExistingTitles:
     def test_covers_whole_board_in_one_unfiltered_call(self):
         """25K tasks (bigger than the old 4×500=2K cap) are ALL seen."""
-        board = [
-            {"repo": "repo-a", "title": f"task {i}"} for i in range(25_000)
-        ]
+        board = [{"repo": "repo-a", "title": f"task {i}"} for i in range(25_000)]
         api = _FakeAPI(board)
         with patch.object(runner, "_api_get", side_effect=api.get):
             existing = runner._fetch_existing_titles()
@@ -172,10 +168,14 @@ class TestTwoScannerRuns:
         assert run2["fake"]["created"] == 0
 
         # The pre-existing 5 done copies must NOT have grown to 6.
-        repo_a_dups = [t for t in board if t["repo"] == "repo-a" and t["title"] == "Replace bare except:"]
+        repo_a_dups = [
+            t for t in board if t["repo"] == "repo-a" and t["title"] == "Replace bare except:"
+        ]
         assert len(repo_a_dups) == 5
         # repo-b has exactly one (created in run 1, never duplicated in run 2).
-        repo_b_dups = [t for t in board if t["repo"] == "repo-b" and t["title"] == "Replace bare except:"]
+        repo_b_dups = [
+            t for t in board if t["repo"] == "repo-b" and t["title"] == "Replace bare except:"
+        ]
         assert len(repo_b_dups) == 1
 
         # No two tasks CREATED by the scanner share a (repo, title) key.
