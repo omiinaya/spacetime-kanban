@@ -631,6 +631,27 @@ async def test_suggest_tasks_blocker_exception(client, mock_all):
     assert isinstance(data, list)
 
 
+@pytest.mark.asyncio
+async def test_suggest_tasks_reuses_cache(client, mock_all):
+    """suggest_tasks serves from the list cache — no duplicate _sql call.
+
+    The first call populates the no-filter cache key; a second call must
+    NOT hit _sql again (guards the 22K-row re-pull regression).
+    """
+    mock_all["sql"].return_value = [_task_dict(tid="t1")]
+    mock_all["param"].side_effect = Exception("STDB error")  # agent fetch fails
+
+    first = await client.get("/api/tasks/suggest?limit=5")
+    assert first.status_code == 200
+    calls_after_first = mock_all["sql"].call_count
+
+    second = await client.get("/api/tasks/suggest?limit=5")
+    assert second.status_code == 200
+    # No additional full-table SELECT for the cached path (blocker query
+    # still runs once per call and is allowed to bump the count).
+    assert mock_all["sql"].call_count <= calls_after_first + 1
+
+
 # ── Direct tests for remaining uncovered lines ──
 
 

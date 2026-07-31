@@ -30,6 +30,72 @@ def get_scanner_name(fn: Callable) -> str:
     return fn.__name__.replace("scan_", "")
 
 
+# ── Pruned directory walker ────────────────────────────────────────────
+# Scanning repos naively with os.walk() walks EVERYTHING — .git, node_modules,
+# target/, venv, dist, build — millions of files across 50+ repos. The scanner
+# runs inside the server process (run_in_executor), so an unpruned walk pegs
+# CPU at 100% for minutes and starves /api/health (observed: 5s timeouts while
+# run_all_scanners walked ~/sample-repo-m's 92K files).
+_SCAN_EXCLUDE_DIRS = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "node_modules",
+        "target",
+        "dist",
+        "build",
+        "venv",
+        ".venv",
+        "env",
+        ".env",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".tox",
+        ".nox",
+        ".idea",
+        ".vscode",
+        ".next",
+        ".nuxt",
+        ".cache",
+        "coverage",
+        ".coverage",
+        "htmlcov",
+        ".eggs",
+        "*.egg-info",
+        ".gradle",
+        ".cargo",
+        ".rustup",
+        ".hermes",
+        ".config",
+        ".local",
+        "site-packages",
+        "vendor",
+        "third_party",
+        "third-party",
+        "bower_components",
+    }
+)
+
+
+def walk_repo(repo_path: str, extra_exclude: set[str] | frozenset[str] | None = None):
+    """Yield (root, dirs, files) for a repo, pruning heavy/build dirs.
+
+    Every scanner must use this instead of raw os.walk() — the pruning is
+    what keeps a full-board scan bounded (seconds, not minutes of CPU).
+    ``dirs`` is mutated in place so os.walk skips pruned subtrees entirely.
+    ``extra_exclude`` adds caller-specific dir names (e.g. {"tests"}).
+    """
+    exclude = _SCAN_EXCLUDE_DIRS
+    if extra_exclude:
+        exclude = exclude | frozenset(extra_exclude)
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [d for d in dirs if d not in exclude and not d.endswith(".egg-info")]
+        yield root, dirs, files
+
+
 # ── Import all scanner modules so their @register_scanner decorators run ──
 from . import (  # noqa: E402
     dep_scanner,

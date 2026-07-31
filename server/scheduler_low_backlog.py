@@ -149,7 +149,7 @@ async def _generate_improvement_tasks() -> int:
                 norm = h.strip().lower()
                 if norm in existing_titles:
                     continue
-                result = _api_post(
+                result = await _api_post(
                     "/api/tasks",
                     {
                         "title": h[:200],
@@ -185,7 +185,7 @@ async def _generate_improvement_tasks() -> int:
         title = f"Add CI badge to README for {repo_name}"
         norm = title.strip().lower()
         if has_ci and not has_badge and norm not in existing_titles:
-            result = _api_post(
+            result = await _api_post(
                 "/api/tasks",
                 {
                     "title": title,

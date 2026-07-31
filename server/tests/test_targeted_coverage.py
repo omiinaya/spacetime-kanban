@@ -1,11 +1,24 @@
 """Targeted coverage tests for remaining uncovered lines in routes."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from main import app
+
+
+def _absorb_coroutine(coro):
+    """Consume a fire-and-forget coroutine without executing it.
+
+    Endpoints use ``asyncio.create_task(_notify(...))`` for background
+    notifications. In tests we patch create_task so the coroutine would
+    otherwise be GC'd un-awaited (RuntimeWarning). Closing it keeps the
+    test hermetic — the notify payload is mocked anyway.
+    """
+    coro.close()
+    return None
+
 
 # ── Local mock_all fixture (mirrors test_coverage_routes) ──
 
@@ -151,7 +164,11 @@ async def test_webhook_subs_test_telegram(client, mock_all):
     mock_all["call"].return_value = {"status": "sent"}
 
     fake_httpx_client = AsyncMock()
-    fake_httpx_client.post.return_value.status_code = 200
+    # post.return_value must be a plain MagicMock, NOT an AsyncMock child:
+    # an AsyncMock's return_value is itself an AsyncMock, so resp would be
+    # one too and resp.raise_for_status() would create an un-awaited
+    # coroutine (RuntimeWarning). A MagicMock makes it a sync method.
+    fake_httpx_client.post.return_value = MagicMock(status_code=200)
     fake_httpx_client.__aenter__.return_value = fake_httpx_client
     fake_httpx_client.__aexit__.return_value = None
 
@@ -281,7 +298,7 @@ async def test_github_webhook_closed_issue(client, mock_all):
     with (
         patch("issue_sync.get_task_id_for_issue", return_value="task_1"),
         patch("issue_sync.update_issue_status"),
-        patch("asyncio.create_task"),
+        patch("asyncio.create_task", side_effect=_absorb_coroutine),
     ):
         resp = await client.post(
             "/api/webhook/github",
@@ -331,7 +348,7 @@ async def test_github_webhook_closed_available(client, mock_all):
     with (
         patch("issue_sync.get_task_id_for_issue", return_value="task_1"),
         patch("issue_sync.update_issue_status"),
-        patch("asyncio.create_task"),
+        patch("asyncio.create_task", side_effect=_absorb_coroutine),
     ):
         resp = await client.post(
             "/api/webhook/github",
@@ -356,7 +373,7 @@ async def test_github_webhook_closed_else(client, mock_all):
     with (
         patch("issue_sync.get_task_id_for_issue", return_value="task_1"),
         patch("issue_sync.update_issue_status"),
-        patch("asyncio.create_task"),
+        patch("asyncio.create_task", side_effect=_absorb_coroutine),
     ):
         resp = await client.post(
             "/api/webhook/github",

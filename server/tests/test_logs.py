@@ -324,6 +324,32 @@ async def test_batch_logs_whitespace_task_ids(client, mock_stdb):
 
 
 @pytest.mark.asyncio
+async def test_batch_logs_real_sql_param_formatting(client, mock_stdb):
+    """batch_logs SQL must use NAMED placeholders that _sql_param can format.
+
+    Regression guard: the OR-query optimization used positional {0}, {1}
+    placeholders, but _sql_param formats with **kwargs — the resulting
+    IndexError made /api/logs/batch return 500 for EVERY call, silently
+    breaking the scheduler's heartbeat batch check (it fell back to slow
+    per-task queries). This test runs the REAL _sql_param (only shared._sql
+    is mocked, which is the final hop inside _sql_param) so a
+    positional-placeholder regression raises immediately at format time.
+    """
+    with patch("shared._sql", new_callable=AsyncMock) as mock_sql:
+        mock_sql.return_value = [
+            _make_log(lid="log_a", task_id="task_1", action="heartbeat", timestamp=300),
+        ]
+        resp = await client.get(
+            "/api/logs/batch",
+            params={"task_ids": "task_1,task_2", "action": "heartbeat", "limit": 1},
+        )
+        assert resp.status_code == 200, f"batch_logs 500: {resp.text[:200]}"
+        data = resp.json()
+        assert data.get("task_1", {}).get("timestamp") == 300
+        assert data.get("task_2") is None
+
+
+@pytest.mark.asyncio
 async def test_batch_logs_single_task(client, mock_stdb):
     """Single task ID returns its latest log."""
     with patch("routes.logs._sql_param", new_callable=AsyncMock) as mock_param:

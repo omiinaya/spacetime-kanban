@@ -11,7 +11,7 @@ Priority: P3 (low) — nice to have, not urgent.
 
 import os
 
-from scanners import register_scanner
+from scanners import register_scanner, walk_repo
 
 
 def _find_test_gaps_python(repo_path: str) -> list[str]:
@@ -31,15 +31,7 @@ def _find_test_gaps_python(repo_path: str) -> list[str]:
     for src_dir in src_dirs:
         if not os.path.isdir(src_dir):
             continue
-        for root, dirs, files in os.walk(src_dir):
-            # Skip dirs
-            dirs[:] = [
-                d
-                for d in dirs
-                if not d.startswith("__")
-                and not d.startswith(".")
-                and d not in ("tests", ".venv", "venv", "__pycache__", "node_modules")
-            ]
+        for root, _dirs, files in walk_repo(src_dir, extra_exclude={"tests"}):
             for f in files:
                 if f.endswith(".py") and not f.startswith("test_") and f != "__init__.py":
                     # Check if corresponding test exists
@@ -59,7 +51,7 @@ def _find_test_gaps_rust(repo_path: str) -> list[str]:
         return []
 
     gaps = []
-    for root, _dirs, files in os.walk(stdb_src):
+    for root, _dirs, files in walk_repo(stdb_src):
         for f in files:
             if not f.endswith(".rs"):
                 continue

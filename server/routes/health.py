@@ -2,11 +2,27 @@
 
 import asyncio
 import functools
+import threading
 import time
 
 from fastapi import APIRouter
 
 router = APIRouter(tags=["health"])
+
+# ── Board summary cache ────────────────────────────────────────────────
+# /api/health is polled constantly (scheduler loops, agents, e2e probes).
+# The naive implementation ran `SELECT * FROM tasks` (22K rows / ~12MB) and
+# re-parsed every row on EVERY call to count by status — 2-4s per hit and
+# it competed with real work for the thread pool. The summary only needs
+# total + per-status counts, so we cache it. STDB can't GROUP BY and can't
+# compare the status enum to a string literal, so a single COUNT(*) for
+# total + a cached snapshot for the status breakdown is the fastest correct
+# shape. TTL is 30s: the counts are informational (health dashboard, e2e
+# probes), so sub-minute staleness is harmless and the full-table scan is
+# only paid once per TTL window.
+_BOARD_SUMMARY_CACHE: dict[str, tuple[float, dict]] = {}
+_BOARD_SUMMARY_TTL = 30.0
+_BOARD_SUMMARY_LOCK = threading.Lock()
 
 
 @router.get("/api/health")
@@ -53,21 +69,12 @@ async def system_health():
     except ImportError:
         pass  # scheduler not loaded — return defaults
 
-    # Lightweight board overview — fetch via shared client, don't block
+    # Lightweight board overview — TTL-cached so the hot poll path never
+    # pulls the full 22K-row table on every call.
     try:
         from shared import _sql
 
-        tasks = await _sql("SELECT * FROM tasks")
-        total = 0
-        by_status = {}
-        for t in tasks or []:
-            s = t.get("status", "unknown")
-            by_status[s] = by_status.get(s, 0) + 1
-            total += 1
-        result["board"] = {
-            "total": total,
-            "by_status": by_status,
-        }
+        result["board"] = await _get_board_summary(_sql)
     except ImportError:
         pass  # shared module not available
     except Exception:
@@ -77,6 +84,38 @@ async def system_health():
         pass  # query failure — keep board as {}
 
     return result
+
+
+async def _get_board_summary(sql_fn) -> dict:
+    """Return {total, by_status} with a short TTL cache."""
+    now = time.monotonic()
+    with _BOARD_SUMMARY_LOCK:
+        cached = _BOARD_SUMMARY_CACHE.get("board")
+        if cached and cached[0] > now:
+            return cached[1]
+
+    # Fast path: COUNT(*) for total (8ms) — STDB can't GROUP BY status.
+    total = 0
+    try:
+        total_rows = await sql_fn("SELECT COUNT(*) AS cnt FROM tasks")
+        if total_rows:
+            total = int(total_rows[0].get("cnt", 0))
+    except Exception:  # noqa: S110 — treat count failure as 0, still try the scan
+        pass
+
+    by_status: dict[str, int] = {}
+    if total > 0:
+        # Slow path only on cache miss: pull the raw table once and count
+        # statuses in Python (STDB's enum can't be compared to SQL strings).
+        tasks = await sql_fn("SELECT * FROM tasks")
+        for t in tasks or []:
+            s = t.get("status", "unknown")
+            by_status[s] = by_status.get(s, 0) + 1
+
+    summary = {"total": total, "by_status": by_status}
+    with _BOARD_SUMMARY_LOCK:
+        _BOARD_SUMMARY_CACHE["board"] = (now + _BOARD_SUMMARY_TTL, summary)
+    return summary
 
 
 @router.get("/api/health/projects")

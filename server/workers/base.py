@@ -9,6 +9,7 @@ Every worker follows the same protocol:
   6. Exit with exit code (0=done, 1=blocked, 2=error)
 """
 
+import contextlib
 import json
 import os
 import sys
@@ -190,9 +191,17 @@ def heartbeat_loop(ctx: WorkerContext):
 
     def _loop():
         while ctx._running:
-            time.sleep(HEARTBEAT_INTERVAL)
+            try:
+                time.sleep(HEARTBEAT_INTERVAL)
+            except InterruptedError:
+                # Interrupted (shutdown / test harness) — exit the thread
+                # cleanly instead of leaking an unhandled exception.
+                break
+            except Exception:  # noqa: S110 — transient sleep failure; keep beating
+                continue
             if ctx._running:
-                ctx.heartbeat()
+                with contextlib.suppress(Exception):  # a failed heartbeat must never kill the loop
+                    ctx.heartbeat()
 
     t = threading.Thread(target=_loop, daemon=True)
     t.start()

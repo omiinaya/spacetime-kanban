@@ -662,15 +662,39 @@ async def test_health_uptime_with_scheduler(client, mock_all):
 @pytest.mark.asyncio
 async def test_health_board_with_data(client, mock_all):
     """Health shows board summary when tasks exist."""
-    mock_all["sql"].return_value = [
-        {"id": "t1", "status": "done"},
-        {"id": "t2", "status": "available"},
+    # Health now issues COUNT(*) first, then the full scan on cache miss.
+    mock_all["sql"].side_effect = [
+        [{"cnt": 2}],  # COUNT(*) result
+        [  # SELECT * rows
+            {"id": "t1", "status": "done"},
+            {"id": "t2", "status": "available"},
+        ],
     ]
     resp = await client.get("/api/health")
     assert resp.status_code == 200
     assert resp.json()["board"]["total"] == 2
     assert resp.json()["board"]["by_status"]["done"] == 1
     assert resp.json()["board"]["by_status"]["available"] == 1
+
+
+@pytest.mark.asyncio
+async def test_health_board_cache_hit(client, mock_all):
+    """Second health call within TTL hits the cache (no extra SQL)."""
+    mock_all["sql"].side_effect = [
+        [{"cnt": 3}],  # COUNT(*) — cache miss
+        [  # SELECT * rows
+            {"id": "t1", "status": "done"},
+            {"id": "t2", "status": "available"},
+            {"id": "t3", "status": "blocked"},
+        ],
+    ]
+    first = await client.get("/api/health")
+    assert first.json()["board"]["total"] == 3
+    # Second call: cache is warm — _sql must NOT be called again.
+    second = await client.get("/api/health")
+    assert second.status_code == 200
+    assert second.json()["board"]["total"] == 3
+    assert mock_all["sql"].call_count == 2  # 1 COUNT + 1 SELECT, no 3rd call
 
 
 # ── Github: PR no branch / bad pattern (lines 164-169) ──
@@ -837,7 +861,22 @@ async def test_health_board_query_exception(client, mock_all):
     resp = await client.get("/api/health")
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("board") == {}  # board stays empty on error
+    # COUNT(*) fails → total stays 0, board keeps an empty status breakdown
+    assert data.get("board") == {"total": 0, "by_status": {}}
+
+
+@pytest.mark.asyncio
+async def test_health_board_scan_exception(client, mock_all):
+    """Health handles full-scan failure (post-COUNT) gracefully."""
+    mock_all["sql"].side_effect = [
+        [{"cnt": 5}],  # COUNT(*) succeeds
+        Exception("scan failed"),  # SELECT * raises
+    ]
+    resp = await client.get("/api/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    # Scan failure → board falls back to default {} (outer handler)
+    assert data.get("board") == {}
 
 
 # ── Health: board query import error (line 71-72) ──

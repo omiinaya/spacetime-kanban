@@ -174,7 +174,12 @@ def scan_prod_readiness(repo_name: str, repo_path: str) -> list[dict]:
                 pass
 
     # Actually let me use a simpler approach
-    for root, _dirs, files in os.walk(repo_path):
+    # Pruned walk — the unpruned os.walk() over 50 repos (millions of files
+    # incl. .git, node_modules, target/) pegged server CPU at 100% for
+    # minutes while the low-backlog trigger ran the scanner in-process.
+    from scanners import walk_repo
+
+    for root, _dirs, files in walk_repo(repo_path):
         for f in files:
             if f == "main.py":
                 filepath = os.path.join(root, f)

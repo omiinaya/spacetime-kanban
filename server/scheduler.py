@@ -21,7 +21,9 @@ Scheduler loops:
 import asyncio
 import os
 import subprocess
+import threading
 import time
+import traceback
 import urllib.parse
 from typing import Any
 
@@ -140,6 +142,49 @@ _worker_processes: dict[str, subprocess.Popen] = {}  # task_id -> Popen
 _worker_spawn_times: dict[str, float] = {}  # task_id -> time.monotonic()
 _worker_crash_counts: dict[str, int] = {}  # task_id -> consecutive immediate crashes
 _worker_stderr_data: dict[str, bytes] = {}  # task_id -> captured stderr on crash
+_worker_stderr_threads: dict[str, threading.Thread] = {}  # task_id -> drain thread
+
+# Max bytes of stderr to retain per worker. The OS pipe buffer is ~64KB;
+# a worker that writes more than this while its pipe is undrained will
+# block forever on write(). We drain the pipe in a background thread and
+# keep only the tail for crash diagnostics.
+_WORKER_STDERR_MAX_BYTES = 64 * 1024
+
+
+def _drain_worker_stderr(task_id: str, proc: subprocess.Popen) -> None:
+    """Background thread: drain a worker's stderr pipe so it can never fill.
+
+    The OS pipe buffer is ~64KB. If nothing reads the pipe while the worker
+    is alive, a chatty worker's ``write()`` blocks forever once the buffer
+    fills — the worker freezes mid-task, stops heartbeating, and the board
+    sees a 'stale worker' alert (the original root cause of the t_fb alert
+    spam). This thread keeps the pipe drained into a bounded buffer in
+    ``_worker_stderr_data`` so workers never block on stderr writes, and the
+    death watcher can read crash diagnostics without doing a blocking
+    ``proc.stderr.read()`` on the event loop.
+    """
+    buffer = bytearray()
+    try:
+        stream = proc.stderr
+        if stream is None:
+            return
+        while True:
+            chunk = stream.read(4096)
+            if not chunk:
+                break
+            buffer.extend(chunk)
+            if len(buffer) > _WORKER_STDERR_MAX_BYTES:
+                # Keep only the tail — stderr is for crash diagnostics
+                del buffer[: len(buffer) - _WORKER_STDERR_MAX_BYTES]
+    except Exception:  # noqa: S110 — pipe-closed on worker death is the normal shutdown path
+        # Pipe closed / read error — nothing more to drain. A background
+        # drain thread must never crash the server.
+        pass
+    finally:
+        if buffer:
+            _worker_stderr_data[task_id] = bytes(buffer)
+
+
 scheduler_start_time: float | None = None  # set when start_scheduler() runs
 _CRASH_RESET_INTERVAL = 3600  # Reset crash count after 1 hour
 _IMMEDIATE_CRASH_THRESHOLD = 3.0  # seconds — die within this = crash-on-launch
@@ -197,6 +242,18 @@ def _spawn_worker(task_id: str, title: str, repo: str) -> bool:
         )
         _worker_processes[task_id] = proc
         _worker_spawn_times[task_id] = time.monotonic()
+        # Drain stderr in a background thread — the OS pipe buffer is ~64KB,
+        # and an undrained pipe blocks the worker's write() forever (worker
+        # freezes → no heartbeat → stale-worker alerts). The thread keeps the
+        # pipe drained so workers never block on stderr writes.
+        drain_thread = threading.Thread(
+            target=_drain_worker_stderr,
+            args=(task_id, proc),
+            daemon=True,
+            name=f"worker-stderr-{task_id[:8]}",
+        )
+        drain_thread.start()
+        _worker_stderr_threads[task_id] = drain_thread
         return True
     except Exception as e:
         print(f"[scheduler] Failed to spawn worker for {task_id[:20]}: {e}")
@@ -248,6 +305,7 @@ def _kill_worker(task_id: str) -> bool:
     """Kill a worker process."""
     proc = _worker_processes.pop(task_id, None)
     _worker_spawn_times.pop(task_id, None)
+    _worker_stderr_threads.pop(task_id, None)
     if proc and proc.poll() is None:
         try:
             proc.kill()
@@ -356,7 +414,7 @@ async def task_dispatcher(interval: int):
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"[scheduler:dispatcher] Error: {e}")
+            print(f"[scheduler:dispatcher] Error: {e}\n{traceback.format_exc()}")
 
 
 async def stale_watcher(interval: int):
@@ -801,6 +859,7 @@ async def worker_death_watcher(interval: int):
                         _worker_processes.pop(tid, None)
                         _worker_spawn_times.pop(tid, None)
                         _worker_stderr_data.pop(tid, None)
+                        _worker_stderr_threads.pop(tid, None)
                         _worker_crash_counts.pop(tid, None)
 
             if not crashed:
@@ -821,21 +880,18 @@ async def worker_death_watcher(interval: int):
                     _worker_processes.pop(tid, None)
                     _worker_spawn_times.pop(tid, None)
                     _worker_stderr_data.pop(tid, None)
+                    _worker_stderr_threads.pop(tid, None)
                     continue
 
-                # Read stderr from crashed worker
-                proc = _worker_processes.get(tid)
+                # Read stderr from the background drain buffer — never block
+                # the event loop on a raw pipe read (a crashed worker with a
+                # large stderr backlog used to freeze ALL API requests).
                 stderr_text = ""
-                if proc:
-                    try:
-                        stderr_data = proc.stderr.read()
-                        if stderr_data:
-                            _worker_stderr_data[tid] = stderr_data
-                            decoded = stderr_data.decode("utf-8", errors="replace")[:2000]
-                            if decoded.strip():
-                                stderr_text = f" | stderr: {decoded.strip()[:200]}"
-                    except Exception as exc:
-                        print(f"[scheduler] Stderr read failed: {exc}")
+                stderr_data = _worker_stderr_data.get(tid, b"")
+                if stderr_data:
+                    decoded = stderr_data.decode("utf-8", errors="replace")[:2000]
+                    if decoded.strip():
+                        stderr_text = f" | stderr: {decoded.strip()[:200]}"
 
                 if age < _IMMEDIATE_CRASH_THRESHOLD:
                     # Immediate crash — unclaim and potentially block
@@ -874,11 +930,12 @@ async def worker_death_watcher(interval: int):
                 _worker_processes.pop(tid, None)
                 _worker_spawn_times.pop(tid, None)
                 _worker_stderr_data.pop(tid, None)
+                _worker_stderr_threads.pop(tid, None)
 
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"[scheduler:deathwatch] Error: {e}")
+            print(f"[scheduler:deathwatch] Error: {e}\n{traceback.format_exc()}")
 
 
 async def _seed_initial_workers():
@@ -904,7 +961,7 @@ async def _seed_initial_workers():
                     print(f"[scheduler:seed] Spawn FAILED for {tid[:20]} — unclaiming")
                     await _api_post(f"/api/tasks/{tid}/unclaim", {"agent_id": settings.agent_id})
     except Exception as e:
-        print(f"[scheduler:seed] Error: {e}")
+        print(f"[scheduler:seed] Error: {e}\n{traceback.format_exc()}")
 
 
 # ── Scheduler lifecycle ──────────────────────────────────────────────
@@ -1193,9 +1250,14 @@ async def _task_fountain_loop(interval: int):
                 proc.kill()
             break
         except Exception as e:
-            print(f"[scheduler:fountain] Error: {e}")
+            # Include the traceback — plain str(e) is empty for some
+            # exception types (e.g. bare TimeoutError) and makes failures
+            # undiagnosable from logs.
+            print(f"[scheduler:fountain] Error: {e}\n{traceback.format_exc()}")
             with open(log_path, "a") as f:
-                f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Error: {e}\n")
+                f.write(
+                    f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Error: {e}\n{traceback.format_exc()}\n"
+                )
 
 
 async def _recover_stale_tasks() -> int:
