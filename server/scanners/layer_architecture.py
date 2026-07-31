@@ -62,7 +62,8 @@ def _check_bare_excepts(repo_path: str) -> list[str]:
                 with open(filepath) as fh:
                     tree = ast.parse(fh.read())
                 count = sum(
-                    1 for node in ast.walk(tree)
+                    1
+                    for node in ast.walk(tree)
                     if isinstance(node, ast.ExceptHandler) and node.type is None
                 )
                 if count:
