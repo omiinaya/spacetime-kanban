@@ -218,7 +218,13 @@ They create kanban tasks for code quality issues. Key behaviors:
   regardless of lower-layer completion.
 - **Task fountain** (`_task_fountain.py`) runs every 60s as a fast board-health check.
   Only creates generic seed tasks when available tasks drop below 3.
-  Dedup checks ALL statuses (available, inProgress, blocked, done).
+  Dedup covers the WHOLE board: it fetches every task per-repo (`GET /api/tasks?repo=X&limit=100000`,
+  all statuses at once) — the old per-status `limit=200` capped dedup at 800 titles and
+  let old duplicates (16x "Review sample-repo-o…") slip through. If any repo query fails
+  the run aborts (an incomplete dedup set is what created duplicates). The health check
+  is gated ONCE per run and emits at most ONE review task per run (not one per repo),
+  and API timeouts are 60s (board queries take 30s+ under load; the scheduler's
+  subprocess timeout is 120s).
 
 ### Scanner layers
 

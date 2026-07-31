@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ultra-fast task fountain — runs in <3s, creates tasks for workers.
+"""Ultra-fast task fountain — keeps a minimum pool of available tasks.
 
 Only keeps the board healthy when tasks are running low.
 Does NOT duplicate main scanner findings (unwraps, bare excepts, large files, etc.)
@@ -7,6 +7,19 @@ to prevent infinite task loops. The main scanner system (scanners/runner.py)
 handles those on a longer interval with proper dedup.
 
 Only scans a hardcoded set of known-good repos. No discover_repos overhead.
+
+Dedup strategy (2026-07-31 fix): the old implementation fetched only
+limit=200 per status (available/inProgress/blocked/done) = max 800 titles
+on a 22k-task board, so any duplicate older than the newest 200 in its
+status bucket was invisible. fetch_board_state() now queries per-repo with
+a high limit (all statuses at once), covering the ENTIRE board. If any
+repo query fails the run aborts — creating tasks with an incomplete dedup
+set is exactly how duplicates got on the board in the first place.
+
+Board-health gate (2026-07-31 fix): the available-count check moved into
+run() and is evaluated ONCE per run. The old per-repo check created up to
+9 identical "Review X" tasks in a single run; scan_board_health now emits
+at most ONE task per run.
 """
 
 import json
@@ -16,6 +29,20 @@ import urllib.error
 import urllib.request
 
 API = os.environ.get("KANBAN_API", "http://localhost:8727")
+
+# Board queries take 30s+ under load — the old 5s timeout failed, yielding
+# an EMPTY dedup set → guaranteed duplicates. 60s gives per-repo full-board
+# queries room to complete.
+API_TIMEOUT = 60
+
+# Per-repo query limit for dedup. Must exceed the largest repo's task count
+# so the dedup set covers every task on the board (all statuses). One
+# request per repo is a single sorted snapshot, so nothing is truncated
+# or reordered between paginated requests.
+DEDUP_LIMIT = 100_000
+
+# The board-health scanner only fires when available tasks drop below this.
+MIN_AVAILABLE_TASKS = 3
 
 # REPOS is a hardcoded list of repos that are fast to scan (<1s each)
 REPOS = [
@@ -35,6 +62,10 @@ HOME = os.path.expanduser("~")
 # Scanner registry — each is a function that returns findings
 SCANNERS = []
 
+# Set when scan_board_health emits its one task per run — guarantees the
+# fountain creates AT MOST ONE health task per run, not one per repo.
+_health_emitted = False
+
 
 def register(fn):
     SCANNERS.append(fn)
@@ -43,7 +74,7 @@ def register(fn):
 
 def api_get(path: str):
     try:
-        with urllib.request.urlopen(f"{API}{path}", timeout=5) as resp:
+        with urllib.request.urlopen(f"{API}{path}", timeout=API_TIMEOUT) as resp:
             return json.loads(resp.read().decode())
     except Exception:
         return None
@@ -54,30 +85,44 @@ def api_post(path: str, data: dict):
         body = json.dumps(data).encode()
         req = urllib.request.Request(f"{API}{path}", data=body, method="POST")
         req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=API_TIMEOUT) as resp:
             content = resp.read().decode()
             return json.loads(content) if content else {"status": "ok"}
     except Exception:
         return None
 
 
-def fetch_existing_titles() -> set[str]:
-    """Fetch all task titles from ALL statuses for dedup."""
-    existing = set()
-    for status in ("available", "inProgress", "blocked", "done"):
-        try:
-            with urllib.request.urlopen(
-                f"{API}/api/tasks?status={status}&limit=200", timeout=5
-            ) as resp:
-                tasks = json.loads(resp.read().decode())
-                if tasks:
-                    for t in tasks:
-                        title = t.get("title", "")
-                        if title:
-                            existing.add(title.strip().lower())
-        except Exception:
-            pass
-    return existing
+def fetch_board_state() -> tuple[set[str], int] | None:
+    """Fetch the WHOLE board's titles + available-task count for dedup/gating.
+
+    Queries per-repo (GET /api/tasks?repo=X&limit=DEDUP_LIMIT) — one request
+    per repo returns ALL statuses for that repo, so the union covers every
+    task on the board. The old per-status limit=200 capped the set at 800
+    titles on a 22k-task board, making old duplicates invisible.
+
+    Returns (titles, available_count) or None if ANY repo query fails —
+    callers must abort creation rather than risk duplicates from an
+    incomplete dedup set.
+    """
+    existing: set[str] = set()
+    available = 0
+    for repo in REPOS:
+        tasks = api_get(f"/api/tasks?repo={repo}&limit={DEDUP_LIMIT}")
+        if tasks is None or not isinstance(tasks, list):
+            return None
+        for t in tasks:
+            title = t.get("title", "")
+            if title:
+                existing.add(title.strip().lower())
+            if t.get("status") == "available":
+                available += 1
+    return existing, available
+
+
+def fetch_existing_titles() -> set[str] | None:
+    """Whole-board titles only (wrapper over fetch_board_state)."""
+    state = fetch_board_state()
+    return state[0] if state is not None else None
 
 
 def is_dup(title: str, existing: set[str]) -> bool:
@@ -94,16 +139,16 @@ def is_dup(title: str, existing: set[str]) -> bool:
 
 @register
 def scan_board_health(repo_name: str, repo_path: str) -> list[dict]:
-    """Only create task if the board has fewer than 3 available tasks."""
-    try:
-        with urllib.request.urlopen(f"{API}/api/tasks?status=available") as resp:
-            available = json.loads(resp.read().decode())
-        if available and len(available) >= 3:
-            return []  # Board healthy — don't create anything
-    except Exception:
-        pass
+    """Create at most ONE generic 'review repo' task per fountain run.
 
-    # Board near-empty — create one generic task
+    The available-count gate lives in run() (checked ONCE per run, not per
+    repo — per-repo checks created up to 9 identical review tasks in a
+    single fountain run).
+    """
+    global _health_emitted
+    if _health_emitted:
+        return []
+    _health_emitted = True
     return [
         {
             "title": f"Review {repo_name} for actionable improvements",
@@ -121,11 +166,27 @@ def scan_board_health(repo_name: str, repo_path: str) -> list[dict]:
 
 def run() -> int:
     """Run all scanners on all repos. Returns number of tasks created."""
-    existing = fetch_existing_titles()
+    state = fetch_board_state()
+    if state is None:
+        # Never create with an incomplete dedup set — that's how duplicates
+        # got on the board. Retry next cycle (60s).
+        print(
+            "[fountain] dedup fetch failed — aborting run (incomplete dedup set)",
+            file=sys.stderr,
+        )
+        return 0
+    existing, available = state
 
-    import sys
+    global _health_emitted
+    _health_emitted = False
 
-    print(f"  existing={len(existing)} repos={len(REPOS)}", file=sys.stderr)
+    # Board-health gate — evaluated ONCE per run, not once per repo.
+    board_low = available < MIN_AVAILABLE_TASKS
+
+    print(
+        f"  existing={len(existing)} available={available} repos={len(REPOS)}",
+        file=sys.stderr,
+    )
 
     created = 0
     for repo_name in REPOS:
@@ -134,9 +195,14 @@ def run() -> int:
             continue
 
         for scanner in SCANNERS:
+            if scanner is scan_board_health and not board_low:
+                continue
             try:
                 findings = scanner(repo_name, repo_path)
             except Exception:
+                continue
+
+            if not findings:
                 continue
 
             for f in findings:
