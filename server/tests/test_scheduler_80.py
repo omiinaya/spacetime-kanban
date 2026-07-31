@@ -261,7 +261,10 @@ def test_save_improver_status_exception():
 async def test_fountain_loop_exception():
     """Lines 1126-1129: exception caught and logged."""
     ctrl = SC()
-    with mock.patch("scheduler.settings") as ms:
+    with (
+        mock.patch("scheduler.settings") as ms,
+        mock.patch("scheduler.FOUNTAIN_LOG_PATH", os.path.join(tempfile.mkdtemp(), "fountain.log")),
+    ):
         ms.agent_id = "test"
         with mock.patch.object(scheduler.asyncio, "sleep", ctrl):
             with mock.patch.object(

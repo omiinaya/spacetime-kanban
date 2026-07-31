@@ -101,6 +101,13 @@ class TestApiPost:
         result = api_post("/api/tasks", {"title": "test"})
         assert result is None
 
+    @patch("workers.base.urllib.request.urlopen")
+    def test_generic_exception_returns_none(self, mock_urlopen):
+        """Non-HTTP errors (connection refused, DNS, timeout) return None."""
+        mock_urlopen.side_effect = ConnectionError("Connection refused")
+        result = api_post("/api/tasks", {"title": "test"})
+        assert result is None
+
     @patch("workers.base.urllib.request.Request")
     @patch("workers.base.urllib.request.urlopen")
     def test_request_has_content_type(self, mock_urlopen, mock_request):

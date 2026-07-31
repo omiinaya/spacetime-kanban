@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import csv
+import functools
 import io
 import json
 import threading
@@ -62,6 +63,35 @@ from webhook_dispatcher import (
 _TASK_LIST_CACHE: dict[tuple, tuple[float, list]] = {}
 _TASK_LIST_CACHE_TTL = 5.0
 _TASK_LIST_CACHE_LOCK = threading.Lock()
+
+
+def _invalidate_task_list_cache() -> None:
+    """Drop all cached task rows after any task mutation.
+
+    Reads are served from the TTL cache; without invalidation a newly created
+    task can be invisible for up to TTL seconds (caught by e2e tests).
+    """
+    with _TASK_LIST_CACHE_LOCK:
+        _TASK_LIST_CACHE.clear()
+
+
+def _invalidate_on_success(func):
+    """Decorator: invalidate the task-list cache after a mutating endpoint.
+
+    Stacked BELOW the route decorator:
+        @router.post(...)
+        @_invalidate_on_success
+        async def create_task(...)
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        result = await func(*args, **kwargs)
+        _invalidate_task_list_cache()
+        return result
+
+    return wrapper
+
 
 router = APIRouter()
 
@@ -184,6 +214,7 @@ async def list_tasks(
 
 
 @router.post("/api/tasks/seed", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def seed_tasks():
     """Seed sample tasks into the database."""
     await _call("seed_sample_tasks", [])
@@ -191,6 +222,7 @@ async def seed_tasks():
 
 
 @router.post("/api/tasks/clear", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def clear_all_tasks():
     """Delete ALL tasks via the delete_task reducer. Board reset."""
     rows = await _sql("SELECT id FROM tasks")
@@ -290,6 +322,7 @@ async def export_tasks(format: str = "json", status: str = "", repo: str = ""):
 
 
 @router.post("/api/tasks/reorder", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def reorder_task(body: ReorderRequest):
     """Set a task's position for custom ordering."""
     await _call("reorder_task", [body.task_id, body.position])
@@ -297,6 +330,7 @@ async def reorder_task(body: ReorderRequest):
 
 
 @router.post("/api/tasks/bulk-reorder", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def bulk_reorder_tasks(body: BulkReorderRequest):
     """Bulk-set positions for multiple tasks (e.g. drag-drop within a column)."""
     items_json = json.dumps([{"task_id": it.task_id, "position": it.position} for it in body.items])
@@ -308,6 +342,7 @@ async def bulk_reorder_tasks(body: BulkReorderRequest):
 
 
 @router.post("/api/tasks/batch/labels", status_code=200, dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def batch_assign_labels(body: BatchLabelsRequest):
     """Batch assign labels to multiple tasks."""
     if not body.task_ids or not body.label_ids:
@@ -322,6 +357,7 @@ async def batch_assign_labels(body: BatchLabelsRequest):
 
 
 @router.post("/api/tasks/batch/unlabels", status_code=200, dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def batch_unassign_labels(body: BatchLabelsRequest):
     """Batch unassign labels from multiple tasks."""
     if not body.task_ids or not body.label_ids:
@@ -347,6 +383,7 @@ async def get_task(task_id: str):
 
 
 @router.post("/api/tasks", status_code=201, dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def create_task(body: TaskCreate):
     import uuid as _uuid
 
@@ -402,6 +439,7 @@ async def create_task(body: TaskCreate):
 
 
 @router.patch("/api/tasks/{task_id}", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def patch_task(task_id: str, body: TaskUpdate):
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if not rows:
@@ -443,6 +481,7 @@ async def patch_task(task_id: str, body: TaskUpdate):
 
 
 @router.delete("/api/tasks/{task_id}", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def delete_task(task_id: str):
     # Fetch task data before deleting so we can fire webhook
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
@@ -465,6 +504,7 @@ async def delete_task(task_id: str):
 
 
 @router.post("/api/tasks/{task_id}/claim", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def claim_task(task_id: str, body: ClaimRequest):
     await _call("claim_task", [task_id, body.agent_id])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
@@ -512,6 +552,7 @@ async def _sync_to_github(task_id: str, event: str, notes: str = ""):
 
 
 @router.post("/api/tasks/{task_id}/unclaim", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def unclaim_task(task_id: str):
     await _call("unclaim_task", [task_id])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
@@ -522,6 +563,7 @@ async def unclaim_task(task_id: str):
 
 
 @router.post("/api/tasks/{task_id}/complete", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def complete_task(task_id: str, body: CompleteRequest | None = None):
     if body is None:
         body = CompleteRequest()
@@ -567,6 +609,7 @@ def _maybe_notify_blocked(task_id: str, rows: list[dict], reason: str):
 
 
 @router.post("/api/tasks/{task_id}/block", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def block_task(task_id: str, body: BlockRequest | None = None):
     if body is None:
         body = BlockRequest()
@@ -577,6 +620,7 @@ async def block_task(task_id: str, body: BlockRequest | None = None):
 
 
 @router.post("/api/tasks/{task_id}/block-with-reason", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def block_task_with_reason(task_id: str, body: BlockWithReasonRequest):
     await _call("block_task_with_reason", [task_id, body.reason])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
@@ -585,6 +629,7 @@ async def block_task_with_reason(task_id: str, body: BlockWithReasonRequest):
 
 
 @router.post("/api/tasks/{task_id}/permanent-block", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def permanent_block_task(task_id: str, body: PermanentBlockRequest):
     """Block a task permanently (no retry). Sets max_attempts=1 then blocks."""
     await _call("set_max_attempts", [task_id, 1])
@@ -595,6 +640,7 @@ async def permanent_block_task(task_id: str, body: PermanentBlockRequest):
 
 
 @router.post("/api/tasks/{task_id}/split", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def split_task(task_id: str, body: SplitTaskRequest):
     child_titles_json = json.dumps(body.child_titles)
     await _call("split_task", [task_id, child_titles_json])
@@ -602,12 +648,14 @@ async def split_task(task_id: str, body: SplitTaskRequest):
 
 
 @router.post("/api/tasks/{task_id}/reset-fails", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def reset_fail_count(task_id: str):
     await _call("reset_fail_count", [task_id])
     return {"status": "reset", "task_id": task_id}
 
 
 @router.post("/api/tasks/bulk-retry", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def bulk_retry_tasks(body: BulkRetryRequest):
     """Return blocked tasks to available (optionally resetting fail_count).
 
@@ -628,6 +676,7 @@ async def bulk_retry_tasks(body: BulkRetryRequest):
 
 
 @router.post("/api/tasks/bulk-archive", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def bulk_archive_tasks(body: BulkArchiveRequest):
     """Archive a list of tasks (only unarchived ones are toggled)."""
     archived, failed = 0, []
@@ -646,6 +695,7 @@ async def bulk_archive_tasks(body: BulkArchiveRequest):
 
 
 @router.post("/api/tasks/bulk", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def bulk_tasks(body: BulkActionRequest):
     """Bulk task operations: claim, complete, block, unclaim, delete.
 
@@ -721,12 +771,14 @@ async def bulk_tasks(body: BulkActionRequest):
 
 
 @router.post("/api/tasks/{task_id}/max-attempts", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def set_max_attempts(task_id: str, body: MaxAttemptsRequest):
     await _call("set_max_attempts", [task_id, body.max_attempts])
     return {"status": "updated", "task_id": task_id, "max_attempts": body.max_attempts}
 
 
 @router.post("/api/tasks/{task_id}/dependency", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def set_dependency(task_id: str, body: SetDependencyRequest):
     await _call("set_dependency", [task_id, body.depends_on])
     return {"status": "updated", "task_id": task_id, "depends_on": body.depends_on or None}
@@ -736,6 +788,7 @@ async def set_dependency(task_id: str, body: SetDependencyRequest):
 
 
 @router.post("/api/tasks/{task_id}/skills", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def set_task_skills(task_id: str, body: SetSkillsRequest):
     await _call("set_task_skills", [task_id, body.skills])
     return {"status": "updated", "task_id": task_id, "skills": body.skills or None}
@@ -745,6 +798,7 @@ async def set_task_skills(task_id: str, body: SetSkillsRequest):
 
 
 @router.post("/api/tasks/{task_id}/archive", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def archive_task(task_id: str):
     """Toggle archive on a task (calls toggle_archive reducer)."""
     await _call("toggle_archive", [task_id])
@@ -752,6 +806,7 @@ async def archive_task(task_id: str):
 
 
 @router.post("/api/tasks/{task_id}/unarchive", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def unarchive_task(task_id: str):
     """Unarchive a task (calls unarchive_task reducer)."""
     await _call("unarchive_task", [task_id])
@@ -762,6 +817,7 @@ async def unarchive_task(task_id: str):
 
 
 @router.post("/api/tasks/{task_id}/sprint", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def set_task_sprint(task_id: str, body: SprintRequest):
     """Set a task's sprint assignment."""
     await _call("set_sprint", [task_id, body.sprint])
@@ -772,6 +828,7 @@ async def set_task_sprint(task_id: str, body: SprintRequest):
 
 
 @router.post("/api/tasks/{task_id}/time-estimates", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def set_task_time_estimates(task_id: str, body: TimeEstimatesRequest):
     """Set estimated and spent hours on a task."""
     await _call("set_time_estimates", [task_id, body.estimated_hours, body.spent_hours])
@@ -812,6 +869,7 @@ async def list_task_relations(task_id: str):
 
 
 @router.post("/api/tasks/{task_id}/relations", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def add_task_relation(task_id: str, body: TaskRelationCreate):
     """Add a relation between two tasks."""
     await _call("add_task_relation", [task_id, body.related_task_id, body.relation_type])
@@ -819,6 +877,7 @@ async def add_task_relation(task_id: str, body: TaskRelationCreate):
 
 
 @router.delete("/api/tasks/{task_id}/relations/{relation_id}", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def remove_task_relation(task_id: str, relation_id: str):
     """Remove a task relation."""
     await _call("remove_task_relation", [relation_id])
@@ -958,6 +1017,7 @@ async def get_all_task_label_assignments():
 
 
 @router.post("/api/tasks/{task_id}/labels", dependencies=[Depends(verify_auth)])
+@_invalidate_on_success
 async def set_task_labels(task_id: str, body: TaskLabelAssign):
     """Set labels for a task by replacing all current assignments."""
     existing = await _sql_param(
