@@ -211,6 +211,92 @@ async def test_stale_watcher_exception():
     assert ctrl.call_count == 2
 
 
+@pytest.mark.asyncio
+async def test_stale_watcher_batch_dict_values():
+    """Batch endpoint returns {task_id: log_record_dict} — scheduler must
+    extract the timestamp instead of doing int - dict (was a TypeError that
+    crashed stale_watcher every cycle)."""
+    ctrl = SleepController()
+    now_ms = scheduler._now_ms()
+    tasks = [
+        {
+            "id": "t_dict",
+            "assigned_to": "test_agent",
+            "title": "Task with dict heartbeat",
+            "repo": "test",
+            "updated_at": now_ms - 3_700_000,  # ~61 min ago → force release
+        }
+    ]
+    # The REAL /api/logs/batch response: full log record dict per task
+    batch_response = {
+        "t_dict": {
+            "id": "log_hb1",
+            "task_id": "t_dict",
+            "action": "heartbeat",
+            "timestamp": now_ms - 5_000,
+        }
+    }
+
+    with mock.patch("scheduler.settings") as ms:
+        ms.agent_id = "test_agent"
+        ms.stale_minutes = 30
+        with mock.patch.object(scheduler.asyncio, "sleep", ctrl):
+            with mock.patch.object(scheduler, "_api_get", side_effect=[tasks, batch_response]):
+                with mock.patch.object(scheduler, "_api_post", return_value={"retried": 1}):
+                    with mock.patch.object(scheduler, "_now_ms", return_value=now_ms):
+                        await scheduler.stale_watcher(120)
+    # No TypeError — task was processed and force-released
+    assert ctrl.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_stale_watcher_batch_mixed_values():
+    """Batch endpoint returning a mix of dict records, int timestamps, and None
+    must not crash the stale check."""
+    ctrl = SleepController()
+    now_ms = scheduler._now_ms()
+    tasks = [
+        {
+            "id": "t_dict",
+            "assigned_to": "test_agent",
+            "title": "Dict hb task",
+            "updated_at": now_ms - 1_000_000,  # > stale_minutes
+        },
+        {
+            "id": "t_int",
+            "assigned_to": "test_agent",
+            "title": "Int hb task",
+            "updated_at": now_ms - 1_000_000,
+        },
+        {
+            "id": "t_none",
+            "assigned_to": "test_agent",
+            "title": "No hb task",
+            "updated_at": now_ms - 1_000_000,
+        },
+    ]
+    batch_response = {
+        "t_dict": {
+            "id": "log1",
+            "task_id": "t_dict",
+            "action": "heartbeat",
+            "timestamp": now_ms - 1000,
+        },
+        "t_int": now_ms - 2000,
+        "t_none": None,
+    }
+
+    with mock.patch("scheduler.settings") as ms:
+        ms.agent_id = "test_agent"
+        ms.stale_minutes = 30
+        with mock.patch.object(scheduler.asyncio, "sleep", ctrl):
+            with mock.patch.object(scheduler, "_api_get", side_effect=[tasks, batch_response]):
+                with mock.patch.object(scheduler, "_api_post", return_value={"retried": 1}):
+                    with mock.patch.object(scheduler, "_now_ms", return_value=now_ms):
+                        await scheduler.stale_watcher(120)
+    assert ctrl.call_count == 2
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # dead_board_monitor
 # ═══════════════════════════════════════════════════════════════════════

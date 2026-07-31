@@ -46,8 +46,10 @@ async def _sql(query: str) -> list[dict[str, Any]]:
         raise HTTPException(502, f"SQL query failed: {resp.text[:300]}")
     # Parse off the event loop: large result sets (e.g. unfiltered task_logs
     # at 460K+ rows) take tens of seconds of pure-Python SATS parsing and
-    # would otherwise stall every concurrent request.
-    return await asyncio.to_thread(_parse_sats_rows, resp.json())
+    # would otherwise stall every concurrent request. NOTE: resp.json() is
+    # also synchronous — it must run in the thread too, or a 12MB response
+    # still blocks the event loop for ~1.5s per request.
+    return await asyncio.to_thread(lambda: _parse_sats_rows(resp.json()))
 
 
 async def _sql_param(query_template: str, **params: str) -> list[dict[str, Any]]:

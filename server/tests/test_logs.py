@@ -398,10 +398,10 @@ async def test_batch_logs_default_action(client, mock_stdb):
         assert resp.status_code == 200
         data = resp.json()
         assert data["task_1"]["id"] == "log_hb"
-        # Verify SQL included action filter — the SQL template uses {action_val}
+        # Verify SQL included action filter and indexed task_id OR conditions
         call_sql = mock_param.call_args[0][0]
         assert "action" in call_sql
-        assert "action_val" in call_sql
+        assert "task_id" in call_sql
 
 
 @pytest.mark.asyncio

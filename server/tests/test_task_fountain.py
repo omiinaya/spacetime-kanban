@@ -636,10 +636,13 @@ def test_main_block_structure():
 
     assert hasattr(m, "run")
     # Verify run() returns an int (0 here because no repos have .git dirs
-    # in the test environment)
+    # in the test environment). Scanners are cleared so the test is hermetic
+    # and doesn't scan real repos under load.
     with (
         patch.object(m, "fetch_existing_titles", return_value=set()),
         patch.object(m, "api_post", return_value=None),
+        patch.object(m, "SCANNERS", []),
+        patch.object(m, "REPOS", ["nonexistent-repo-xyz"]),
     ):
         n = m.run()
     assert isinstance(n, int)
