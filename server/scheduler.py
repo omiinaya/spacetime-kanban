@@ -348,8 +348,9 @@ async def task_dispatcher(interval: int):
             except Exception as exc:
                 print(f"[scheduler] Memory check failed: {exc}")
 
-            # Fetch available tasks
-            available = await _api_get("/api/tasks?status=available&limit=200")
+            # Fetch available tasks (exclude archived — archived tasks are
+            # removed from the active board and must never be re-dispatched)
+            available = await _api_get("/api/tasks?status=available&archived=false&limit=200")
             if not available:
                 continue
 
@@ -1012,7 +1013,7 @@ async def worker_death_watcher(interval: int):
 async def _seed_initial_workers():
     """Claim and spawn workers immediately on startup (one-shot)."""
     try:
-        available = await _api_get("/api/tasks?status=available&limit=50")
+        available = await _api_get("/api/tasks?status=available&archived=false&limit=50")
         if not available:
             return
 
@@ -1052,7 +1053,7 @@ async def zombie_cleaner(interval: int):
         try:
             await asyncio.sleep(interval)
 
-            available = await _api_get("/api/tasks?status=available&limit=500")
+            available = await _api_get("/api/tasks?status=available&archived=false&limit=500")
             if not available:
                 continue
 
@@ -1164,7 +1165,7 @@ async def self_improver(interval: int):
                         )
 
             # Check cycling tasks (high fail_count)
-            avail = await _api_get("/api/tasks?status=available&limit=200")
+            avail = await _api_get("/api/tasks?status=available&archived=false&limit=200")
             if avail:
                 cycling = [t for t in avail if t.get("fail_count", 0) > 0]
                 if len(cycling) > 20:

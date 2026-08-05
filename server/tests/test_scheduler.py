@@ -26,6 +26,52 @@ class TestScheduler:
         _worker_spawn_times.clear()
         _worker_crash_counts.clear()
 
+    # ── task_dispatcher: archived filter ──────────────────────────────
+
+    @patch("server.scheduler.settings")
+    async def test_dispatcher_excludes_archived_tasks(self, mock_settings):
+        """task_dispatcher must fetch available tasks with archived=false.
+
+        Regression: the dispatcher previously fetched
+        ``/api/tasks?status=available&limit=200`` WITHOUT the archived
+        filter. Tasks archived by the scanner's stale-closer (or the
+        archiver) stayed status=available and got re-dispatched to
+        workers — burning turns on tasks removed from the active board.
+        """
+        import asyncio
+
+        import server.scheduler as sched_mod
+
+        mock_settings.worker_script = "python3 run.py"
+        mock_settings.max_workers = 10
+        mock_settings.max_memory_pct = 99.0
+        mock_settings.agent_id = "hermes"
+
+        calls = []
+
+        async def fake_get(path):
+            calls.append(path)
+            if "archived=false" in path:
+                return []  # no available (non-archived) tasks → no spawn
+            return None
+
+        with (
+            patch.object(sched_mod, "_api_get", side_effect=fake_get),
+            patch.object(sched_mod, "_get_worker_count", return_value=0),
+        ):
+            task = asyncio.create_task(sched_mod.task_dispatcher(0.01))
+            await asyncio.sleep(0.05)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        assert calls, "dispatcher never fetched available tasks"
+        assert all("archived=false" in c for c in calls), (
+            f"dispatcher fetched without archived filter: {calls}"
+        )
+
     # ── _now_ms ────────────────────────────────────────────────────────
 
     def test_now_ms_returns_integer(self):

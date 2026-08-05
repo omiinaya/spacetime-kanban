@@ -249,6 +249,11 @@ pub fn claim_task(ctx: &ReducerContext, task_id: String, agent_id: String) -> Re
         ));
     }
 
+    // Archived tasks are removed from the active board — never claimable.
+    if task.archived {
+        return Err("Task is archived and cannot be claimed".to_string());
+    }
+
     // Check dependency: if task depends on another task, that dependency must be done
     if let Some(ref dep_id) = task.depends_on {
         let dep = find_task(ctx, dep_id)
