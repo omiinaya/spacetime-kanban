@@ -235,7 +235,84 @@ def _verify_completed_tasks(
     return regressed
 
 
-# ── Main scan function ──────────────────────────────────────────────
+def _close_stale_available_tasks(
+    repos: list[tuple[str, str]], existing: set[tuple[str, str]], deadline: float | None = None
+) -> int:
+    """Archive available scanner tasks whose finding no longer exists.
+
+    Complement to _verify_completed_tasks (which re-opens regressed *done*
+    tasks). If a task is still *available* — no worker ever claimed it — but
+    its originating scanner no longer reports the finding, the issue was
+    fixed (or the finding became obsolete, e.g. a smarter matcher). Leaving
+    it available would let a worker burn turns on a non-issue.
+
+    Closes the task via the block-with-reason endpoint (transitions
+    available → blocked), then archives it so it leaves the active board.
+    ``deadline`` (monotonic) bounds the whole pass.
+    """
+    closed = 0
+    now_ms = int(time.time() * 1000)
+    thirty_days_ms = 30 * 86400 * 1000
+
+    def _over_budget() -> bool:
+        return deadline is not None and time.monotonic() >= deadline
+
+    for repo_name, repo_path in repos:
+        if _over_budget():
+            break
+        avail_tasks = _api_get(f"/api/tasks?status=available&repo={repo_name}&limit={DEDUP_LIMIT}")
+        if not avail_tasks:
+            continue
+
+        # Group available tasks by originating scanner (roadmap_item "Scanner: X")
+        by_scanner: dict[str, list[dict]] = {}
+        for t in avail_tasks:
+            ri = t.get("roadmap_item") or ""
+            scanner_name = ri.replace("Scanner: ", "") if ri.startswith("Scanner:") else ""
+            if not scanner_name:
+                continue
+            created = t.get("created_at", 0)
+            if created and (now_ms - created) > thirty_days_ms:
+                continue  # only touch recently-created tasks
+            by_scanner.setdefault(scanner_name, []).append(t)
+
+        # find each scanner once and close its stale available tasks
+        for sname, tasks in by_scanner.items():
+            if _over_budget():
+                break
+            fn = _scanner_by_name(sname)
+            if fn is None:
+                continue
+            try:
+                fresh = fn(repo_name, repo_path)
+            except Exception:
+                continue
+            fresh_set = {f["title"].strip().lower() for f in fresh}
+
+            for t in tasks:
+                title = t.get("title", "").strip().lower()
+                if title in fresh_set:
+                    continue  # finding still present — leave alone
+                tid = t.get("id", "")
+                if not tid:
+                    continue
+                # Finding vanished → block + archive the stale task.
+                _api_post(
+                    f"/api/tasks/{tid}/block",
+                    {"reason": "stale", "notes": "finding no longer detected by scanner"},
+                )
+                _api_post(f"/api/tasks/{tid}/archive", {})
+                closed += 1
+                print(f"[scanner] Closed stale available task: {title[:55]}...", file=sys.stderr)
+
+    return closed
+
+
+def _scanner_by_name(name: str):
+    for fn in SCANNERS:
+        if get_scanner_name(fn) == name:
+            return fn
+    return None
 
 
 def run_all_scanners(repos: list[tuple[str, str]] | None = None, time_budget: float = 90.0) -> dict:
@@ -277,6 +354,11 @@ def run_all_scanners(repos: list[tuple[str, str]] | None = None, time_budget: fl
     regressed = _verify_completed_tasks(repos, existing, deadline=deadline)
     if regressed:
         print(f"[scanner] Re-opened {regressed} regressed task(s)", file=sys.stderr)
+
+    # Step 1b: Close stale available tasks whose finding no longer exists
+    closed_stale = _close_stale_available_tasks(repos, existing, deadline=deadline)
+    if closed_stale:
+        print(f"[scanner] Closed {closed_stale} stale available task(s)", file=sys.stderr)
 
     results = {}
     total_findings = 0

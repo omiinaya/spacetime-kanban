@@ -224,6 +224,15 @@ They create kanban tasks for code quality issues. Key behaviors:
 
 - **Per-repo batching** — findings are grouped per repo, not per file. Instead of 8 separate
   unwrap() tasks, you get 1 task listing all files.
+- **Test-gap matching is smart** — `gaps.py` treats a module as covered if any test file
+  matches `test_{module}.py`, `test_{parent}_{module}.py` (nested convention, e.g.
+  `workers/llm.py` → `test_workers_llm.py`), or imports the module (grouped test files
+  like `test_scanner_modules.py`). No more false-positive "untested" tasks for code that
+  has tests.
+- **Self-cleaning** — each scan pass also closes stale *available* tasks: if a task was
+  never claimed but its originating scanner no longer reports the finding, it's blocked +
+  archived automatically. Works in reverse of the regressed-done re-opener to keep the
+  board free of junk.
 - **Find-only scanners** — unwraps, bare excepts, stale TODOs, large files, missing
   `__init__.py`, test gaps, and dep review tasks have `skip_verify=True`. They're
   created once and never re-opened by the verifier, preventing infinite loops.

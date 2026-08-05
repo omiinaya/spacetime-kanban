@@ -8,6 +8,7 @@ optionally patch subprocess calls for scanners that invoke git.
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from unittest.mock import patch
 
@@ -132,6 +133,38 @@ class TestDepScanner:
         findings = scan_deps("test-repo", tmp_repo)
         assert isinstance(findings, list)
 
+    def test_cargo_workspace_members_checked(self, tmp_repo):
+        """Workspace member Cargo.tomls are visited without crashing."""
+        _write(
+            tmp_repo,
+            "Cargo.toml",
+            '[package]\nname = "root"\n[workspace]\nmembers = ["crates/a", "crates/b"]\n',
+        )
+        # Member a exists and parses; member b is missing (skipped).
+        _write(tmp_repo, "crates/a/Cargo.toml", '[package]\nname = "a"\n')
+        # Member c exists but is unparseable (skipped).
+        _write(tmp_repo, "crates/c/Cargo.toml", "<<<<<NOT TOML>>>>>")
+        _write(
+            tmp_repo,
+            "Cargo.toml",
+            '[package]\nname = "root"\n[workspace]\nmembers = ["crates/a", "crates/b", "crates/c"]\n',
+        )
+        from scanners.dep_scanner import scan_deps
+
+        findings = scan_deps("test-repo", tmp_repo)
+        assert isinstance(findings, list)
+
+    def test_web_package_json_malformed_skipped(self, tmp_repo):
+        """web/package.json that fails to decode is skipped, not fatal."""
+        _write(tmp_repo, "package.json", json.dumps({"dependencies": {"a": "^1.0.0"}}))
+        _write(tmp_repo, "web/package.json", "\xff\xfe\x00 binary garbage")
+        from scanners.dep_scanner import scan_deps
+
+        findings = scan_deps("test-repo", tmp_repo)
+        assert isinstance(findings, list)
+        # Root package still processed (a is caret → not pinned).
+        assert not any("Unpin" in t for t in [f["title"] for f in findings])
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # gaps.py
@@ -160,6 +193,55 @@ class TestGapsScanner:
 
         findings = scan_test_gaps("test-repo", tmp_repo)
         assert len(findings) == 0
+
+    def test_nested_module_dir_prefixed_test_skipped(self, tmp_repo):
+        """A nested module tested via test_{parent}_{module}.py is NOT flagged.
+
+        Regression: workers/llm.py is covered by test_workers_llm.py, but the
+        old matcher only looked for test_llm.py → false-positive junk task.
+        """
+        _write(tmp_repo, "server/workers/llm.py", "def run(): pass")
+        _write(tmp_repo, "server/tests/test_workers_llm.py", "def test_run(): pass")
+        from scanners.gaps import scan_test_gaps
+
+        findings = scan_test_gaps("test-repo", tmp_repo)
+        assert len(findings) == 0
+
+    def test_grouped_import_covers_module(self, tmp_repo):
+        """A module imported inside a grouped test file is NOT flagged.
+
+        Regression: scanners/*.py are tested inside test_scanner_modules.py via
+        ``from scanners.gaps import scan_test_gaps``; the old basename-only
+        matcher flagged them as untested.
+        """
+        _write(tmp_repo, "server/scanners/gaps.py", "def scan(): pass")
+        _write(
+            tmp_repo,
+            "server/tests/test_scanner_modules.py",
+            "from scanners.gaps import scan\n\ndef test_scan(): pass\n",
+        )
+        from scanners.gaps import scan_test_gaps
+
+        findings = scan_test_gaps("test-repo", tmp_repo)
+        assert len(findings) == 0
+
+    def test_grouped_import_missing_still_flagged(self, tmp_repo):
+        """A module NOT imported by any test file is still flagged."""
+        _write(tmp_repo, "server/scanners/gaps.py", "def scan(): pass")
+        _write(tmp_repo, "server/routes/apikeys.py", "def handler(): pass")
+        _write(
+            tmp_repo,
+            "server/tests/test_scanner_modules.py",
+            "def test_unrelated(): pass\n",
+        )
+        from scanners.gaps import scan_test_gaps
+
+        findings = scan_test_gaps("test-repo", tmp_repo)
+        titles = [f["title"] for f in findings]
+        assert any("untested Python" in t for t in titles)
+        desc = " ".join(f.get("description", "") for f in findings)
+        assert "routes/apikeys.py" in desc
+        assert "scanners/gaps.py" in desc
 
     def test_no_server_dir(self, tmp_repo):
         """No server/ dir → no findings."""
@@ -213,6 +295,28 @@ class TestGapsScanner:
         findings = scan_test_gaps("test-repo", tmp_repo)
         # 7 files at max 5 per task = 2 tasks
         assert len(findings) == 2
+
+    def test_rust_non_rs_file_skipped(self, tmp_repo):
+        """Non-.rs files in the stdb src tree are not gap candidates."""
+        _write(tmp_repo, "server/spacetimedb/src/README.txt", "not rust")
+        from scanners.gaps import _find_test_gaps_rust
+
+        assert _find_test_gaps_rust(tmp_repo) == []
+
+    def test_rust_unreadable_file_skipped(self, tmp_repo):
+        """A .rs file that fails to decode (binary) is skipped, not fatal."""
+        _write(tmp_repo, "server/spacetimedb/src/lib.rs", "pub fn ok() {}")
+        # Write raw invalid-UTF8 bytes (0xFF is never valid in UTF-8).
+        bin_path = os.path.join(tmp_repo, "server/spacetimedb/src/binary.rs")
+        os.makedirs(os.path.dirname(bin_path), exist_ok=True)
+        with open(bin_path, "wb") as fh:
+            fh.write(b"\xff\xfe\x00 binary garbage")
+        from scanners.gaps import _find_test_gaps_rust
+
+        gaps = _find_test_gaps_rust(tmp_repo)
+        # lib.rs is flagged; binary.rs raised UnicodeDecodeError → skipped.
+        assert len(gaps) == 1
+        assert gaps[0].endswith("lib.rs")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -281,6 +385,76 @@ class TestHealth:
         # Returns {'projects': [...], 'summary': {...}}
         assert "projects" in result
         assert "summary" in result
+
+    @patch("scanners.health._api_get")
+    def test_compute_all_projects_with_health_data(self, mock_get):
+        """Projects WITH scanner tasks flow through the aggregation body."""
+        from scanners.health import compute_all_projects
+
+        def side_effect(path):
+            # repo-a has a partially-done L0 task (needs attention);
+            # repo-b has no scanner tasks (skipped in aggregation).
+            if "repo-a" in path:
+                return [
+                    {"roadmap_item": "Scanner: stdb_index", "status": "done"},
+                    {"roadmap_item": "Scanner: stdb_index", "status": "available"},
+                ]
+            return []
+
+        mock_get.side_effect = side_effect
+        repos = [("repo-a", "/tmp/a"), ("repo-b", "/tmp/b")]
+        result = compute_all_projects(repos)
+        assert result["summary"]["total"] == 1
+        assert result["projects"][0]["repo"] == "repo-a"
+        assert result["summary"]["needs_attention"] == ["repo-a"]
+
+    @patch("scanners.health._api_get")
+    @patch("scanners.discover_repos")
+    def test_compute_all_projects_default_repos(self, mock_discover, mock_get):
+        """repos=None falls back to discover_repos()."""
+        from scanners.health import compute_all_projects
+
+        mock_discover.return_value = [("repo-x", "/tmp/x")]
+        mock_get.return_value = None
+        result = compute_all_projects()
+        mock_discover.assert_called_once()
+        assert result["summary"]["total"] == 0
+
+    def test_api_get_success(self):
+        """_api_get parses the JSON response body."""
+        from scanners import health
+
+        with patch("urllib.request.urlopen") as mock_urlopen, patch(
+            "urllib.request.Request"
+        ):
+            mock_urlopen.return_value.read.return_value = b'{"ok": true}'
+            assert health._api_get("/api/tasks?x=1") == {"ok": True}
+
+    def test_api_get_failure_returns_none(self):
+        """_api_get swallows network errors and returns None."""
+        from scanners import health
+
+        with patch("urllib.request.urlopen", side_effect=OSError("boom")):
+            assert health._api_get("/api/tasks") is None
+
+    def test_sys_path_inserted_on_import(self):
+        """Importing scanners.health ensures the server dir is on sys.path."""
+        import importlib
+
+        from scanners import health
+
+        server_dir = os.path.dirname(os.path.dirname(health.__file__))
+        # Remove server_dir if present, reload the module, and confirm the
+        # import-time guard re-adds it.
+        was_present = server_dir in sys.path
+        sys.path = [p for p in sys.path if p != server_dir]
+        try:
+            importlib.reload(health)
+            assert server_dir in sys.path
+        finally:
+            if not was_present:
+                sys.path = [p for p in sys.path if p != server_dir]
+            importlib.reload(health)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -370,6 +544,92 @@ class TestArchitectureScanner:
         titles = [f["title"] for f in findings]
         # The giant.js file in node_modules should NOT be flagged
         assert not any("giant" in t.lower() for t in titles)
+
+    def test_rust_non_rs_file_skipped(self, tmp_repo):
+        """Non-.rs files in stdb dirs are not unwrap candidates."""
+        os.makedirs(os.path.join(tmp_repo, "server/spacetimedb/src"), exist_ok=True)
+        _write(tmp_repo, "server/spacetimedb/src/README.md", "docs")
+        from scanners.layer_architecture import _check_rust_unwraps
+
+        assert _check_rust_unwraps(tmp_repo) == []
+
+    def test_rust_binary_file_skipped(self, tmp_repo):
+        """Unreadable .rs (invalid UTF-8) is skipped, not fatal."""
+        os.makedirs(os.path.join(tmp_repo, "server/spacetimedb/src"), exist_ok=True)
+        bin_path = os.path.join(tmp_repo, "server/spacetimedb/src/binary.rs")
+        with open(bin_path, "wb") as fh:
+            fh.write(b"\xff\xfe\x00 garbage")
+        from scanners.layer_architecture import _check_rust_unwraps
+
+        assert _check_rust_unwraps(tmp_repo) == []
+
+    def test_bare_except_skip_non_py(self, tmp_repo):
+        """Non-.py files are not bare-except candidates."""
+        _write(tmp_repo, "server/notes.txt", "except: not python")
+        from scanners.layer_architecture import _check_bare_excepts
+
+        assert _check_bare_excepts(tmp_repo) == []
+
+    def test_bare_except_skip_unparseable(self, tmp_repo):
+        """A .py file with a syntax error is skipped, not fatal."""
+        _write(tmp_repo, "server/broken.py", "def broken(:\n")
+        from scanners.layer_architecture import _check_bare_excepts
+
+        assert _check_bare_excepts(tmp_repo) == []
+
+    def test_large_files_skip_binary(self, tmp_repo):
+        """A binary .py file raises on read and is skipped."""
+        bin_path = os.path.join(tmp_repo, "server/binary.py")
+        os.makedirs(os.path.dirname(bin_path), exist_ok=True)
+        with open(bin_path, "wb") as fh:
+            fh.write(b"\xff\xfe\x00 binary")
+        from scanners.layer_architecture import _check_large_files
+
+        assert _check_large_files(tmp_repo) == []
+
+    @patch("scanners.layer_architecture.subprocess.run")
+    def test_stale_todos_detected(self, mock_run, tmp_repo):
+        """Git log with old-TODO files produces a stale-TODO finding."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="\n".join(
+                [
+                    "abc1234 2024-01-01 00:00:00 +0000",
+                    "server/routes/old.py",
+                    "web/src/old.ts",
+                    "",
+                ]
+            ),
+            stderr="",
+        )
+        from scanners.layer_architecture import scan_architecture
+
+        findings = scan_architecture("test-repo", tmp_repo)
+        titles = [f["title"] for f in findings]
+        assert any("stale TODO" in t.lower() for t in titles)
+
+    @patch("scanners.layer_architecture.subprocess.run")
+    def test_stale_todos_empty_output(self, mock_run, tmp_repo):
+        """No git log output → no stale-TODO finding."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        from scanners.layer_architecture import scan_architecture
+
+        findings = scan_architecture("test-repo", tmp_repo)
+        titles = [f["title"] for f in findings]
+        assert not any("stale TODO" in t.lower() for t in titles)
+
+    @patch("scanners.layer_architecture.subprocess.run")
+    def test_stale_todos_git_failure(self, mock_run, tmp_repo):
+        """Git error → no stale-TODO finding, no crash."""
+        mock_run.side_effect = Exception("git exploded")
+        from scanners.layer_architecture import scan_architecture
+
+        findings = scan_architecture("test-repo", tmp_repo)
+        titles = [f["title"] for f in findings]
+        assert not any("stale TODO" in t.lower() for t in titles)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -803,6 +1063,11 @@ class TestScannerInit:
 
         assert len(SCANNERS) == original_count + 1
         assert scan_dummy in SCANNERS
+        # Clean up — the registry is module-global; leaking scan_dummy breaks
+        # test_runner's layer-mapping check (every registered scanner must
+        # have a SCANNER_LAYER entry).
+        SCANNERS.remove(scan_dummy)
+        assert len(SCANNERS) == original_count
 
     def test_get_scanner_name(self):
         """get_scanner_name strips scan_ prefix."""

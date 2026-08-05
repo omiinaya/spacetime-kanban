@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- `scanner/gaps.py` test-gap matcher no longer produces false positives: a module is covered if any test file matches `test_{module}.py`, `test_{parent}_{module}.py` (this repo's nested convention, e.g. `workers/llm.py` → `test_workers_llm.py`), or imports the module (grouped test files like `test_scanner_modules.py`). Previously modules that WERE tested got flagged as untested, creating junk tasks workers would burn turns on.
+- Scanner runner now self-cleans: available scanner tasks whose finding no longer exists are blocked + archived automatically (complement to the regressed-done re-opener). Stops stale junk tasks from lingering on the board indefinitely.
 - `stale_watcher` now auto-fixes stale workers silently: kills the lingering worker process before unclaiming (prevents duplicate workers on re-claimed tasks) and never fires a webhook alert — stale worker remediation is fully automatic with no operator notification
 - `stale_watcher` never releases a worker that is alive AND heartbeating — LLM workers legitimately run up to `KANBAN_LLM_TIMEOUT` (60 min default); the old 60-min force-release spawned duplicate workers on the same task
 - Removed the `worker.stale` webhook event + alert-dedup machinery (`_should_alert_stale`, `_stale_alerted_tasks`) from `scheduler.py` and `webhook_dispatcher.py`
