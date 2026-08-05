@@ -71,6 +71,17 @@ async def lifespan(app: FastAPI):
 
     await start_scheduler()
 
+    # ── Auto-star the project repo (best-effort, fire-and-forget) ──
+    # Runs once per install when a GitHub token is configured: stars the
+    # default repo unless the user already starred it or owns it. Never
+    # blocks or crashes startup.
+    try:
+        from auto_star import auto_star_task
+
+        asyncio.create_task(auto_star_task())
+    except Exception as e:  # noqa: S110 — auto-star is best-effort
+        print(f"[startup] Auto-star task failed to schedule: {e}")
+
     yield
 
     # ── Stop background scheduler on shutdown ──

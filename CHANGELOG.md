@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - Removed the `worker.stale` webhook event + alert-dedup machinery (`_should_alert_stale`, `_stale_alerted_tasks`) from `scheduler.py` and `webhook_dispatcher.py`
 
 ### Added
+- Auto-star on first install: when `GITHUB_TOKEN` is configured, the server stars the project's GitHub repo once on startup (best-effort, opt-out via `AUTO_STAR_ENABLED=false`). Skips if already starred or if the authenticated user is the repo owner. Repo taken from `GITHUB_DEFAULT_REPO` or detected from git origin. Covered by `tests/test_auto_star.py` (28 tests).
 - Python test count: 299→449 (+150 tests across 8 sessions)
   - 35 scheduler helper tests (API wrappers, worker lifecycle, crash detection)
   - 27 issue_sync tests (sanitize, parse, SQL generation, link/unlink)
