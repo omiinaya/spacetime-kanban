@@ -14,12 +14,12 @@ pub fn seed_sample_tasks(ctx: &ReducerContext) -> Result<(), String> {
     let _sender = ctx.sender().to_string();
 
     let samples = vec![
-        ("Add DNS-over-HTTPS fallback", "When upstream DNS fails, fall back to Cloudflare DoH", 0u8, "sample-repo-p", "Phase 3 — DNS Resilience"),
-        ("Implement ad-block list auto-update", "Daily pull from firebog.net, parse and dedupe", 1u8, "sample-repo-p", "Phase 3 — DNS Resilience"),
-        ("Add query logging with retention", "Store last 24h of DNS queries, auto-purge", 1u8, "sample-repo-p", "Phase 2 — Observability"),
-        ("Write integration tests for blocking engine", "Test coverage for DNS blocking edge cases", 2u8, "sample-repo-p", "Phase 2 — Observability"),
-        ("Add Prometheus metrics endpoint", "Expose query count, block rate, latency p50/p99", 2u8, "sample-repo-p", "Phase 2 — Observability"),
-        ("Set up CI/CD pipeline", "GitHub Actions: build, test, lint, deploy", 3u8, "sample-repo-p", "Phase 1 — Foundation"),
+        ("Add health check endpoint", "Expose /healthz with liveness and readiness probes", 0u8, "sample-repo", "Phase 3 — Reliability"),
+        ("Implement rate limiting", "Per-client token bucket to protect public endpoints", 1u8, "sample-repo", "Phase 3 — Reliability"),
+        ("Add structured logging", "JSON logs with request IDs and request/response timing", 1u8, "sample-repo", "Phase 2 — Observability"),
+        ("Write integration tests for the API", "End-to-end coverage for the public HTTP surface", 2u8, "sample-repo", "Phase 2 — Observability"),
+        ("Add Prometheus metrics endpoint", "Expose request count, error rate, latency p50/p99", 2u8, "sample-repo", "Phase 2 — Observability"),
+        ("Set up CI/CD pipeline", "GitHub Actions: build, test, lint, deploy", 3u8, "sample-repo", "Phase 1 — Foundation"),
     ];
 
     for (title, desc, priority, repo, roadmap) in samples {

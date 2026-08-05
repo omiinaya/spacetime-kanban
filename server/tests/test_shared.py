@@ -90,11 +90,11 @@ class TestValidateWebhookUrl:
 
     def test_private_ip_passes_validation(self):
         """Private IPs are not blocked by validation (DNS resolution handles it)."""
-        assert validate_webhook_url("https://10.0.0.1/hook") == "https://10.0.0.1/hook"
+        assert validate_webhook_url("https://198.51.100.1/hook") == "https://198.51.100.1/hook"
 
     def test_loopback_ip_passes_validation(self):
         """Loopback IPs not in the explicit blocklist pass through."""
-        assert validate_webhook_url("https://192.168.1.1/hook") == "https://192.168.1.1/hook"
+        assert validate_webhook_url("https://203.0.113.1/hook") == "https://203.0.113.1/hook"
 
     def test_link_local_ip_is_blocked(self):
         """Link-local IPs (169.254.x.x) are blocked."""

@@ -13,29 +13,14 @@ import urllib.error
 import urllib.request
 
 API = os.environ.get("KANBAN_API", "http://localhost:8727")
-# Repos to scan — priority-ordered, expanded list
+# Repos to scan — override with KANBAN_REPOS (comma-separated). Default:
+# this repo itself only; no assumptions about sibling projects on the host.
+_DEFAULT_REPOS = ["spacetimedb-kanban"]
 REPOS = [
-    "spacetimedb-kanban",
-    "sample-repo-f",
-    "sample-repo-r",
-    "sample-repo-o",
-    "sample-repo-p",
-    "sample-repo-m",
-    "spacetime-code",
-    "spacetime-intel",
-    "spacetime-jobs",
-    "sample-repo-n",
-    "sample-repo-d",
-    "sample-repo-e",
-    "spacetime-rpm",
-    "spacetime-wiki",
-    "graphify",
-    "hermes-discord-music",
-    "sample-repo-s",
-    "sample-repo-w",
-    "sample-repo-t",
-    "sample-repo-u",
-]
+    r.strip()
+    for r in os.environ.get("KANBAN_REPOS", "").split(",")
+    if r.strip()
+] or list(_DEFAULT_REPOS)
 HOME = os.path.expanduser("~")
 
 

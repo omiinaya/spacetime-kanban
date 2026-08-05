@@ -120,7 +120,7 @@ mcp_servers:
   spacetimedb-kanban:
     command: python
     args:
-      - /home/user/spacetimedb-kanban/server/mcp_server.py
+      - ~/spacetimedb-kanban/server/mcp_server.py
     env:
       KANBAN_API: "http://localhost:8727"
 ```
@@ -145,7 +145,7 @@ If you have the `hermes-agent` skill loaded, you can use its MCP management tool
 
 ```
 # Start the MCP server
-mcp_run name=spacetimedb-kanban command="python" args="/home/user/spacetimedb-kanban/server/mcp_server.py"
+mcp_run name=spacetimedb-kanban command="python" args="~/spacetimedb-kanban/server/mcp_server.py"
 
 # Verify it's running
 mcp_list
@@ -230,7 +230,7 @@ If you've added the MCP server to `config.yaml` but the tools aren't available:
 
 1. **Check the MCP server is reachable** — run it standalone to test:
    ```bash
-   cd /home/user/spacetimedb-kanban/server
+   cd ~/spacetimedb-kanban/server
    python mcp_server.py
    ```
    It should start without errors (it will block on stdio, which is expected).

@@ -124,12 +124,12 @@ class TestCreateTask:
     def test_success(self):
         """create_task returns True when api_post succeeds."""
         with patch("_fast_seed.api_post", return_value={"id": "t1"}):
-            assert create_task("My task", "Desc", "sample-repo-p", priority=2) is True
+            assert create_task("My task", "Desc", "sample-repo-a", priority=2) is True
 
     def test_failure(self):
         """create_task returns False when api_post returns None."""
         with patch("_fast_seed.api_post", return_value=None):
-            assert create_task("My task", "Desc", "sample-repo-p") is False
+            assert create_task("My task", "Desc", "sample-repo-a") is False
 
     def test_passes_correct_payload(self):
         """create_task sends correct payload to api_post."""

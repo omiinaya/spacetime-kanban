@@ -173,7 +173,7 @@ class TestWorkerContext:
 
     @patch("workers.base.api_get")
     @patch("workers.base.os.path.isdir", return_value=True)
-    @patch("workers.base.os.path.expanduser", return_value="/home/user/tmp")
+    @patch("workers.base.os.path.expanduser", return_value="/home/test/tmp")
     def test_repo_path_with_existing_dir(
         self,
         mock_expanduser,
