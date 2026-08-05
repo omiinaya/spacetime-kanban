@@ -6,7 +6,8 @@ Does NOT duplicate main scanner findings (unwraps, bare excepts, large files, et
 to prevent infinite task loops. The main scanner system (scanners/runner.py)
 handles those on a longer interval with proper dedup.
 
-Only scans a hardcoded set of known-good repos. No discover_repos overhead.
+Only scans a configurable set of repos (KANBAN_REPOS env, default: this
+repo itself). No discover_repos overhead.
 
 Dedup strategy (2026-07-31 fix): the old implementation fetched only
 limit=200 per status (available/inProgress/blocked/done) = max 800 titles
@@ -44,18 +45,15 @@ DEDUP_LIMIT = 100_000
 # The board-health scanner only fires when available tasks drop below this.
 MIN_AVAILABLE_TASKS = 3
 
-# REPOS is a hardcoded list of repos that are fast to scan (<1s each)
+# Repos the fountain scans. Override with KANBAN_REPOS (comma-separated
+# repo names) to target your own projects. Default: this repo itself only —
+# no assumptions about sibling projects on the host.
+_DEFAULT_REPOS = ["spacetimedb-kanban"]
 REPOS = [
-    "spacetimedb-kanban",
-    "sample-repo-f",
-    "sample-repo-r",
-    "sample-repo-o",
-    "sample-repo-m",
-    "sample-repo-p",
-    "sample-repo-n",
-    "sample-repo-d",
-    "sample-repo-e",
-]
+    r.strip()
+    for r in os.environ.get("KANBAN_REPOS", "").split(",")
+    if r.strip()
+] or list(_DEFAULT_REPOS)
 
 HOME = os.path.expanduser("~")
 

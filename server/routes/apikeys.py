@@ -13,7 +13,7 @@ from shared import (
 router = APIRouter()
 
 
-@router.get("/api/api-keys", response_model=list[ApiKeyOut])
+@router.get("/api/api-keys", response_model=list[ApiKeyOut], dependencies=[Depends(verify_auth)])
 async def list_api_keys():
     """List all API keys."""
     rows = await _sql("SELECT * FROM api_keys")

@@ -15,6 +15,10 @@ import json
 from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
+# Generic test repos — the fountain no longer hardcodes internal sibling
+# project names, so tests exercise it with fictional repos.
+TEST_REPOS = [f"sample-repo-{chr(ord('a') + i)}" for i in range(9)]
+
 # ── register ──────────────────────────────────────────────────────────
 
 
@@ -236,18 +240,20 @@ def test_fetch_board_state_covers_every_repo_all_statuses(mock_urlopen):
     returns the whole board's titles plus the available count."""
     import _task_fountain as m
 
+    # Generic test repos — the fountain no longer hardcodes internal names
+    test_repos = ["sample-repo-a", "sample-repo-b", "sample-repo-c"]
     urls_seen = []
     per_repo = {
-        "spacetimedb-kanban": [
+        "sample-repo-a": [
             {"title": "  Fix Bug Alpha  ", "status": "available"},
             {"title": "Add Feature Beta", "status": "done"},
         ],
-        "sample-repo-o": [
-            {"title": "REVIEW SPACETIME-TV FOR ACTIONABLE IMPROVEMENTS", "status": "available"},
+        "sample-repo-b": [
+            {"title": "Review sample-repo-b for actionable improvements", "status": "available"},
             {"title": "Old Dup Invisible Before", "status": "done"},
         ],
-        "sample-repo-m": [
-            {"title": "Review sample-repo-m for actionable improvements", "status": "blocked"},
+        "sample-repo-c": [
+            {"title": "Review sample-repo-c for actionable improvements", "status": "blocked"},
         ],
     }
 
@@ -258,22 +264,22 @@ def test_fetch_board_state_covers_every_repo_all_statuses(mock_urlopen):
                 return _make_mock_urlopen_response(tasks)
         return _make_mock_urlopen_response([])
 
-    mock_urlopen.side_effect = side_effect
-
-    result = m.fetch_board_state()
+    with patch.object(m, "REPOS", test_repos):
+        mock_urlopen.side_effect = side_effect
+        result = m.fetch_board_state()
 
     assert result is not None
     titles, available = result
     # Whole-board coverage: titles from every repo, stripped + lowercased
     assert "fix bug alpha" in titles
     assert "add feature beta" in titles
-    assert "review sample-repo-o for actionable improvements" in titles
+    assert "review sample-repo-b for actionable improvements" in titles
     assert "old dup invisible before" in titles  # done-status dup is NOT invisible
-    assert "review sample-repo-m for actionable improvements" in titles
+    assert "review sample-repo-c for actionable improvements" in titles
     # Available count is derived from the same whole-board snapshot
-    assert available == 2  # spacetimedb-kanban + sample-repo-o
+    assert available == 2  # sample-repo-a + sample-repo-b
     # One query per repo, each with the high dedup limit
-    assert len(urls_seen) == len(m.REPOS)
+    assert len(urls_seen) == len(test_repos)
     for url in urls_seen:
         assert f"limit={m.DEDUP_LIMIT}" in url
 
@@ -438,11 +444,11 @@ def test_scan_board_health_task_fields():
 
     _reset_health_flag(m)
     try:
-        result = m.scan_board_health("sample-repo-o", "/home/sample-repo-o")
+        result = m.scan_board_health(TEST_REPOS[0], f"/home/test/{TEST_REPOS[0]}")
 
         assert len(result) == 1
         task = result[0]
-        assert "sample-repo-o" in task["title"]
+        assert TEST_REPOS[0] in task["title"]
         assert task["priority"] == 4
         assert "description" in task
     finally:
@@ -455,9 +461,9 @@ def test_scan_board_health_emits_at_most_once_per_run():
 
     _reset_health_flag(m)
     try:
-        first = m.scan_board_health("sample-repo-o", "/home/sample-repo-o")
-        second = m.scan_board_health("sample-repo-m", "/home/sample-repo-m")
-        third = m.scan_board_health("sample-repo-p", "/home/sample-repo-p")
+        first = m.scan_board_health(TEST_REPOS[0], f"/home/test/{TEST_REPOS[0]}")
+        second = m.scan_board_health(TEST_REPOS[1], f"/home/test/{TEST_REPOS[1]}")
+        third = m.scan_board_health(TEST_REPOS[2], f"/home/test/{TEST_REPOS[2]}")
 
         assert len(first) == 1
         assert second == []
@@ -544,6 +550,7 @@ def test_run_creates_task_for_scanner_finding(mock_isdir):
     )
 
     with ExitStack() as stack:
+        stack.enter_context(patch.object(m, "REPOS", list(TEST_REPOS)))
         stack.enter_context(patch.object(m, "fetch_board_state", return_value=(set(), 0)))
         stack.enter_context(patch.object(m, "api_post", return_value={"status": "ok"}))
         stack.enter_context(patch("_task_fountain.SCANNERS", [stub_scanner]))
@@ -555,7 +562,7 @@ def test_run_creates_task_for_scanner_finding(mock_isdir):
     assert result == 1
     stub_scanner.assert_called_once()
     # Should be called with the first repo name since isdir is True only for first
-    repo_name = m.REPOS[0]
+    repo_name = TEST_REPOS[0]
     stub_scanner.assert_called_with(repo_name, f"/home/test/{repo_name}")
 
 
@@ -567,6 +574,7 @@ def test_run_skips_duplicate_title(mock_isdir):
     stub_scanner = MagicMock(return_value=[{"title": "Existing Task", "description": ""}])
 
     with ExitStack() as stack:
+        stack.enter_context(patch.object(m, "REPOS", list(TEST_REPOS)))
         stack.enter_context(
             patch.object(m, "fetch_board_state", return_value=({"existing task"}, 0))
         )
@@ -589,6 +597,7 @@ def test_run_api_post_failure_not_counted(mock_isdir):
     stub_scanner = MagicMock(return_value=[{"title": "Brand New Task", "description": ""}])
 
     with ExitStack() as stack:
+        stack.enter_context(patch.object(m, "REPOS", list(TEST_REPOS)))
         stack.enter_context(patch.object(m, "fetch_board_state", return_value=(set(), 0)))
         stack.enter_context(patch.object(m, "api_post", return_value=None))
         stack.enter_context(patch("_task_fountain.SCANNERS", [stub_scanner]))
@@ -611,6 +620,7 @@ def test_run_scanner_exception_skipped(mock_isdir):
     good_scanner = MagicMock(return_value=[{"title": "Recovery Task", "description": ""}])
 
     with ExitStack() as stack:
+        stack.enter_context(patch.object(m, "REPOS", list(TEST_REPOS)))
         stack.enter_context(patch.object(m, "fetch_board_state", return_value=(set(), 0)))
         stack.enter_context(patch.object(m, "api_post", return_value={"status": "ok"}))
         stack.enter_context(patch("_task_fountain.SCANNERS", [bad_scanner, good_scanner]))
@@ -631,6 +641,7 @@ def test_run_first_repo_only(mock_isdir):
     stub_scanner = MagicMock(return_value=[{"title": "Single Repo Task", "description": ""}])
 
     with ExitStack() as stack:
+        stack.enter_context(patch.object(m, "REPOS", list(TEST_REPOS)))
         stack.enter_context(patch.object(m, "fetch_board_state", return_value=(set(), 0)))
         stack.enter_context(patch.object(m, "api_post", return_value={"status": "ok"}))
         stack.enter_context(patch("_task_fountain.SCANNERS", [stub_scanner]))

@@ -1,5 +1,21 @@
 # Security Notes
 
+## Authentication model
+
+- **Mutations** (task create/update/delete, agent register/heartbeat, API-key
+  create/revoke, webhook subscribe, etc.) require an API key when the
+  `API_KEY` env var is set. Auth is **disabled by default** (empty `API_KEY`)
+  — suitable for a local/demo deployment; **set `API_KEY` in production**.
+- **Reads** (`GET` endpoints) are open by design — the kanban board is meant
+  to be viewable. The one exception is `GET /api/api-keys`, which is
+  auth-gated because it exposes API-key metadata.
+- The STDB `api_keys` table is declared `public` (the backend reads it via
+  the unauthenticated SQL endpoint). It stores only **SHA-256 hashes** of
+  keys, never plaintext, but key names/scopes/`created_by` metadata is
+  world-readable to anyone with access to the STDB module. If you deploy the
+  module on a public STDB node, set `API_KEY` and consider that key metadata
+  is exposed at the module layer.
+
 ## Dependency advisories
 
 ### react-router-dom (GHSA-qwww-vcr4-c8h2) — NOT APPLICABLE
