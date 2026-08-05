@@ -65,7 +65,7 @@ def task(client):
 def force_claim(client: httpx.Client, tid: str, agent: str, attempts: int = 10):
     """Claim a task, beating the live dispatcher's competing claims.
 
-    The real dispatcher and agent-swarm swarm poll for available tasks every few
+    The real dispatcher and the agent swarm poll for available tasks every few
     minutes and will happily claim integration-test tasks. unclaim works
     regardless of who holds the task, so: unclaim → claim, retry until ours.
     """
