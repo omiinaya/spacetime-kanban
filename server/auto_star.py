@@ -111,12 +111,14 @@ def _detect_repo_from_git() -> str | None:
     install (e.g. Docker image without .git), or network mount just means
     we fall back to GITHUB_DEFAULT_REPO.
     """
+    import shutil
     import subprocess
 
+    git_bin = shutil.which("git") or "git"
     for hint_dir in _REPO_DIR_HINTS:
         try:
-            out = subprocess.run(
-                ["git", "-C", hint_dir, "remote", "get-url", "origin"],
+            out = subprocess.run(  # noqa: S603 — git resolved to abs path below; fixed argv
+                [git_bin, "-C", hint_dir, "remote", "get-url", "origin"],  # noqa: S607
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -136,7 +138,7 @@ def _detect_repo_from_git() -> str | None:
             parts = slug.strip("/").split("/")
             if len(parts) >= 2 and parts[0] and parts[1]:
                 return f"{parts[0]}/{parts[1]}"
-        except Exception:  # noqa: S110 — best-effort fallback detection
+        except Exception:  # noqa: S112 — best-effort, non-credential fallback detection
             continue
     return None
 

@@ -100,7 +100,7 @@ async def _get_actionable_available_count() -> int:
 # became kanban tasks that workers burned turns on. Only headings that
 # describe something DOABLE become tasks.
 
-import re as _re
+import re as _re  # noqa: E402 — module-level helpers below docstring
 
 # Sections whose CHILDREN are never tasks (they're status/log/done lists).
 _SECTION_SKIP_CHILDREN = {
@@ -377,13 +377,9 @@ def _is_actionable(text: str) -> bool:
     if any(v in lowered for v in _ACTION_VERBS):
         return True
 
-    # Strong action signal
-    if any(s in lowered for s in ("should", "needs", "must", "missing", "broken", "fails")):
-        return True
-
-    # Default: plain noun phrases ("Retrieval Quality") are research topics,
-    # not doable tasks — skip to avoid junk.
-    return False
+    # Strong action signal — default: plain noun phrases ("Retrieval Quality")
+    # are research topics, not doable tasks — skip to avoid junk.
+    return any(s in lowered for s in ("should", "needs", "must", "missing", "broken", "fails"))
 
 
 async def _generate_improvement_tasks() -> int:
@@ -456,7 +452,9 @@ async def _generate_improvement_tasks() -> int:
                 if result:
                     existing_titles.add(norm)
                     created += 1
-                    print(f"[scheduler:improvement]  ✨ Created improvement: {heading['title'][:60]}...")
+                    title_snip = heading["title"][:60]
+                    msg = f"[scheduler:improvement]  ✨ Created improvement: {title_snip}..."
+                    print(msg)
 
         # Check for stale CI — if repo has .github/workflows but no CI badge
         ci_dir = os.path.join(repo_path, ".github", "workflows")

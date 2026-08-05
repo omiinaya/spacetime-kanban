@@ -37,7 +37,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "S"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/*" = ["S101", "S110", "S108", "E501", "SIM117"]
+"tests/*" = ["S101", "S105", "S110", "S108", "E501", "SIM117"]
 # Utility/seed scripts — intentional file:// reads and subprocess calls
 "_fast_seed.py" = ["S310", "S603", "S607"]
 "_task_fountain.py" = ["S310", "S603", "S607", "S110", "S112"]
