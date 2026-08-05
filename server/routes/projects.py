@@ -1,4 +1,4 @@
-"""Project endpoints for spacetimedb-kanban."""
+"""Project endpoints for spacetime-kanban."""
 
 import time
 

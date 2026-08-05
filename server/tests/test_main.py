@@ -16,7 +16,7 @@ class TestMain:
         """The FastAPI app should have the correct title and version."""
         from main import app
 
-        assert app.title == "spacetimedb-kanban"
+        assert app.title == "spacetime-kanban"
         assert app.version == "0.1.0"
 
     def test_app_has_openapi_docs_enabled(self):

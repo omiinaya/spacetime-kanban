@@ -28,6 +28,17 @@ All notable changes to this project will be documented in this file.
 - Scanner `test_gaps.py` renamed to `gaps.py` to prevent pytest misidentification
 
 ### Changed
+- **Project renamed `spacetimedb-kanban` → `spacetime-kanban`** (repo, Python package,
+  FastAPI title, MCP server name, Cargo crate, WASM artifact `spacetime_kanban.wasm`,
+  Docker container names, docs, tests). GitHub remote is now
+  `github.com/omiinaya/spacetime-kanban`.
+- Task fountain / seed repos now configurable via `KANBAN_REPOS` (comma-separated;
+  default: just `spacetime-kanban`) instead of a hardcoded repo list.
+- `GET /api/api-keys` gated behind the same `verify_auth` check as mutations
+  (open in demo mode, requires `X-API-Key` when `API_KEY` is set).
+- Docs refreshed to match the current codebase: env defaults, scheduler loop
+  inventory (12 loops), route modules, CLI commands, test counts.
+- Backend test count: 449 → **1,600** passing (+21 skipped); frontend 188 → **194**.
 - ROADMAP.md: updated test count to 449+, expanded Round 8 section
 - CHANGELOG.md: structured format, added Round 8 entries
 - `requirements.txt` minimums synced to `pyproject.toml` (fastapi≥0.115.0, uvicorn≥0.30.0, httpx≥0.27.0)

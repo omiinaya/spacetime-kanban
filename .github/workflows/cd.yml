@@ -53,7 +53,7 @@ jobs:
           fi
           cd server/spacetimedb && \
           spacetime publish \
-            -b target/wasm32-unknown-unknown/release/spacetimedb_kanban.wasm \
+            -b target/wasm32-unknown-unknown/release/spacetime_kanban.wasm \
             -s "$SPACETIME_SERVER" \
             --yes kanban 2>&1
 

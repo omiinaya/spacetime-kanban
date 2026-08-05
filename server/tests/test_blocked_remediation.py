@@ -114,12 +114,12 @@ class TestDismissReason:
 
     def test_venv_paths_dismissed(self):
         task = {
-            "title": "Split 5 large source file(s) in spacetimedb-kanban (5/5)",
+            "title": "Split 5 large source file(s) in spacetime-kanban (5/5)",
             "description": (
                 "Found 689 large source file(s) ≥300 lines. Recommend splitting:\n"
-                "  - /home/test/spacetimedb-kanban/server/.venv/lib/python3.11/"
+                "  - /home/test/spacetime-kanban/server/.venv/lib/python3.11/"
                 "site-packages/idna/uts46data.py (16896 lines)\n"
-                "  - /home/test/spacetimedb-kanban/server/.venv/lib/python3.11/"
+                "  - /home/test/spacetime-kanban/server/.venv/lib/python3.11/"
                 "site-packages/mypy/checker.py (10012 lines)"
             ),
             "fail_reason": "",
@@ -255,7 +255,7 @@ class TestRunRemediation:
                 "title": "[Stale] Task stuck in_progress: Add tests (5/5)",
                 "description": "Task task_abc has been in_progress without heartbeat",
                 "fail_reason": "",
-                "repo": "spacetimedb-kanban",
+                "repo": "spacetime-kanban",
                 "updated_at": old,
             },
             {
@@ -268,10 +268,10 @@ class TestRunRemediation:
             },
             {
                 "id": "task_venv",
-                "title": "Split 5 large source file(s) in spacetimedb-kanban (5/5)",
+                "title": "Split 5 large source file(s) in spacetime-kanban (5/5)",
                 "description": "  - /x/.venv/lib/python3.11/site-packages/idna/uts46data.py (16896 lines)",
                 "fail_reason": "",
-                "repo": "spacetimedb-kanban",
+                "repo": "spacetime-kanban",
                 "updated_at": old,
             },
             {
@@ -413,9 +413,7 @@ class TestRunRemediation:
         async def fire(event, data):
             pass
 
-        summary = await br.run_blocked_remediation(
-            get, post, fire, now_ms=10_000_000_000_000
-        )
+        summary = await br.run_blocked_remediation(get, post, fire, now_ms=10_000_000_000_000)
         # Only the task WITH an id can be archived.
         assert [tid for batch in posts for tid in batch] == ["task_real"]
         assert summary["archived"] == 1
@@ -480,9 +478,7 @@ class TestRunRemediation:
         async def fire(event, data):
             raise RuntimeError("webhook down")
 
-        summary = await br.run_blocked_remediation(
-            get, post, fire, now_ms=10_000_000_000_000
-        )
+        summary = await br.run_blocked_remediation(get, post, fire, now_ms=10_000_000_000_000)
         assert summary["archived"] == 1
         assert [tid for batch in posts for tid in batch] == ["task_x"]
 

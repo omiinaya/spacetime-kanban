@@ -70,7 +70,7 @@ export default function App() {
         })}
       </nav>
       <div className="p-3 border-t border-[var(--color-border)] text-xs text-[var(--color-muted)]">
-        spacetimedb-kanban v{APP_VERSION}
+        spacetime-kanban v{APP_VERSION}
       </div>
     </>
   )

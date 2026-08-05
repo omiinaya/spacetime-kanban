@@ -1,4 +1,4 @@
-"""Two-way GitHub issue sync for spacetimedb-kanban.
+"""Two-way GitHub issue sync for spacetime-kanban.
 
 Stores the kanban-task ⟷ GitHub-issue mapping in STDB (issue_links table).
 Provides GitHub API helpers for creating, closing, and reopening issues.
@@ -199,7 +199,7 @@ def _gh_headers(token: str) -> dict:
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "spacetimedb-kanban/1.0",
+        "User-Agent": "spacetime-kanban/1.0",
     }
 
 

@@ -2,14 +2,14 @@ name: Bug Report
 description: Report a bug or unexpected behavior
 title: "bug: "
 labels: ["bug"]
-projects: ["spacetimedb-kanban"]
+projects: ["spacetime-kanban"]
 assignees: []
 
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report! Before filing, please check the [existing issues](https://github.com/omiinaya/spacetimedb-kanban/issues) and [AGENTS.md](./AGENTS.md) for known gotchas.
+        Thanks for taking the time to fill out this bug report! Before filing, please check the [existing issues](https://github.com/omiinaya/spacetime-kanban/issues) and [AGENTS.md](./AGENTS.md) for known gotchas.
 
   - type: textarea
     id: description

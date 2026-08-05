@@ -18,7 +18,7 @@ WORKDIR /app/module
 COPY server/spacetimedb/Cargo.toml server/spacetimedb/Cargo.lock* ./
 COPY server/spacetimedb/src/ ./src/
 RUN cargo build --release --target wasm32-unknown-unknown && \
-    cp target/wasm32-unknown-unknown/release/spacetimedb_kanban.wasm /tmp/module.wasm
+    cp target/wasm32-unknown-unknown/release/spacetime_kanban.wasm /tmp/module.wasm
 
 # Stage 3: Runtime — Python server
 FROM python:3.12-slim

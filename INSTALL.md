@@ -1,6 +1,6 @@
 # Installation Guide
 
-This document covers all three installation methods for **spacetimedb-kanban** — a multi-agent kanban board on SpacetimeDB.
+This document covers all three installation methods for **spacetime-kanban** — a multi-agent kanban board on SpacetimeDB.
 
 - [Option 1: Docker (Recommended)](#option-1-docker-recommended)
 - [Option 2: Manual (Development)](#option-2-manual-development)
@@ -28,8 +28,8 @@ The fastest way to get running. A single `docker compose up` starts both Spaceti
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/omiinaya/spacetimedb-kanban.git
-   cd spacetimedb-kanban
+   git clone https://github.com/omiinaya/spacetime-kanban.git
+   cd spacetime-kanban
    ```
 
 2. **Configure environment**
@@ -47,8 +47,8 @@ The fastest way to get running. A single `docker compose up` starts both Spaceti
    ```
 
    This starts two containers:
-   - `spacetimedb-kanban-db` — SpacetimeDB (ports `3001` / `3002`)
-   - `spacetimedb-kanban-backend` — FastAPI server (port `8727`)
+   - `spacetime-kanban-db` — SpacetimeDB (ports `3001` / `3002`)
+   - `spacetime-kanban-backend` — FastAPI server (port `8727`)
 
    The backend waits for STDB to become healthy before starting.
 
@@ -112,8 +112,8 @@ For contributors, custom deployments, or when you need hot-reload during develop
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/omiinaya/spacetimedb-kanban.git
-   cd spacetimedb-kanban
+   git clone https://github.com/omiinaya/spacetime-kanban.git
+   cd spacetime-kanban
    ```
 
 2. **Set up the Python backend environment**
@@ -199,7 +199,7 @@ For contributors, custom deployments, or when you need hot-reload during develop
 
    # Publish to the local STDB instance
    spacetime publish \
-     -b target/wasm32-unknown-unknown/release/spacetimedb_kanban.wasm \
+     -b target/wasm32-unknown-unknown/release/spacetime_kanban.wasm \
      -s http://localhost:3001 \
      --yes kanban
 
@@ -275,9 +275,9 @@ The `docker-compose.yml` already includes `restart: unless-stopped` on the backe
 
    | Variable | Production Suggestion | Notes |
    |----------|----------------------|-------|
-   | `DISPATCHER_INTERVAL_SECONDS` | `30` | How often the task dispatcher runs |
+   | `DISPATCHER_INTERVAL_SECONDS` | `5` | How often the task dispatcher runs |
    | `STALE_CHECK_INTERVAL_SECONDS` | `120` | Stale task recovery frequency |
-   | `DEAD_BOARD_INTERVAL_SECONDS` | `900` | Board auto-remediation check |
+   | `DEAD_BOARD_INTERVAL_SECONDS` | `3600` | Board auto-remediation check |
    | `METRICS_INTERVAL_SECONDS` | `900` | Metrics snapshot interval |
 
 4. **Use a reverse proxy** for SSL termination and domain binding:
@@ -372,7 +372,7 @@ After installation, run through these checks:
    docker compose ps
    ```
 
-   Both `spacetimedb-kanban-db` and `spacetimedb-kanban-backend` should show `Up`.
+   Both `spacetime-kanban-db` and `spacetime-kanban-backend` should show `Up`.
 
 ---
 
@@ -406,6 +406,6 @@ cd server && python3 -m venv .venv && source .venv/bin/activate && pip install -
 cd web && npm install && npm run build
 spacetime start
 cd server/spacetimedb && cargo build --release --target wasm32-unknown-unknown && \
-  spacetime publish -b target/wasm32-unknown-unknown/release/spacetimedb_kanban.wasm -s http://localhost:3001 --yes kanban
+  spacetime publish -b target/wasm32-unknown-unknown/release/spacetime_kanban.wasm -s http://localhost:3001 --yes kanban
 cd server && python main.py
 ```

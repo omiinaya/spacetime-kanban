@@ -1,4 +1,4 @@
-# spacetimedb-kanban
+# spacetime-kanban
 
 **Atomic multi-agent kanban board** — a shared task coordination system built on SpacetimeDB.  
 Multiple AI agents (or humans) can simultaneously discover, claim, complete, and manage tasks on a shared board without conflicts.
@@ -31,8 +31,8 @@ Multiple AI agents (or humans) can simultaneously discover, claim, complete, and
 ## 🚀 Quick Start (Docker — 2 minutes)
 
 ```bash
-git clone https://github.com/omiinaya/spacetimedb-kanban.git
-cd spacetimedb-kanban
+git clone https://github.com/omiinaya/spacetime-kanban.git
+cd spacetime-kanban
 cp server/.env.example server/.env   # review and edit
 docker compose up -d                  # starts STDB + backend
 ```
@@ -57,11 +57,11 @@ See [INSTALL.md](INSTALL.md) for manual setup, production deployment, and detail
 │  │                   │     │  │ ├ dead_board_monitor   │  │  │
 │  │  Tables:          │     │  │ ├ metrics_collector    │  │  │
 │  │  ├ tasks          │     │  │ ├ task_dispatcher      │  │  │
-│  │  ├ task_logs      │     │  │ ├ template_trigger     │  │  │
-│  │  ├ agents         │     │  │ ├ zombie_cleaner       │  │  │
-│  │  ├ webhooks       │     │  │ ├ self_improver        │  │  │
-│  │  ├ labels         │     │  │ └ ... (7 more loops)   │  │  │
-│  │  ├ comments       │     │  ├────────────────────────┤  │  │
+│  │  ├ task_logs      │     │  │ ├ repo_scanner (1800s) │  │  │
+│  │  ├ agents         │     │  │ ├ template_trigger     │  │  │
+│  │  ├ webhooks       │     │  │ ├ zombie_cleaner       │  │  │
+│  │  ├ labels         │     │  │ ├ self_improver        │  │  │
+│  │  ├ comments       │     │  │ └ ... (12 loops total) │  │  │
 │  │  ├ checklists     │     │  │ REST API (/api/*)      │  │  │
 │  │  ├ issues         │     │  │ Static Frontend (/)    │  │  │
 │  │  └ projects       │     │  │ MCP Server (stdio)     │  │  │
@@ -98,7 +98,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed data flow, scheduler referen
 ## 📦 Project Structure
 
 ```
-spacetimedb-kanban/
+spacetime-kanban/
 ├── server/               # Python FastAPI backend
 │   ├── main.py           # App entry point, static file serving
 │   ├── config.py         # Pydantic settings (all env vars)
@@ -113,8 +113,13 @@ spacetimedb-kanban/
 │   │   ├── tasks.py      # Task CRUD + state machine
 │   │   ├── agents.py     # Agent registration, heartbeat
 │   │   ├── analytics.py  # Analytics endpoints
-│   │   ├── ops.py        # Health, schema migrations
-│   │   └── webhooks.py   # Webhook CRUD + dispatch
+│   │   ├── apikeys.py    # API key management (auth-gated)
+│   │   ├── github.py     # GitHub issue sync + webhook
+│   │   ├── labels.py     # Label CRUD
+│   │   ├── logs.py       # Activity logs
+│   │   ├── projects.py   # Project/repo registry
+│   │   ├── webhook_subs.py # Webhook subscription CRUD
+│   │   └── ...           # health, ops, rules, scanner, dispatcher, templates
 │   └── workers/          # Worker subprocess management
 │       ├── base.py       # Base worker class
 │       ├── llm.py        # LLM-driven workers
@@ -130,8 +135,8 @@ spacetimedb-kanban/
 ├── docker-compose.yml    # STDB + backend orchestration
 ├── Dockerfile            # Multi-stage build
 ├── docker-entrypoint.sh  # Container entrypoint
+├── kanban                # kanban CLI (single-file, stdlib-only)
 └── bin/                  # CLI utilities
-    ├── kanban            # kanban CLI binary
     └── check-branch      # Branch name validator
 ```
 
@@ -141,20 +146,12 @@ spacetimedb-kanban/
 
 | Layer | Tests | Status |
 |---|---|---|
-| Python backend | 449 + 12 skipped | ✅ |
-| Frontend (Vitest) | 188 | ✅ |
+| Python backend | 1,600 + 21 skipped | ✅ |
+| Frontend (Vitest) | 194 | ✅ |
 | E2E (Playwright) | — | ⚪ Requires STDB |
 | TypeScript (tsc) | Clean | ✅ |
-| Ruff lint | 72 files clean | ✅ |
+| Ruff lint | All checks passed | ✅ |
 | Pre-commit hooks | Ruff check + format | ✅ |
-
----
-
-## 🔗 Related Projects
-
-- [sample-repo-n](https://github.com/omiinaya/sample-repo-n) — LLM proxy with STDB memory
-- [sample-repo-q](https://github.com/omiinaya/sample-repo-q) — Flight search engine
-- [sample-repo-p](https://github.com/omiinaya/sample-repo-p) — DNS ad-blocker
 
 ---
 

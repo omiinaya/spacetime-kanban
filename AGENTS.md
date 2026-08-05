@@ -1,5 +1,5 @@
 ---
-name: SpacetimedbKanban
+name: SpacetimeKanban
 description: "Atomic multi-agent kanban on SpacetimeDB — shared task coordination for AI agents with atomic claiming and state machine"
 stack: [python, fastapi, react, typescript]
 ports:
@@ -23,7 +23,24 @@ This file is read by AI coding agents. For Claude Code specifically, also see [C
 
 ## 📌 Architecture (Jul 2026)
 
-This kanban server is **fully self-contained** — no external cron jobs. The server-side scheduler replaces all cron jobs with asyncio background tasks (stale_watcher, dead_board_monitor, metrics_collector, task_dispatcher, template_trigger) running inside the FastAPI process.
+This kanban server is **fully self-contained** — no external cron jobs. The server-side scheduler replaces all cron jobs with asyncio background tasks running inside the FastAPI process:
+
+| Loop | Interval (default) | Purpose |
+|------|--------------------|---------|
+| `task_dispatcher` | 5s | Keeps the worker pool filled (`min_workers`–`max_workers`) |
+| `stale_watcher` | 120s | Releases `in_progress` tasks stuck past `STALE_MINUTES` |
+| `dead_board_monitor` | 3600s | Detects a stalled board and auto-remediates |
+| `metrics_collector` | 900s | Snapshot metrics + backlog triggers |
+| `repo_scanner` | 1800s | Runs code-quality scanners, creates improvement tasks |
+| `template_trigger` | 900s | Processes task templates |
+| `worker_death_watcher` | 15s | Restarts crashed worker subprocesses |
+| `zombie_cleaner` | 1800s | Blocks/archives tasks at `max_attempts` |
+| `task_archiver` | 3600s | Archives completed/stale tasks |
+| `blocked_remediator` | 3600s | Audits + archives un-actionable blocked tasks |
+| `self_improver` | 3600s | Health checks, codebase audits, improvement tasks |
+| `_task_fountain_loop` | 60s | Fast board-health check + generic seed tasks |
+
+All intervals are configurable via environment variables (see `CONFIGURATION.md`).
 
 See `server/.env.example` for configuration. Alerts fire via webhook to Discord.
 
@@ -40,7 +57,7 @@ GET http://localhost:8727/api/schema-migrations
 
 ## 🆕 Shared Skeleton Components
 
-The frontend uses a shared `Skeleton.tsx` component library for consistent loading states across all 12+ pages:
+The frontend uses a shared `Skeleton.tsx` component library for consistent loading states across all 14 pages:
 
 | Skeleton | Usage |
 |----------|-------|
@@ -58,7 +75,7 @@ Pages like SchemaMigrationsPage, WebhooksPage, IssuesPage, AnalyticsPage, Labels
 
 ### 1. Get Available Tasks
 ```http
-GET http://localhost:8727/api/tasks?status=available&repo=sample-repo-p
+GET http://localhost:8727/api/tasks?status=available&repo=my-repo
 ```
 
 Response:
@@ -130,7 +147,7 @@ Content-Type: application/json
   "title": "Add DNS-over-HTTPS fallback",
   "description": "...",
   "priority": 0,
-  "repo": "sample-repo-p",
+  "repo": "my-repo",
   "roadmap_item": "Phase 3 — DNS Resilience"
 }
 ```
@@ -194,7 +211,7 @@ Use globally unique agent IDs:
 
 ## Tips for Peaceful Coexistence
 
-1. **Poll sparingly** — `GET /api/tasks/available` every 30s max
+1. **Poll sparingly** — `GET /api/tasks?status=available` every 30s max
 2. **Claim immediately** when you see a task you want — don't read the full description first
 3. **Release promptly** if you claim something you can't handle — `POST /unclaim`
 4. **Stay in your lane** — stick to tasks assigned to you; respect others' claims
@@ -220,7 +237,7 @@ They create kanban tasks for code quality issues. Key behaviors:
   Only creates generic seed tasks when available tasks drop below 3.
   Dedup covers the WHOLE board: it fetches every task per-repo (`GET /api/tasks?repo=X&limit=100000`,
   all statuses at once) — the old per-status `limit=200` capped dedup at 800 titles and
-  let old duplicates (16x "Review sample-repo-o…") slip through. If any repo query fails
+  let old duplicates (16x "Review my-repo…") slip through. If any repo query fails
   the run aborts (an incomplete dedup set is what created duplicates). The health check
   is gated ONCE per run and emits at most ONE review task per run (not one per repo),
   and API timeouts are 60s (board queries take 30s+ under load; the scheduler's
@@ -272,11 +289,11 @@ The validator checks:
 
 ## Stale Task Watchdog
 
-The server-side scheduler's `stale_watcher` loop runs every **120 seconds** and checks for tasks stuck `in_progress` for **>35 minutes** with no heartbeat. It auto-releases them back to `available` and fires a webhook event.
+The server-side scheduler's `stale_watcher` loop runs every **120 seconds** (default) and checks for tasks stuck `in_progress` for **>45 minutes** (`STALE_MINUTES`, default) with no heartbeat. It auto-releases them back to `available` and fires a webhook event.
 
 ## Dead Board Auto-Remediation
 
-The `dead_board_monitor` loop runs every **15 minutes** and:
+The `dead_board_monitor` loop runs every **60 minutes** (default `DEAD_BOARD_INTERVAL_SECONDS=3600`) and:
 1. Checks if the board has 0 completions in the last hour while work exists
 2. **Auto-remediates** by restarting the server (systemd auto-restart)
 3. If restart fails to restore throughput, fires a `BOARD_DEAD` webhook alert
@@ -285,7 +302,7 @@ This replaces the old alert-only pattern — now alerts only fire when auto-reme
 
 ## Self-Improvement Agent
 
-The `self_improver` loop runs every **6 hours** and:
+The `self_improver` loop runs every **1 hour** (default `IMPROVER_INTERVAL_SECONDS=3600`) and:
 1. Checks server health → auto-restarts if down
 2. Scans board health (blocked tasks, stale in_progress, cycling tasks)
 3. Auto-fixes definitive-failure tasks (reduces max_attempts to 1)
@@ -415,7 +432,7 @@ Content-Type: application/json
   "agent_id": "hermes-terminal",
   "host": "dev-server-1",
   "capabilities": "rust,python,typescript,react",
-  "repo_focus": "spacetimedb-kanban"
+  "repo_focus": "spacetime-kanban"
 }
 ```
 
@@ -435,7 +452,7 @@ Returns all registered agents with status, capabilities, and heartbeat freshness
 
 ### CLI
 ```bash
-kanban register --capabilities=rust,typescript --repo=sample-repo-p
+kanban register --capabilities=rust,typescript --repo=my-repo
 kanban heartbeat                   # send online pulse
 kanban heartbeat --status=busy --task=task_xxx
 ```
@@ -456,13 +473,17 @@ kanban heartbeat --status=busy --task=task_xxx
 | `kanban heartbeat` | Send agent pulse |
 | `kanban roadmap-import` | Bulk-import from ROADMAP.md |
 | `kanban check-branch` | Validate branch name |
+| `kanban info` | Show agent status and connection info |
+| `kanban watch` | Watch for work and claim automatically (supports `--daemon`) |
+| `kanban dispatch` | Dispatch tasks to workers (supports `--auto`) |
+| `kanban webhook list/add/remove` | Manage webhook subscriptions |
 |
 
 ---
 
 ## ✅ Test Coverage (Jul 2026)
 
-**161 tests passing** (8 skipped) across 18 test files. Tests cover:
+**1,600 tests passing** (21 skipped) across 59 test files. Tests cover:
 
 ### State Transition Edge Cases
 - Complete unclaimed task → 409 Conflict

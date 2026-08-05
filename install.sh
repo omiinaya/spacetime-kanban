@@ -11,7 +11,7 @@ KANBAN_DST="${BIN_DIR}/kanban"
 
 if [ ! -f "$KANBAN_SRC" ]; then
   echo "❌ kanban CLI not found at ${KANBAN_SRC}"
-  echo "   Run this script from the spacetimedb-kanban repo root."
+  echo "   Run this script from the spacetime-kanban repo root."
   exit 1
 fi
 

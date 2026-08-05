@@ -465,12 +465,8 @@ class TestSelfImproverGitStatus:
         async def get_side_effect(path, timeout=15):
             if "/api/health" in path:
                 return _OK_HEALTH
-            elif "status=blocked" in path:
+            if "status=blocked" in path:
                 return [{"id": f"b{i}", "status": "blocked"} for i in range(8)]
-            elif "status=inProgress" in path:
-                return []
-            elif "status=available" in path:
-                return []
             return []
 
         mock_get.side_effect = get_side_effect

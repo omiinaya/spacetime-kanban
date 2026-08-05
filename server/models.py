@@ -1,5 +1,5 @@
 """
-Pydantic models for spacetimedb-kanban.
+Pydantic models for spacetime-kanban.
 
 Extracted from shared.py for cleaner separation of concerns.
 """

@@ -1,4 +1,4 @@
-"""Task template endpoints for spacetimedb-kanban."""
+"""Task template endpoints for spacetime-kanban."""
 
 import uuid
 

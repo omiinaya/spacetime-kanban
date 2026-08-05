@@ -1,4 +1,4 @@
-# SpacetimeDB Kanban — System Architecture
+# spacetime-kanban — System Architecture
 
 > **Version:** 0.1.0
 > **Last updated:** July 2026
@@ -23,7 +23,7 @@
 
 ## Overview
 
-SpacetimeDB Kanban is a **multi-agent task coordination board** designed for AI agents working on the same repository's roadmap simultaneously. It is fully self-contained — all state lives in SpacetimeDB tables, all scheduler loops run as asyncio tasks inside the FastAPI process (no external cron), and a React frontend provides the human interface.
+spacetime-kanban is a **multi-agent task coordination board** designed for AI agents working on the same repository's roadmap simultaneously. It is fully self-contained — all state lives in SpacetimeDB tables, all scheduler loops run as asyncio tasks inside the FastAPI process (no external cron), and a React frontend provides the human interface.
 
 **Key design tenets:**
 
@@ -39,7 +39,7 @@ SpacetimeDB Kanban is a **multi-agent task coordination board** designed for AI 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        spacetimedb-kanban SYSTEM                                │
+│                        spacetime-kanban SYSTEM                                │
 │                                                                                 │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
 │  │                         FastAPI Server (:8727)                          │   │
@@ -54,10 +54,11 @@ SpacetimeDB Kanban is a **multi-agent task coordination board** designed for AI 
 │  │  │  labels.py   │  │  template_trigger      (900s)                │    │   │
 │  │  │  logs.py     │  │  repo_scanner          (1800s)               │    │   │
 │  │  │  projects.py │  │  improver              (3600s)               │    │   │
-│  │  │  webhooks.py │  │  zombie_cleaner        (1800s)               │    │   │
-│  │  │  github.py   │  │  worker_death_watcher  (15s)                 │    │   │
-│  │  │  ops.py      │  │  task_archiver         (3600s)               │    │   │
-│  │  │  rules.py    │  │  _task_fountain_loop   (60s)                 │    │   │
+│  │  │  webhook_subs│  │  blocked_remediator    (3600s)               │    │   │
+│  │  │  github.py   │  │  zombie_cleaner        (1800s)               │    │   │
+│  │  │  ops.py      │  │  worker_death_watcher  (15s)                 │    │   │
+│  │  │  rules.py    │  │  task_archiver         (3600s)               │    │   │
+│  │  │  ...         │  │  _task_fountain_loop   (60s)                 │    │   │
 │  │  │  ...         │  │  _recover_stale_tasks  (once on startup)     │    │   │
 │  │  └──────┬───────┘  └──────────────────────┬───────────────────────┘    │   │
 │  │         │                                  │                             │   │
@@ -105,7 +106,7 @@ SpacetimeDB Kanban is a **multi-agent task coordination board** designed for AI 
 │  │...tables... │  │...tables... │  │...tables...   │  │...tables...      │     │
 │  └─────────────┘  └─────────────┘  └───────────────┘  └──────────────────┘     │
 │                                                                                  │
-│  Rust WASM module (spacetimedb-kanban.wasm) with reducers:                       │
+│  Rust WASM module (spacetime-kanban.wasm) with reducers:                       │
 │  claim_task, complete_task, block_task, unclaim_task, add_task, ...             │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -631,8 +632,8 @@ Multi-stage build (`Dockerfile`):
 3. **Stage 3:** Python 3.12 runtime with `spacetime` CLI
 
 ```bash
-docker build -t spacetimedb-kanban .
-docker run -p 8727:8727 -p 3001:3001 spacetimedb-kanban
+docker build -t spacetime-kanban .
+docker run -p 8727:8727 -p 3001:3001 spacetime-kanban
 ```
 
 ### Manual

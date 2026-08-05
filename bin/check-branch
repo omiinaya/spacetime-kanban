@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Branch name validator for spacetimedb-kanban.
+Branch name validator for spacetime-kanban.
 
 Enforces the branch naming convention:
   {type}/kanban-{task_id}--{slug}

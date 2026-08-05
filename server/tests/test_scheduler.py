@@ -60,7 +60,7 @@ class TestScheduler:
         mock_proc = MagicMock()
         mock_popen.return_value = mock_proc
 
-        result = _spawn_worker("task_abc123", "Fix bug", "spacetimedb-kanban")
+        result = _spawn_worker("task_abc123", "Fix bug", "spacetime-kanban")
 
         assert result is True
         mock_popen.assert_called_once()

@@ -15,12 +15,12 @@ This document tells AI agents (and humans) how to install the `kanban` CLI tool,
 ## Step 1: Install the CLI
 
 ```bash
-# Clone the repo (or copy bin/kanban from an existing clone)
-git clone https://github.com/omiinaya/spacetimedb-kanban.git
-cd spacetimedb-kanban
+# Clone the repo (or copy the `kanban` script from an existing clone)
+git clone https://github.com/omiinaya/spacetime-kanban.git
+cd spacetime-kanban
 
 # Install the kanban CLI to PATH
-cp bin/kanban ~/.local/bin/
+cp kanban ~/.local/bin/
 chmod +x ~/.local/bin/kanban
 ```
 
@@ -60,7 +60,7 @@ kanban list --status=available
 
 Expected output:
 ```
-Repo: spacetimedb-kanban
+Repo: spacetime-kanban
 Agent: your-agent-name
 
 No tasks matching filters.
@@ -73,14 +73,14 @@ If you see connection errors, ensure the API server is running on `localhost:872
 Only do this for repos that participate in the kanban coordination:
 
 ```bash
-cd ~/sample-repo-p   # the repo you want to protect
+cd ~/my-project   # the repo you want to protect
 kanban install-hooks
 ```
 
 This installs a `pre-push` hook that validates every branch name against the kanban before push. To remove:
 
 ```bash
-cd ~/sample-repo-p
+cd ~/my-project
 kanban uninstall-hooks
 ```
 
@@ -88,7 +88,7 @@ kanban uninstall-hooks
 
 ```bash
 # See what's available in your repo
-kanban list --status=available --repo=sample-repo-p
+kanban list --status=available --repo=my-project
 
 # Claim a task (atomic — fails with 409 if another agent already grabbed it)
 kanban claim task_1748397912_abc12345
@@ -132,10 +132,19 @@ kanban check-branch "$(git branch --show-current)"
 | `kanban unclaim <task_id>` | Release a task |
 | `kanban complete <task_id>` | Mark task as done |
 | `kanban block <task_id>` | Mark task as blocked |
+| `kanban create --title=...` | Create a task |
+| `kanban skills <id> --skills=...` | Set required skills |
+| `kanban suggest` | Show recommended tasks |
+| `kanban register` | Join the swarm |
+| `kanban heartbeat` | Send agent pulse |
+| `kanban roadmap-import` | Bulk-import from ROADMAP.md |
 | `kanban info` | Show agent status and connection info |
 | `kanban check-branch <name>` | Validate a branch name |
 | `kanban install-hooks` | Install pre-push hook in current repo |
 | `kanban uninstall-hooks` | Remove pre-push hook |
+| `kanban watch` | Watch for work and claim automatically |
+| `kanban dispatch` | Dispatch tasks to workers |
+| `kanban webhook list/add/remove` | Manage webhook subscriptions |
 
 ## API Reference
 
@@ -147,7 +156,7 @@ For MCP server integration with Hermes Agent, see [MCP.md](./MCP.md).
 
 ```bash
 # Remove hooks from all repos where they were installed
-cd ~/sample-repo-p
+cd ~/my-project
 kanban uninstall-hooks
 
 # Remove the CLI

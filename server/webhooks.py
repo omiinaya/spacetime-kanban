@@ -1,4 +1,4 @@
-"""Outbound webhook notification system for spacetimedb-kanban.
+"""Outbound webhook notification system for spacetime-kanban.
 
 Stores webhook subscriptions in STDB (webhook_subscriptions table).
 Supports Discord embeds, Slack messages, Telegram, and generic JSON POST.

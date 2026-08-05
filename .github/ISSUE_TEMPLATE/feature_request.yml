@@ -2,7 +2,7 @@ name: Feature Request
 description: Request a new feature or improvement
 title: "feat: "
 labels: ["enhancement"]
-projects: ["spacetimedb-kanban"]
+projects: ["spacetime-kanban"]
 assignees: []
 
 body:

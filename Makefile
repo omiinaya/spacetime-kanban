@@ -5,7 +5,7 @@ PYTHON := python3
 
 # ── Help ────────────────────────────────────────────────────────────────
 help:  ## Show available targets
-	@echo "SpacetimedbKanban — Development Commands"
+	@echo "SpacetimeKanban — Development Commands"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -23,7 +23,7 @@ build-stdb:  ## Build the STDB wasm module
 	cd server/spacetimedb && cargo build --release --target wasm32-unknown-unknown
 
 publish-stdb: build-stdb  ## Build and publish STDB module to local server
-	cd server/spacetimedb && spacetime publish -b target/wasm32-unknown-unknown/release/spacetimedb_kanban.wasm -s http://localhost:3001 --yes kanban 2>&1
+	cd server/spacetimedb && spacetime publish -b target/wasm32-unknown-unknown/release/spacetime_kanban.wasm -s http://localhost:3001 --yes kanban 2>&1
 
 build-frontend:  ## Build frontend production bundle
 	cd web && npm install && npm run build

@@ -1,4 +1,4 @@
-"""Unit tests for spacetimedb-kanban API with mocked STDB backend."""
+"""Unit tests for spacetime-kanban API with mocked STDB backend."""
 
 from contextlib import ExitStack
 from unittest.mock import AsyncMock, patch

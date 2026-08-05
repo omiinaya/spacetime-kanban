@@ -170,7 +170,13 @@ class TestWebhookDispatcher:
         """Empty samples list must produce an empty sample section, not crash."""
         msg = _format_message(
             EVENT_BLOCKED_REMEDIATED,
-            {"archived": 0, "auto_dismissed": 0, "stale_archived": 0, "active_blocked": 0, "samples": []},
+            {
+                "archived": 0,
+                "auto_dismissed": 0,
+                "stale_archived": 0,
+                "active_blocked": 0,
+                "samples": [],
+            },
         )
         assert "Blocked backlog remediated" in msg
         assert "Archived 0 blocked task(s)" in msg

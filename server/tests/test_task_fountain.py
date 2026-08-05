@@ -662,7 +662,9 @@ def test_run_skips_health_scanner_when_board_healthy():
     import _task_fountain as m
 
     # 9 repos × 1 available task = 9 >= 3 → board healthy
-    healthy_repos = [[{"title": f"Task {i}", "status": "available"}] for i in range(len(TEST_REPOS))]
+    healthy_repos = [
+        [{"title": f"Task {i}", "status": "available"}] for i in range(len(TEST_REPOS))
+    ]
     mock_urlopen = MagicMock(side_effect=[_make_mock_urlopen_response(r) for r in healthy_repos])
 
     with ExitStack() as stack:
