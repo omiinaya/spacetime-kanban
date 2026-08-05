@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- `stale_watcher` now auto-fixes stale workers silently: kills the lingering worker process before unclaiming (prevents duplicate workers on re-claimed tasks) and never fires a webhook alert — stale worker remediation is fully automatic with no operator notification
+- `stale_watcher` never releases a worker that is alive AND heartbeating — LLM workers legitimately run up to `KANBAN_LLM_TIMEOUT` (60 min default); the old 60-min force-release spawned duplicate workers on the same task
+- Removed the `worker.stale` webhook event + alert-dedup machinery (`_should_alert_stale`, `_stale_alerted_tasks`) from `scheduler.py` and `webhook_dispatcher.py`
+
 ### Added
 - Python test count: 299→449 (+150 tests across 8 sessions)
   - 35 scheduler helper tests (API wrappers, worker lifecycle, crash detection)

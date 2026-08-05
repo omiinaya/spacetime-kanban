@@ -221,7 +221,6 @@ Fires HTTP POSTs to configured webhook URLs. Events:
 | `task.deleted` | Task deleted |
 | `board.dead` | 0 completions in last hour with work available |
 | `board.stalled` | Abnormally high claim:complete ratio (>20:1) |
-| `worker.stale` | Worker no heartbeat >10min |
 | `metrics.snapshot` | Periodic board metrics |
 
 Discord-compatible payload format with `content`, `_event`, `_timestamp`, `_data` fields. Retries with exponential backoff (1s, 2s, 4s) up to 3 attempts.

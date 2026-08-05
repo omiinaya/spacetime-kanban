@@ -289,7 +289,9 @@ The validator checks:
 
 ## Stale Task Watchdog
 
-The server-side scheduler's `stale_watcher` loop runs every **120 seconds** (default) and checks for tasks stuck `in_progress` for **>45 minutes** (`STALE_MINUTES`, default) with no heartbeat. It auto-releases them back to `available` and fires a webhook event.
+The server-side scheduler's `stale_watcher` loop runs every **120 seconds** (default) and checks for tasks stuck `in_progress` for **>45 minutes** (`STALE_MINUTES`, default) with no heartbeat. It **auto-fixes silently**: it kills any lingering worker process (so it can't keep working on a re-claimed task) and releases the task back to `available`. It does **not** fire a webhook alert — stale workers are remediated automatically, with no operator notification.
+
+A worker that is **alive and heartbeating is never released**, no matter how old the claim is — LLM workers legitimately run up to `KANBAN_LLM_TIMEOUT` (60 min default), and force-releasing a still-beating worker previously caused the dispatcher to spawn a duplicate worker on the same task.
 
 ## Dead Board Auto-Remediation
 
@@ -315,7 +317,7 @@ This means:
 - If an agent claims a task and disappears, it gets reclaimed within ~35 minutes max
 - If you're actively working on a long task, send heartbeats via `POST /api/agents/{agent_id}/heartbeat` to keep the task alive
 - On server restart, `_recover_stale_tasks()` immediately unclaims any `in_progress` tasks from the previous lifecycle — no tasks get permanently stuck
-- The watchdog is silent when nothing is stale — it only fires webhooks when it releases something
+- The watchdog is fully silent: stale workers are killed and their tasks released automatically, with no webhook alerts fired
 
 The scheduler runs as asyncio background tasks inside the FastAPI server process. No external cron setup is needed.
 

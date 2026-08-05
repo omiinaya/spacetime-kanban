@@ -11,7 +11,6 @@ from server.webhook_dispatcher import (
     EVENT_TASK_CLAIMED,
     EVENT_TASK_COMPLETED,
     EVENT_TASK_DELETED,
-    EVENT_WORKER_STALE,
     _format_message,
     _get_webhook_client,
     fire_event,
@@ -95,19 +94,6 @@ class TestWebhookDispatcher:
         assert "25:1" in msg
         assert "50 claims" in msg
         assert "2 completions" in msg
-
-    def test_format_message_worker_stale(self):
-        """_format_message for EVENT_WORKER_STALE should include age."""
-        msg = _format_message(
-            EVENT_WORKER_STALE,
-            {
-                "task_id": "task_abc123",
-                "age_minutes": 42.5,
-            },
-        )
-        assert "Stale Worker" in msg
-        assert "task_abc123" in msg
-        assert "42" in msg  # age rounded to 42m
 
     def test_format_message_metrics_snapshot(self):
         """_format_message for EVENT_METRICS_SNAPSHOT should include all counts."""

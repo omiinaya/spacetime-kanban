@@ -2,7 +2,7 @@
 
 The kanban server fires events when significant state changes happen.
 Each event has:
-  - event: str (e.g. "task.blocked", "board.dead", "worker.stale")
+  - event: str (e.g. "task.blocked", "board.dead", "metrics.snapshot")
   - timestamp: int (epoch ms)
   - data: dict (event-specific payload)
 
@@ -25,7 +25,6 @@ EVENT_TASK_CLAIMED = "task.claimed"
 EVENT_TASK_DELETED = "task.deleted"
 EVENT_BOARD_DEAD = "board.dead"
 EVENT_BOARD_STALLED = "board.stalled"
-EVENT_WORKER_STALE = "worker.stale"
 EVENT_METRICS_SNAPSHOT = "metrics.snapshot"
 EVENT_BLOCKED_REMEDIATED = "board.blocked_remediated"
 
@@ -60,11 +59,6 @@ def _format_message(event: str, data: dict) -> str:
             f"⚠️ **Board Stalled** — claim:complete ratio = {ratio}:1\n"
             f"{data.get('claims_last_hour', 0)} claims but only "
             f"{data.get('completions_last_hour', 0)} completions in the last hour"
-        )
-    elif event == EVENT_WORKER_STALE:
-        return (
-            f"⏰ **Stale Worker** — task `{data.get('task_id', '?')[:30]}` "
-            f"claimed {data.get('age_minutes', 0):.0f}m ago with no heartbeat"
         )
     elif event == EVENT_METRICS_SNAPSHOT:
         return (
