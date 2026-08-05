@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from auto_star import (
-    DEFAULT_MARKER_DIR,
     _detect_repo_from_git,
     _marker_exists,
     _marker_path,
@@ -187,7 +186,9 @@ class TestStarAction:
                 with patch.object(
                     auto_star_module(), "_is_starred", new=AsyncMock(return_value=False)
                 ):
-                    with patch.object(auto_star_module(), "_star", new=AsyncMock(return_value=True)) as star:
+                    with patch.object(
+                        auto_star_module(), "_star", new=AsyncMock(return_value=True)
+                    ) as star:
                         result = await maybe_auto_star()
                         star.assert_called_once_with("ghp_xxx", "owner", "repo")
         assert result is True
@@ -219,7 +220,9 @@ class TestLowLevelHelpers:
     async def test_get_authenticated_user_success(self):
         from auto_star import _get_authenticated_user
 
-        with patch.object(auto_star_module(), "_gh", new=AsyncMock(return_value=_resp(200, {"login": "octocat"}))):
+        with patch.object(
+            auto_star_module(), "_gh", new=AsyncMock(return_value=_resp(200, {"login": "octocat"}))
+        ):
             assert await _get_authenticated_user("tok") == "octocat"
 
     @pytest.mark.asyncio
