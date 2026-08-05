@@ -15,16 +15,55 @@ from scanners import register_scanner, walk_repo
 
 
 def _find_test_gaps_python(repo_path: str) -> list[str]:
-    """Find Python modules missing corresponding test files."""
+    """Find Python modules missing corresponding test files.
+
+    A module counts as covered if ANY of these hold:
+      1. A test file named exactly ``test_{basename}.py`` exists.
+      2. A test file named ``test_{parentdir}_{basename}.py`` exists
+         (this repo's convention for nested modules, e.g.
+         ``workers/llm.py`` → ``test_workers_llm.py``).
+      3. ANY test file's content imports the module (handles grouped
+         test files like ``test_scanner_modules.py`` which test many
+         modules in one file).
+    """
     test_dir = os.path.join(repo_path, "server", "tests")
     src_dirs = [os.path.join(repo_path, "server")]
 
     # Look for test files
     existing_tests = set()
+    test_contents: list[str] = []
     if os.path.isdir(test_dir):
         for f in os.listdir(test_dir):
             if f.startswith("test_") and f.endswith(".py"):
                 existing_tests.add(f)
+                try:
+                    with open(os.path.join(test_dir, f), encoding="utf-8", errors="replace") as fh:
+                        test_contents.append(fh.read())
+                except OSError:
+                    pass
+
+    def _is_covered(rel_dir: str, basename: str) -> bool:
+        # 1. Exact test_{basename}.py
+        if f"test_{basename}.py" in existing_tests:
+            return True
+        # 2. Directory-prefixed convention test_{parent}_{basename}.py
+        parent = os.path.basename(rel_dir.rstrip(os.sep))
+        if parent and f"test_{parent}_{basename}.py" in existing_tests:
+            return True
+        # 3. Any test file imports the module (grouped test files).
+        #    Match dotted import paths, e.g. "from workers.llm import",
+        #    "from workers import llm", "import workers.llm".
+        if not test_contents:
+            return False
+        dotted = f"{parent}.{basename}" if parent else basename
+        patterns = (
+            f"from {dotted} import",
+            f"from {dotted} ",
+            f"import {dotted}",
+            f"from {parent} import {basename}" if parent else "",
+        )
+        joined = "\n".join(test_contents)
+        return any(p and p in joined for p in patterns)
 
     # Find non-test Python modules
     gaps = []
@@ -34,13 +73,13 @@ def _find_test_gaps_python(repo_path: str) -> list[str]:
         for root, _dirs, files in walk_repo(src_dir, extra_exclude={"tests"}):
             for f in files:
                 if f.endswith(".py") and not f.startswith("test_") and f != "__init__.py":
-                    # Check if corresponding test exists
-                    test_name = f"test_{f}"
-                    if test_name not in existing_tests:
-                        # Also check inline test functions
-                        filepath = os.path.join(root, f)
-                        rel_path = os.path.relpath(filepath, repo_path)
-                        gaps.append(rel_path)
+                    basename = f[: -len(".py")]
+                    rel_dir = os.path.relpath(root, src_dir)
+                    if _is_covered(rel_dir, basename):
+                        continue
+                    filepath = os.path.join(root, f)
+                    rel_path = os.path.relpath(filepath, repo_path)
+                    gaps.append(rel_path)
     return gaps
 
 
