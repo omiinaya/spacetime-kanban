@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Worker dispatch now excludes archived tasks: every scheduler fetch of available tasks (`task_dispatcher`, `_seed_initial_workers`, `zombie_cleaner`, `self_improver`) passes `archived=false`. Archived tasks are removed from the active board and must never be re-dispatched — previously they stayed status=available and workers burned turns on them. STDB `claim_task` reducer also rejects archived tasks (defense in depth; deploys on next module republish).
 - `scanner/gaps.py` test-gap matcher no longer produces false positives: a module is covered if any test file matches `test_{module}.py`, `test_{parent}_{module}.py` (this repo's nested convention, e.g. `workers/llm.py` → `test_workers_llm.py`), or imports the module (grouped test files like `test_scanner_modules.py`). Previously modules that WERE tested got flagged as untested, creating junk tasks workers would burn turns on.
 - Scanner runner now self-cleans: available scanner tasks whose finding no longer exists are blocked + archived automatically (complement to the regressed-done re-opener). Stops stale junk tasks from lingering on the board indefinitely.
 - `stale_watcher` now auto-fixes stale workers silently: kills the lingering worker process before unclaiming (prevents duplicate workers on re-claimed tasks) and never fires a webhook alert — stale worker remediation is fully automatic with no operator notification
