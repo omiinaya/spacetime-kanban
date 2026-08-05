@@ -81,6 +81,7 @@ class WorkerContext:
         self.task = None
         self._heartbeat_count = 0
         self._running = True
+        self._worktree_path: str | None = None
 
     def load_task(self) -> bool:
         """Fetch task details from the kanban API."""
@@ -101,12 +102,148 @@ class WorkerContext:
 
     @property
     def repo_path(self) -> str | None:
-        """Return the absolute path to the repo directory, or None."""
+        """Return the absolute path to the repo directory, or None.
+
+        If an isolated worktree has been created (via setup_worktree),
+        returns the worktree path — this is what workers should operate on.
+        Otherwise falls back to the main clone at ~/<repo>.
+        """
+        if self._worktree_path and os.path.isdir(self._worktree_path):
+            return self._worktree_path
         repo = self.repo
         if not repo:
             return None
         path = os.path.expanduser(f"~/{repo}")
         return path if os.path.isdir(path) else None
+
+    # ── Worktree isolation ────────────────────────────────────────────
+    # Each task worker operates in its own git worktree (~/<repo>-kanban-<id>)
+    # so concurrent elves never collide in the main clone. Falls back to the
+    # main clone if worktrees are unavailable (non-git repo, no origin, etc.).
+
+    def setup_worktree(self) -> str | None:
+        """Create an isolated worktree for this task, if possible.
+
+        Returns the worktree path, or None (falls back to main clone).
+        Never raises — all failures degrade to working in ~/<repo>.
+        """
+        import subprocess
+
+        repo = self.repo
+        if not repo:
+            return None
+        main_clone = os.path.expanduser(f"~/{repo}")
+        if not os.path.isdir(main_clone):
+            return None
+        if not os.path.isdir(os.path.join(main_clone, ".git")):
+            return None  # not a git repo — no worktree possible
+
+        # Build a filesystem-safe worktree path and branch name from task id
+        import re
+
+        safe_id = re.sub(r"[^A-Za-z0-9]", "", self.task_id)[:24] or "task"
+        wt_path = os.path.expanduser(f"~/{repo}-kanban-{safe_id}")
+        branch = f"kanban/{safe_id}"
+
+        # If a stale worktree/branch exists from a crashed run, prune it.
+        try:
+            subprocess.run(
+                ["git", "-C", main_clone, "worktree", "prune"],
+                capture_output=True,
+                timeout=10,
+            )
+            subprocess.run(
+                ["git", "-C", main_clone, "branch", "-D", branch],
+                capture_output=True,
+                timeout=10,
+            )
+        except Exception:  # noqa: S110 — best-effort cleanup
+            pass
+
+        # Detect default branch (main or master) for the base.
+        try:
+            base = "main"
+            result = subprocess.run(
+                ["git", "-C", main_clone, "rev-parse", "--verify", "main"],
+                capture_output=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                base = "master"
+            # Ensure base ref is up to date so the worktree starts from HEAD
+            subprocess.run(
+                ["git", "-C", main_clone, "fetch", "origin"],
+                capture_output=True,
+                timeout=30,
+            )
+        except Exception:  # noqa: S110 — best-effort
+            pass
+
+        try:
+            result = subprocess.run(
+                ["git", "-C", main_clone, "worktree", "add", "-b", branch, wt_path, base],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if result.returncode == 0 and os.path.isdir(wt_path):
+                self._worktree_path = wt_path
+                print(
+                    f"[worker] Created worktree {wt_path} on branch {branch}",
+                    file=sys.stderr,
+                )
+                return wt_path
+            print(
+                f"[worker] Worktree creation failed: {result.stderr.strip()[:200]} "
+                f"— falling back to main clone",
+                file=sys.stderr,
+            )
+        except Exception as e:  # noqa: S110 — degrade gracefully
+            print(f"[worker] Worktree setup error: {e} — falling back", file=sys.stderr)
+        return None
+
+    def teardown_worktree(self) -> None:
+        """Remove the isolated worktree and its branch after the task ends.
+
+        Best-effort; never raises. If the worker committed/pushed changes,
+        the worktree removal is safe. If it left uncommitted changes, they
+        are discarded with the worktree (the task's result notes explain).
+        """
+        import subprocess
+
+        if not self._worktree_path:
+            return
+        repo = self.repo
+        main_clone = os.path.expanduser(f"~/{repo}") if repo else None
+        wt_path = self._worktree_path
+        self._worktree_path = None
+
+        try:
+            import re
+
+            safe_id = re.sub(r"[^A-Za-z0-9]", "", self.task_id)[:24] or "task"
+            branch = f"kanban/{safe_id}"
+            if main_clone and os.path.isdir(os.path.join(main_clone, ".git")):
+                # Push the worktree branch so the work isn't lost even if the
+                # worktree is removed (best-effort; only if a remote exists).
+                subprocess.run(
+                    ["git", "-C", wt_path, "push", "-u", "origin", branch],
+                    capture_output=True,
+                    timeout=30,
+                )
+                subprocess.run(
+                    ["git", "-C", main_clone, "worktree", "remove", wt_path, "--force"],
+                    capture_output=True,
+                    timeout=30,
+                )
+                subprocess.run(
+                    ["git", "-C", main_clone, "worktree", "prune"],
+                    capture_output=True,
+                    timeout=10,
+                )
+                print(f"[worker] Removed worktree {wt_path}", file=sys.stderr)
+        except Exception as e:  # noqa: S110 — cleanup is best-effort
+            print(f"[worker] Worktree teardown error: {e}", file=sys.stderr)
 
     def heartbeat(self) -> bool:
         """Send a heartbeat via activity log. Returns False on failure."""
@@ -232,6 +369,14 @@ def run_worker(task_id: str, work_fn, timeout: int = 0):
     print(f"[worker] Starting on: {ctx.title[:80]}", file=sys.stderr)
     ctx.add_log("worker_started", f"Worker started on: {ctx.title[:100]}")
 
+    # Isolate this task in its own git worktree so concurrent elves never
+    # collide in the main clone. Falls back gracefully if unavailable.
+    worktree_enabled = os.environ.get("KANBAN_WORKTREE", "1") != "0"
+    if worktree_enabled:
+        wt = ctx.setup_worktree()
+        if wt:
+            ctx.add_log("worker_worktree", f"Isolated worktree: {wt}")
+
     # Start heartbeat thread
     hb_thread = heartbeat_loop(ctx)
 
@@ -281,3 +426,5 @@ def run_worker(task_id: str, work_fn, timeout: int = 0):
     finally:
         ctx._running = False
         hb_thread.join(timeout=5)
+        if worktree_enabled:
+            ctx.teardown_worktree()

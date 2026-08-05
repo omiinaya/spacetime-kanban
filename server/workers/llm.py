@@ -33,6 +33,10 @@ WORK_TIMEOUT = int(os.environ.get("KANBAN_LLM_TIMEOUT", "3600"))  # 60 min (env-
 GIT_TIMEOUT = 15  # git operations timeout
 STDERR_LOG_LIMIT = 5000  # max stderr chars to include in block reason
 
+# Post-completion test verification (proves improvement lab is "reviewed complete").
+VERIFY_TESTS_ENABLED = os.environ.get("KANBAN_VERIFY_TESTS", "1") != "0"
+VERIFY_TESTS_TIMEOUT = int(os.environ.get("KANBAN_VERIFY_TESTS_TIMEOUT", "180"))  # seconds
+
 
 # ── Prompt builder ──────────────────────────────────────────────────
 
@@ -117,6 +121,105 @@ def _has_git_commits_since(repo_path: str, start_ref: str = "HEAD~1") -> bool:
         return False
 
 
+def _detect_test_command(repo_path: str) -> list[str] | None:
+    """Detect the repo's test command, or None if none is obvious.
+
+    Order of preference: Makefile `test` target → Cargo.toml (Rust) →
+    pyproject.toml/setup.cfg (pytest) → package.json (npm/vitest/jest).
+    Returns a shlex-split command list ready for subprocess.run.
+    """
+    import shlex as _shlex
+
+    makefile = os.path.join(repo_path, "Makefile")
+    if os.path.isfile(makefile):
+        try:
+            with open(makefile, encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            if re.search(r"^test\s*:", content, re.MULTILINE):
+                return ["make", "test"]
+        except Exception:  # noqa: S110 — best-effort detection
+            pass
+
+    cargo = os.path.join(repo_path, "Cargo.toml")
+    if os.path.isfile(cargo):
+        try:
+            with open(cargo, encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            if "[dev-dependencies]" in content or "#[cfg(test)]" in content:
+                return ["cargo", "test", "--quiet"]
+        except Exception:  # noqa: S110 — best-effort detection
+            pass
+
+    for cfg_file in ("pyproject.toml", "setup.cfg", "pytest.ini"):
+        cfg_path = os.path.join(repo_path, cfg_file)
+        if os.path.isfile(cfg_path):
+            try:
+                with open(cfg_path, encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+                if "pytest" in content.lower():
+                    return ["python3", "-m", "pytest", "-q"]
+            except Exception:  # noqa: S110 — best-effort detection
+                pass
+
+    pkg_json = os.path.join(repo_path, "package.json")
+    if os.path.isfile(pkg_json):
+        try:
+            with open(pkg_json, encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            if '"test"' in content:
+                # Prefer vitest/jest for frontend repos
+                if "vitest" in content:
+                    return _shlex.split("npx vitest run --reporter=dot")
+                if "jest" in content:
+                    return _shlex.split("npx jest --silent")
+                return _shlex.split("npm test -- --run")
+        except Exception:  # noqa: S110 — best-effort detection
+            pass
+
+    return None
+
+
+def _verify_repo_tests(repo_path: str, timeout: int = 0) -> tuple[bool, str]:
+    """Run the repo's test suite to verify a change didn't break anything.
+
+    Returns (ok, detail):
+      - (True, msg) if tests pass, OR no test command is detectable (nothing
+        to run — don't block a task just because the repo has no harness).
+      - (False, msg) if a test command exists and FAILS (the change broke it).
+    """
+    if not VERIFY_TESTS_ENABLED:
+        return True, "test verification disabled (KANBAN_VERIFY_TESTS=0)"
+
+    cmd = _detect_test_command(repo_path)
+    if cmd is None:
+        return True, "no test harness detected — skipping verification"
+
+    if timeout <= 0:
+        timeout = VERIFY_TESTS_TIMEOUT
+
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if result.returncode == 0:
+            return True, f"tests pass ({' '.join(cmd)})"
+        tail = (result.stdout + "\n" + result.stderr).strip().splitlines()[-15:]
+        preview = "\n".join(tail)[-800:]
+        return False, f"tests FAILED ({' '.join(cmd)}):\n{preview}"
+    except subprocess.TimeoutExpired:
+        # Timed out — don't block on a slow suite, but flag it in the result
+        return True, f"test verification timed out after {timeout}s (not counted as failure)"
+    except FileNotFoundError:
+        # Tool missing (e.g. cargo/npm not installed) — don't block the task
+        return True, "test tool not found — skipping verification"
+    except Exception as e:  # noqa: S110 — never let verification crash the worker
+        return True, f"test verification error (not counted as failure): {e}"
+
+
 # ── Main worker ─────────────────────────────────────────────────────
 
 
@@ -173,7 +276,11 @@ def run_llm_worker(ctx: WorkerContext) -> tuple[bool, str]:
         # Verify actual changes were made
         changes_after = _has_git_changes(repo_path)
         if len(changes_after) > len(changes_before):
-            return True, f"{summary} ({len(changes_after)} file(s) changed)"
+            # Review gate: the change must not break the repo's tests.
+            ok, verify_msg = _verify_repo_tests(repo_path)
+            if not ok:
+                return False, f"WORKER_DONE reported but {verify_msg}"
+            return True, f"{summary} ({len(changes_after)} file(s) changed; {verify_msg})"
         else:
             # No new files changed — possibly committed or just reported
             return True, summary
@@ -212,7 +319,10 @@ def run_llm_worker(ctx: WorkerContext) -> tuple[bool, str]:
             if already_done and len(changes_after) == len(changes_before):
                 return True, "No changes needed — task was already satisfied"
             if len(changes_after) > len(changes_before):
-                return True, f"Completed ({len(changes_after)} file(s) changed)"
+                ok, verify_msg = _verify_repo_tests(repo_path)
+                if not ok:
+                    return False, f"Completion reported but {verify_msg}"
+                return True, f"Completed ({len(changes_after)} file(s) changed; {verify_msg})"
 
     # Check for blocked indicators
     blocked_indicators = [
@@ -236,12 +346,18 @@ def run_llm_worker(ctx: WorkerContext) -> tuple[bool, str]:
     has_new_changes = len(changes_after) > len(changes_before)
 
     if has_new_changes and meaningful:
-        return True, f"Task completed ({len(changes_after)} file(s) changed)"
+        ok, verify_msg = _verify_repo_tests(repo_path)
+        if not ok:
+            return False, f"Changes detected but {verify_msg}"
+        return True, f"Task completed ({len(changes_after)} file(s) changed; {verify_msg})"
     elif not meaningful and not has_new_changes:
         return False, "LLM returned empty/trivial response — no work done"
     elif not meaningful:
         # No actual content, but we see changes (rare)
-        return True, "Changes detected despite minimal LLM output"
+        ok, verify_msg = _verify_repo_tests(repo_path)
+        if not ok:
+            return False, f"Changes detected but {verify_msg}"
+        return True, f"Changes detected despite minimal LLM output ({verify_msg})"
 
     # Default: couldn't determine outcome — provide stderr context
     stderr_log = stderr_data[-STDERR_LOG_LIMIT:] if stderr_data else ""

@@ -202,3 +202,128 @@ class TestSchedulerLowBacklog:
 
         assert result is False
         mock_trigger.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# _extract_actionable_headings — junk-task prevention
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestActionableHeadings:
+    """Only genuinely doable headings become tasks; structural/status
+    sections (Recently Completed, Deferred, Summary, etc.) are skipped."""
+
+    def test_pending_items_are_actionable(self):
+        from server.scheduler_low_backlog import _extract_actionable_headings
+
+        content = """## Status: PENDING
+
+### Add --adults parameter to United CLI (P2)
+### Fix search dedup race in gateway (P1)
+### Migrate cache refresh to _proxy_upstream (P3)
+"""
+        titles = [h["title"] for h in _extract_actionable_headings(content)]
+        assert len(titles) == 3
+        assert any("--adults" in t for t in titles)
+        assert any("dedup race" in t for t in titles)
+
+    def test_recently_completed_skipped(self):
+        from server.scheduler_low_backlog import _extract_actionable_headings
+
+        content = """## Recently Completed
+
+### Alaska scaffold — COMPLETE
+### Spirit investigation — RESOLVED
+"""
+        assert _extract_actionable_headings(content) == []
+
+    def test_deferred_wont_do_skipped(self):
+        from server.scheduler_low_backlog import _extract_actionable_headings
+
+        content = """## Deferred / Won't Do
+
+### Add --adults parameter (deferred)
+### AA normalizer enrichment (won't do)
+"""
+        assert _extract_actionable_headings(content) == []
+
+    def test_status_all_implemented_skipped(self):
+        from server.scheduler_low_backlog import _extract_actionable_headings
+
+        content = """## Status: ALL IMPLEMENTED (verified 2026-08-05)
+### P0 — Customer portal web view ✅ Done
+### P2 — Dashboard charts ✅ Done
+"""
+        assert _extract_actionable_headings(content) == []
+
+    def test_section_headers_skipped(self):
+        from server.scheduler_low_backlog import _extract_actionable_headings
+
+        content = """## Summary
+## Reference Results (Full Suite)
+## Retrieval Quality
+## What We're Building
+## Build Verification Results
+"""
+        assert _extract_actionable_headings(content) == []
+
+    def test_done_marker_in_item_skipped(self):
+        from server.scheduler_low_backlog import _extract_actionable_headings
+
+        content = """## Pending
+
+### Add tests for module X (DONE)
+### Add real work item (P1)
+"""
+        titles = [h["title"] for h in _extract_actionable_headings(content)]
+        assert len(titles) == 1
+        assert "real work item" in titles[0]
+
+    def test_short_headings_skipped(self):
+        from server.scheduler_low_backlog import _extract_actionable_headings
+
+        content = "## Hi\n## Add more\n"
+        assert _extract_actionable_headings(content) == []
+
+    def test_priority_marker_without_verb_is_actionable(self):
+        from server.scheduler_low_backlog import _extract_actionable_headings
+
+        content = "## Pending\n### STDB: republish module to live DB (P0)\n"
+        titles = [h["title"] for h in _extract_actionable_headings(content)]
+        assert len(titles) == 1
+        assert "republish" in titles[0]
+
+    def test_research_log_skipped(self):
+        from server.scheduler_low_backlog import _extract_actionable_headings
+
+        content = """## Research Log
+
+### 2026-08-05 PENDING reconciliation — verified complete
+### 2026-07-01 Tick 7
+"""
+        assert _extract_actionable_headings(content) == []
+
+    def test_realistic_full_doc(self):
+        """Mixed doc: pending items kept, completed/deferred/research skipped."""
+        from server.scheduler_low_backlog import _extract_actionable_headings
+
+        content = """## Status: PENDING
+
+### Add --adults parameter to United CLI (P2)
+### Fix search dedup race in gateway (P1)
+
+## Recently Completed
+
+### Alaska scaffold — COMPLETE
+
+## Research Log
+
+### 2026-08-05 reconciliation
+
+## Deferred / Won't Do
+
+### AA normalizer enrichment (won't do)
+"""
+        titles = [h["title"] for h in _extract_actionable_headings(content)]
+        assert len(titles) == 2
+        assert all("United CLI" in t or "dedup" in t for t in titles)
