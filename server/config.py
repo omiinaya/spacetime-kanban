@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     github_default_repo: str = ""
     api_key: str = ""  # Set API_KEY env var to require auth on mutation endpoints
 
+    # ── Auto-star ──
+    # On first install, star the project's GitHub repo (best-effort) when a
+    # token is configured and the user isn't the owner / hasn't starred it.
+    auto_star_enabled: bool = True
+
     # ── Scheduler (background tasks inside server process) ──
     scheduler_enabled: bool = True
     dispatcher_interval_seconds: int = 5

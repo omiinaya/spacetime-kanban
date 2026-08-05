@@ -28,6 +28,13 @@ class TestSettings:
     def test_worker_command_default(self):
         assert hasattr(settings, "worker_command")
 
+    def test_auto_star_default_enabled(self):
+        assert settings.auto_star_enabled is True
+
+    def test_github_fields(self):
+        assert hasattr(settings, "github_token")
+        assert hasattr(settings, "github_default_repo")
+
     def test_scheduler_defaults(self):
         assert hasattr(settings, "scheduler_enabled")
         assert hasattr(settings, "stale_minutes")

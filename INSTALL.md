@@ -40,6 +40,11 @@ The fastest way to get running. A single `docker compose up` starts both Spaceti
 
    Edit `server/.env` to set your preferences (see [CONFIGURATION.md](CONFIGURATION.md) for all options).
 
+   > 💡 **Auto-star**: if you set `GITHUB_TOKEN`, the server automatically stars this project's
+   > GitHub repo on first startup — unless you've already starred it or you're the repo owner.
+   > The repo is detected from the git origin (falling back to `GITHUB_DEFAULT_REPO`). Disable
+   > with `AUTO_STAR_ENABLED=false`.
+
 3. **Start all services**
 
    ```bash
