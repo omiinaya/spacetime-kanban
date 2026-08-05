@@ -26,6 +26,9 @@ All notable changes to this project will be documented in this file.
   - IssuesPage: 12 tests (loading, rendering, filtering by repo/issue number, error/empty states)
 
 ### Fixed
+- **Junk-task generator** (`scheduler_low_backlog._generate_improvement_tasks`): now only creates tasks from *actionable* headings. Previously every `## ` heading in IMPROVEMENTS.md/PERFORMANCE.md/SCHEMA_EVOLUTION_POLICY.md became a task — so structural sections ("Recently Completed", "Deferred / Blocked", "Status: PENDING", "Summary", "Research Log") and done/deferred items were seeded as kanban tasks that workers burned LLM turns on. New `_extract_actionable_headings()` filters by priority markers (P0-P3), action verbs, strong action signals, and section context; skips status/emoji/completed/deferred headings. Covered by 12 new tests.
+- **Worker verification gate** (`workers/llm.py`): an LLM worker that reports `WORKER_DONE` must now pass the repo's test suite before the task is marked done (`_verify_repo_tests`). A completion whose change breaks the tests is rejected as blocked. Configurable via `KANBAN_VERIFY_TESTS` / `KANBAN_VERIFY_TESTS_TIMEOUT`. Detectable harnesses: Makefile `test`, Cargo.toml, pytest, vitest/jest. Covered by 13 new tests.
+- **Worker worktree isolation** (`workers/base.py`): each task worker now runs in its own git worktree (`~/<repo>-kanban-<task-id>` on branch `kanban/<task-id>`) instead of the main clone, so concurrent agents never collide on the same files. Graceful fallback to the main clone when worktrees aren't possible; teardown (push + remove + prune) on completion. Configurable via `KANBAN_WORKTREE`. Covered by 7 new tests.
 - Docker entrypoint: STDB v2.6.1 CLI flags (`-b` instead of `-f`), health endpoint `/v1/health`
 - Bare `except: pass` replaced with proper error logging in all route handlers
 - CI/CD branch triggers: `develop`→`main` in all workflow files

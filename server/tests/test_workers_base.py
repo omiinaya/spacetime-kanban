@@ -365,3 +365,88 @@ class TestRunWorker:
         exit_code = run_worker("task_123", work_fn, timeout=0)
         assert exit_code == 0
         mock_complete.assert_called_once()
+
+
+class TestWorktreeIsolation:
+    """WorkerContext worktree isolation — each task works in its own worktree."""
+
+    def _make_ctx(self, repo="test-repo", task_id="task_abc123"):
+        ctx = WorkerContext(task_id)
+        ctx.task = {"id": task_id, "title": "Test", "repo": repo, "description": ""}
+        return ctx
+
+    def test_repo_path_uses_worktree_when_set(self, tmp_path):
+        ctx = self._make_ctx()
+        ctx._worktree_path = str(tmp_path / "wt")
+        (tmp_path / "wt").mkdir(parents=True)
+        assert ctx.repo_path == str(tmp_path / "wt")
+
+    def test_repo_path_falls_back_to_main_clone(self):
+        ctx = self._make_ctx()
+        ctx._worktree_path = "/nonexistent/wt"
+        # repo "test-repo" won't exist at ~/test-repo → None
+        assert ctx.repo_path is None
+
+    @patch("subprocess.run")
+    def test_setup_worktree_creates_and_sets_path(self, mock_run, tmp_path):
+        main_clone = tmp_path / "test-repo"
+        (main_clone / ".git").mkdir(parents=True)
+        wt_path = tmp_path / "test-repo-kanban-taskabc123"  # safe_id strips '_'
+        # worktree add succeeds (creates the dir as git would)
+        wt_path.mkdir(parents=True)
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with patch(
+            "os.path.expanduser",
+            side_effect=lambda p: str(wt_path) if "kanban" in p else str(main_clone),
+        ):
+            ctx = self._make_ctx()
+            result = ctx.setup_worktree()
+        assert result is not None
+        assert ctx._worktree_path == str(wt_path)
+
+    @patch("subprocess.run")
+    def test_setup_worktree_returns_none_when_not_git(self, mock_run, tmp_path):
+        main_clone = tmp_path / "test-repo"
+        main_clone.mkdir(parents=True)  # no .git
+        with patch("os.path.expanduser", return_value=str(main_clone)):
+            ctx = self._make_ctx()
+            assert ctx.setup_worktree() is None
+
+    @patch("subprocess.run")
+    def test_setup_worktree_failure_falls_back(self, mock_run, tmp_path):
+        main_clone = tmp_path / "test-repo"
+        (main_clone / ".git").mkdir(parents=True)
+        # worktree add fails
+        mock_run.return_value = MagicMock(returncode=1, stderr="fatal: branch exists")
+        with patch("os.path.expanduser", return_value=str(main_clone)):
+            ctx = self._make_ctx()
+            assert ctx.setup_worktree() is None
+        assert ctx._worktree_path is None
+
+    @patch("subprocess.run")
+    def test_teardown_worktree_noop_when_none(self, mock_run):
+        ctx = self._make_ctx()
+        ctx._worktree_path = None
+        ctx.teardown_worktree()
+        mock_run.assert_not_called()
+
+    @patch("subprocess.run")
+    def test_teardown_worktree_removes(self, mock_run, tmp_path):
+        main_clone = tmp_path / "test-repo"
+        (main_clone / ".git").mkdir(parents=True)
+        wt_path = tmp_path / "test-repo-kanban-taskabc123"
+        wt_path.mkdir(parents=True)
+        with patch("os.path.expanduser", return_value=str(main_clone)):
+            ctx = self._make_ctx()
+            ctx._worktree_path = str(wt_path)
+            ctx.teardown_worktree()
+        assert ctx._worktree_path is None
+        assert mock_run.call_count >= 3  # push + worktree remove + prune
+
+    @patch("subprocess.run")
+    def test_teardown_worktree_exception_safe(self, mock_run):
+        mock_run.side_effect = RuntimeError("git exploded")
+        ctx = self._make_ctx()
+        ctx._worktree_path = "/tmp/some-wt"
+        ctx.teardown_worktree()  # must not raise
+        assert ctx._worktree_path is None

@@ -1,6 +1,7 @@
 """Tests for server/workers/llm.py — LLM-driven worker."""
 
 import os
+import subprocess
 import sys
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -350,3 +351,161 @@ class TestRunLlmWorker:
         success, message = run_llm_worker(worker_context)
         assert success is False
         assert "did not report" in message
+
+
+class TestDetectTestCommand:
+    """_detect_test_command() finds the right test runner per repo type."""
+
+    def test_makefile(self, tmp_path):
+        (tmp_path / "Makefile").write_text("build:\n\techo hi\ntest:\n\tpytest\n")
+        from workers.llm import _detect_test_command
+
+        assert _detect_test_command(str(tmp_path)) == ["make", "test"]
+
+    def test_cargo(self, tmp_path):
+        (tmp_path / "Cargo.toml").write_text(
+            "[package]\nname = \"x\"\n[dev-dependencies]\nserde = \"1\"\n"
+        )
+        from workers.llm import _detect_test_command
+
+        assert _detect_test_command(str(tmp_path)) == ["cargo", "test", "--quiet"]
+
+    def test_pytest(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n")
+        from workers.llm import _detect_test_command
+
+        assert _detect_test_command(str(tmp_path)) == ["python3", "-m", "pytest", "-q"]
+
+    def test_package_json_vitest(self, tmp_path):
+        (tmp_path / "package.json").write_text('{"scripts": {"test": "vitest"}}')
+        from workers.llm import _detect_test_command
+
+        assert _detect_test_command(str(tmp_path)) == ["npx", "vitest", "run", "--reporter=dot"]
+
+    def test_none(self, tmp_path):
+        from workers.llm import _detect_test_command
+
+        assert _detect_test_command(str(tmp_path)) is None
+
+
+class TestVerifyRepoTests:
+    """_verify_repo_tests() gates completion on a passing test suite."""
+
+    def test_disabled(self, tmp_path):
+        from workers.llm import _verify_repo_tests
+
+        with patch("workers.llm.VERIFY_TESTS_ENABLED", False):
+            ok, msg = _verify_repo_tests(str(tmp_path))
+        assert ok is True
+        assert "disabled" in msg
+
+    def test_no_harness_ok(self, tmp_path):
+        from workers.llm import _verify_repo_tests
+
+        ok, msg = _verify_repo_tests(str(tmp_path))
+        assert ok is True
+        assert "no test harness" in msg
+
+    def test_tests_pass(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n")
+        from workers.llm import _verify_repo_tests
+
+        with patch(
+            "workers.llm.subprocess.run",
+            return_value=MagicMock(returncode=0, stdout="", stderr=""),
+        ):
+            ok, msg = _verify_repo_tests(str(tmp_path))
+        assert ok is True
+        assert "tests pass" in msg
+
+    def test_tests_fail(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n")
+        from workers.llm import _verify_repo_tests
+
+        with patch(
+            "workers.llm.subprocess.run",
+            return_value=MagicMock(
+                returncode=1, stdout="FAILED test_x.py", stderr="assert 1 == 2"
+            ),
+        ):
+            ok, msg = _verify_repo_tests(str(tmp_path))
+        assert ok is False
+        assert "tests FAILED" in msg
+        assert "test_x.py" in msg
+
+    def test_timeout_not_failure(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n")
+        from workers.llm import _verify_repo_tests
+
+        with patch("workers.llm.subprocess.run", side_effect=subprocess.TimeoutExpired("pytest", 180)):
+            ok, msg = _verify_repo_tests(str(tmp_path))
+        assert ok is True
+        assert "timed out" in msg
+
+    def test_tool_missing_not_failure(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n")
+        from workers.llm import _verify_repo_tests
+
+        with patch("workers.llm.subprocess.run", side_effect=FileNotFoundError("pytest")):
+            ok, msg = _verify_repo_tests(str(tmp_path))
+        assert ok is True
+        assert "not found" in msg
+
+
+class TestVerifyGate:
+    """A WORKER_DONE claim whose change breaks tests must NOT be accepted."""
+
+    @pytest.fixture
+    def worker_context(self, tmp_path):
+        repo_dir = tmp_path / "test-repo"
+        repo_dir.mkdir(parents=True)
+        ctx = WorkerContext("task_123")
+        ctx.task = {"id": "task_123", "title": "Fix auth bug", "repo": "test-repo", "description": ""}
+        with patch.object(
+            WorkerContext,
+            "repo_path",
+            new_callable=PropertyMock,
+            return_value=str(repo_dir),
+        ):
+            yield ctx
+
+    @patch("workers.llm._has_git_changes", side_effect=[[], ["file1.py"]])
+    @patch("workers.llm.subprocess.Popen")
+    def test_done_marker_with_failing_tests_rejected(self, mock_popen, mock_git_changes, worker_context):
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = (
+            "I fixed the bug.\nWORKER_DONE: Fixed authentication bug",
+            "",
+        )
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+        with patch("workers.base.WorkerContext.add_log"):
+            with patch(
+                "workers.llm._verify_repo_tests",
+                return_value=(False, "tests FAILED (python3 -m pytest -q):\nassert 1 == 2"),
+            ):
+                success, message = run_llm_worker(worker_context)
+        assert success is False
+        assert "tests FAILED" in message
+        assert "WORKER_DONE reported" in message
+
+    @patch("workers.llm._has_git_changes", side_effect=[[], ["file1.py"]])
+    @patch("workers.llm.subprocess.Popen")
+    def test_done_marker_with_passing_tests_accepted(
+        self, mock_popen, mock_git_changes, worker_context
+    ):
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = (
+            "I fixed the bug.\nWORKER_DONE: Fixed authentication bug",
+            "",
+        )
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+        with patch("workers.base.WorkerContext.add_log"):
+            with patch(
+                "workers.llm._verify_repo_tests",
+                return_value=(True, "tests pass (python3 -m pytest -q)"),
+            ):
+                success, message = run_llm_worker(worker_context)
+        assert success is True
+        assert "tests pass" in message

@@ -319,6 +319,21 @@ This means:
 - On server restart, `_recover_stale_tasks()` immediately unclaims any `in_progress` tasks from the previous lifecycle — no tasks get permanently stuck
 - The watchdog is fully silent: stale workers are killed and their tasks released automatically, with no webhook alerts fired
 
+## Worker Isolation & Verification
+
+Workers are [self-improvement machine](README.md#-features) agents that scan, fix, verify,
+test, and document — with two guards that keep the "machine" honest:
+
+- **Worktree isolation (default on):** each task worker runs in its own git worktree
+  (`~/<repo>-kanban-<task-id>`) on branch `kanban/<task-id>`, so concurrent elves never
+  collide in the main clone. If worktrees are unavailable (non-git repo, no origin), the
+  worker degrades to the main clone. Disable with `KANBAN_WORKTREE=0`.
+- **Test verification gate (default on):** when an LLM worker reports completion
+  (`WORKER_DONE`), the worker runs the repo's test suite (`make test`, `cargo test`,
+  pytest, or vitest/jest) and only marks the task done if it passes. A completion that
+  breaks the repo's tests is rejected as blocked — so "improvements" must actually work.
+  Configure with `KANBAN_VERIFY_TESTS` (enable/disable) and `KANBAN_VERIFY_TESTS_TIMEOUT`.
+
 The scheduler runs as asyncio background tasks inside the FastAPI server process. No external cron setup is needed.
 
 ## GitHub PR Linking

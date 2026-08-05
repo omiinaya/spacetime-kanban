@@ -92,12 +92,314 @@ async def _get_actionable_available_count() -> int:
         return 0
 
 
+# ── Actionable-heading extraction ──────────────────────────────────
+# Improvement docs (IMPROVEMENTS.md, PERFORMANCE.md, ...) use `## ` for
+# SECTION headers and `### ` for concrete items. The old code created a
+# task from every `## ` line, so structural sections like "Recently
+# Completed", "Deferred / Blocked", "Status: PENDING" and "Summary"
+# became kanban tasks that workers burned turns on. Only headings that
+# describe something DOABLE become tasks.
+
+import re as _re
+
+# Sections whose CHILDREN are never tasks (they're status/log/done lists).
+_SECTION_SKIP_CHILDREN = {
+    "recently completed",
+    "recently completed:",
+    "deferred",
+    "deferred / blocked",
+    "deferred / won't do",
+    "deferred / wont do",
+    "deferred/won't do",
+    "won't do",
+    "wont do",
+    "research log",
+    "research log:",
+    "reference results",
+    "reference results (full suite)",
+    "build verification results",
+    "build verification",
+    "known deficiencies vs reference browsers",
+    "known deficiencies",
+    "summary",
+    "summary:",
+    "current audit — what exists",
+    "current audit - what exists",
+    "legacy",
+    "legacy / future backlog (not yet scoped as tasks)",
+    "future improvements",
+    "next steps",
+    "next most important",
+    "table of contents",
+    "introduction",
+    "overview",
+    "appendix",
+    "related documents",
+    "executive summary",
+    "why this policy?",
+    "why this policy",
+    "references",
+    "architecture",
+    "background",
+    "conclusion",
+    "completion",
+    "completed",
+    "all implemented",
+    "checklist",
+    "todo:",
+    "todo",
+    "what we're building",
+}
+
+# Sections to skip as a TASK TITLE themselves, but whose children may be
+# actionable (e.g. "## Status: PENDING" → children are the pending tasks).
+_SECTION_SKIP_SELF = {
+    "pending",
+    "pending:",
+    "blocked",
+    "blocked:",
+    "status: pending",
+    "status: complete",
+    "status: completed",
+    "status: all implemented",
+    "status: complete (all items implemented)",
+}
+
+# Prefixes that mark a heading as structural/status even with extra text.
+# NOTE: "status:" is deliberately NOT here — a "## Status: PENDING" section's
+# children ARE the pending tasks and must be evaluated. Only done/deferred-
+# style prefixes skip children.
+_SECTION_PREFIXES = (
+    "recently completed",
+    "deferred",
+    "won't do",
+    "wont do",
+    "table of",
+    "build verification",
+    "reference results",
+    "known deficiencies",
+    "research log",
+    "status: complete",
+    "status: completed",
+    "status: all implemented",
+)
+
+# Action verbs — a heading containing one of these is very likely actionable.
+_ACTION_VERBS = (
+    "add",
+    "fix",
+    "implement",
+    "refactor",
+    "update",
+    "remove",
+    "optimize",
+    "migrate",
+    "replace",
+    "support",
+    "document",
+    "test",
+    "create",
+    "improve",
+    "reduce",
+    "increase",
+    "enable",
+    "expose",
+    "port",
+    "rewrite",
+    "rename",
+    "reorganize",
+    "split",
+    "merge",
+    "extract",
+    "deduplicate",
+    "audit",
+    "verify",
+    "publish",
+    "release",
+    "deprecate",
+    "clean",
+    "unpin",
+    "pin",
+    "write",
+    "cover",
+    "handle",
+    "respect",
+    "preserve",
+    "avoid",
+    "prevent",
+    "monitor",
+    "log",
+    "ship",
+    "standardize",
+    "unify",
+    "simplify",
+    "harden",
+    "secure",
+    "configure",
+    "make",
+    "ensure",
+    "investigate",
+    "research",
+    "track",
+    "integrate",
+    "triage",
+    "prioritize",
+    "align",
+    "match",
+    "keep",
+    "share",
+    "build",
+    "establish",
+    "define",
+    "propose",
+    "republish",
+    "refresh",
+    "resolve",
+    "backfill",
+    "bootstrap",
+    "seed",
+    "scaffold",
+    "normalize",
+    "enrich",
+    "retry",
+    "rework",
+    "redesign",
+    "restructure",
+    "reorganize",
+    "expand",
+    "extend",
+    "catch",
+    "raise",
+    "tune",
+    "calibrate",
+    "validate",
+    "cleanup",
+)
+
+# Markers that mean the heading describes something already done / not to do.
+_NON_ACTIONABLE_MARKERS = (
+    "blocked",
+    "won't do",
+    "wont do",
+    "deferred",
+    "not scoped",
+    "not yet",
+    "future",
+    "done",
+    "completed",
+    "implemented",
+    "no longer",
+    "retired",
+    "removed",
+    "baseline",  # "Ungoogled Chromium (baseline)" = comparison section, not a task
+    "wip",
+    "research log",
+    "reconciliation",
+)
+
+# Status emojis that mark a heading as a status list, not a task.
+_EMOJI_STATUS = ("✅", "❌", "🟡", "📝", "🔴", "🟢", "✔", "☑", "🔜")
+
+
+def _extract_actionable_headings(content: str) -> list[dict]:
+    """Return actionable headings as [{title, context}].
+
+    Rules:
+      - Parse both `## ` (sections) and `### ` (items) headings in order.
+      - Sections whose children are status lists (Recently Completed,
+        Deferred, Research Log, ...) are skipped along with their children.
+      - Sections like "Status: PENDING" are skipped as titles but their
+        children ARE evaluated (those are the pending tasks).
+      - A heading is actionable if it contains an action verb, a priority
+        marker (P0-P3), or a strong action signal (should/needs/missing...),
+        AND does not contain a non-actionable marker (blocked/done/etc).
+      - Short headings (<10 chars) are skipped.
+    """
+    headings = []
+    for match in _re.finditer(r"^(#{2,3})\s+(.*)$", content, _re.MULTILINE):
+        level = len(match.group(1))
+        text = match.group(2).strip()
+        headings.append({"level": level, "text": text})
+
+    # Current ## section name (lowercased) — children inherit its skip state.
+    current_section = ""
+    results: list[dict] = []
+
+    for h in headings:
+        text = h["text"]
+        lowered = text.lower().strip()
+
+        if h["level"] == 2:
+            current_section = lowered
+            if lowered in _SECTION_SKIP_SELF:
+                continue  # skip the title itself; children evaluated below
+            if lowered in _SECTION_SKIP_CHILDREN or any(
+                lowered.startswith(p) for p in _SECTION_PREFIXES
+            ):
+                continue  # skip the title AND its children (state persists)
+            if not _is_actionable(text):
+                continue
+            results.append({"title": text, "context": text})
+            continue
+
+        # ### item — skip if inside a children-skipped section
+        if current_section in _SECTION_SKIP_CHILDREN or any(
+            current_section.startswith(p) for p in _SECTION_PREFIXES
+        ):
+            continue
+        if not _is_actionable(text):
+            continue
+        results.append({"title": text, "context": text})
+
+    return results
+
+
+def _is_actionable(text: str) -> bool:
+    """Decide whether a heading describes something a worker can actually do."""
+    t = text.strip()
+    if len(t) < 10:
+        return False
+    lowered = t.lower()
+
+    # Status emoji → skip (e.g. "✅ Fully Implemented")
+    if any(e in text for e in _EMOJI_STATUS):
+        return False
+
+    # Non-actionable markers (blocked/deferred/done/etc) → skip
+    if any(m in lowered for m in _NON_ACTIONABLE_MARKERS):
+        return False
+
+    # Priority marker (P0/P1/P2/P3) → actionable (e.g. "STDB: republish (P0)")
+    if _re.search(r"\(?\s*p[0-9]\s*\)?", lowered):
+        return True
+
+    # Action verb anywhere in the heading → actionable
+    if any(v in lowered for v in _ACTION_VERBS):
+        return True
+
+    # Strong action signal
+    if any(s in lowered for s in ("should", "needs", "must", "missing", "broken", "fails")):
+        return True
+
+    # Default: plain noun phrases ("Retrieval Quality") are research topics,
+    # not doable tasks — skip to avoid junk.
+    return False
+
+
 async def _generate_improvement_tasks() -> int:
     """When scanners find nothing, generate self-improvement tasks from project files.
 
     Creates tasks from IMPROVEMENTS.md, PERFORMANCE.md, etc. — files that
     contain structured improvement suggestions that aren't in ROADMAP.md.
     Also checks for common quality issues (missing CI, stale docs, etc.).
+
+    CRITICAL: only ACTUALLY ACTIONABLE headings become tasks. The old code
+    created a task for every ``## `` heading, which turned document section
+    headers ("Recently Completed", "Deferred / Blocked", "Status: PENDING",
+    "Summary", "Reference Results") into kanban tasks that workers then
+    burned LLM turns on pointlessly. Structural/status sections and
+    blocked/deferred items are skipped; sub-headings (###) under an
+    actionable section are preferred.
     """
     try:
         from scanners.runner import discover_repos
@@ -134,26 +436,18 @@ async def _generate_improvement_tasks() -> int:
             except Exception:  # noqa: S112
                 continue  # skip unreadable files
 
-            # Parse markdown headings as potential task titles
-            import re
-
-            headings = re.findall(r"^##\s+(.*)", content, re.MULTILINE)
-            for h in headings:
-                h = h.strip()
-                # Skip generic/section headings
-                if not h or len(h) < 10:
-                    continue
-                # Skip headings that look like section headers
-                if h.lower().startswith(("table of", "introduction", "overview", "appendix")):
-                    continue
-                norm = h.strip().lower()
+            for heading in _extract_actionable_headings(content):
+                norm = heading["title"].strip().lower()
                 if norm in existing_titles:
                     continue
                 result = await _api_post(
                     "/api/tasks",
                     {
-                        "title": h[:200],
-                        "description": f"Auto-detected from {imp_file} in {repo_name}",
+                        "title": heading["title"][:200],
+                        "description": (
+                            f"Auto-detected from {imp_file} in {repo_name}. "
+                            f"Context: {heading['context'][:300]}"
+                        ),
                         "priority": 2,
                         "repo": repo_name,
                         "roadmap_item": f"Improvement: {imp_file}",
@@ -162,7 +456,7 @@ async def _generate_improvement_tasks() -> int:
                 if result:
                     existing_titles.add(norm)
                     created += 1
-                    print(f"[scheduler:improvement]  ✨ Created improvement: {h[:60]}...")
+                    print(f"[scheduler:improvement]  ✨ Created improvement: {heading['title'][:60]}...")
 
         # Check for stale CI — if repo has .github/workflows but no CI badge
         ci_dir = os.path.join(repo_path, ".github", "workflows")

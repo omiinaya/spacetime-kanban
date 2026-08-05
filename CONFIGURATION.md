@@ -66,6 +66,9 @@ Subprocess workers for executing tasks.
 | `MAX_WORKERS` | `8` | Maximum number of worker subprocesses. |
 | `STALE_MINUTES` | `45` | Minutes after which an `in_progress` task is considered stale. |
 | `MAX_MEMORY_PCT` | `80` | Maximum system memory percentage before worker dispatch is throttled. |
+| `KANBAN_WORKTREE` | `1` | Isolate each task worker in its own git worktree (`~/<repo>-kanban-<task-id>`) so concurrent workers don't collide in the main clone. Set `0` to work directly in the main clone. |
+| `KANBAN_VERIFY_TESTS` | `1` | After an LLM worker reports completion, run the repo's test suite and only mark the task done if it passes. Set `0` to skip verification. |
+| `KANBAN_VERIFY_TESTS_TIMEOUT` | `180` | Max seconds to run the test-suite verification before giving up (a timeout is not counted as a failure). |
 | `KANBAN_API` | `http://localhost:8727` | Internal API URL used by the MCP server and workers to reach the kanban backend. |
 | `KANBAN_LLM_WORKER` | *(empty)* | Command for launching LLM-driven task workers. |
 
