@@ -37,7 +37,6 @@ from webhook_dispatcher import (
     EVENT_BOARD_DEAD,
     EVENT_BOARD_STALLED,
     EVENT_METRICS_SNAPSHOT,
-    EVENT_WORKER_STALE,
     fire_event,
 )
 
@@ -105,11 +104,7 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-# ── Stale-worker alert dedup ────────────────────────────────
-# Prevents webhook spam: each task ID gets at most 1 stale alert
-# per STALE_ALERT_COOLDOWN_MS (6 hours by default).
-# Dict is cleared of entries older than 2x cooldown on each check.
-STALE_ALERT_COOLDOWN_MS = 6 * 3600_000  # 6 hours in milliseconds
+# ── Worker process management ───────────────────────────────────────
 
 # Fountain log path — module constant so tests can redirect it away from
 # the production log file.
@@ -121,22 +116,6 @@ FOUNTAIN_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fo
 # cap made the fountain's raised API timeout pointless: the child was
 # killed before a single slow board query could complete.
 FOUNTAIN_SUBPROCESS_TIMEOUT = 120
-
-_stale_alerted_tasks: dict[str, float] = {}
-
-
-def _should_alert_stale(tid: str, now_ms: int) -> bool:
-    """Check if we can fire a stale alert (dedup + periodic cleanup)."""
-    last = _stale_alerted_tasks.get(tid)
-    if last and (now_ms - last) < STALE_ALERT_COOLDOWN_MS:
-        return False
-    _stale_alerted_tasks[tid] = now_ms
-    # Periodic cleanup: purge entries older than 2x cooldown
-    cutoff = now_ms - STALE_ALERT_COOLDOWN_MS * 2
-    stale_keys = [k for k, v in _stale_alerted_tasks.items() if v < cutoff]
-    for k in stale_keys:
-        del _stale_alerted_tasks[k]
-    return True
 
 
 # ── Worker process management ───────────────────────────────────────
@@ -426,7 +405,12 @@ async def stale_watcher(interval: int):
     Runs every `interval` seconds. Checks tasks assigned to our agent_id.
     Releases if:
       - claim_age > stale_minutes AND no heartbeat in >10min
-      - claim_age > 60min (force release regardless)
+      - claim_age > 60min AND no live worker process (nothing is running)
+
+    Never releases a worker that is alive AND heartbeating — LLM workers
+    legitimately run up to KANBAN_LLM_TIMEOUT (60 min default). Stale
+    workers are auto-fixed silently (kill process + unclaim); no webhook
+    alert is fired.
     """
     while True:
         try:
@@ -493,23 +477,37 @@ async def stale_watcher(interval: int):
 
                 hb_age_min = (now_ms - hb_ts) / 60000 if hb_ts else 999
 
-                force_release = claim_age_min > 60
+                # A live worker with a fresh heartbeat is NOT stale — never
+                # release it, no matter how old the claim is. LLM workers
+                # legitimately run up to KANBAN_LLM_TIMEOUT (60 min default);
+                # force-releasing a still-beating worker made the dispatcher
+                # spawn a SECOND worker on the same task (duplicate work).
+                proc = _worker_processes.get(tid)
+                worker_alive = proc is not None and proc.poll() is None
+                hb_fresh = hb_ts is not None and hb_age_min <= 10
+
+                if worker_alive and hb_fresh:
+                    continue
+
+                force_release = claim_age_min > 60 and not worker_alive
                 stale_release = claim_age_min > settings.stale_minutes and (
                     hb_ts is None or hb_age_min > 10
                 )
 
                 if force_release or stale_release:
-                    # Fire webhook before unclaiming (dedup: max 1 alert / 6h per task)
-                    if stale_release and _should_alert_stale(tid, now_ms):
-                        await fire_event(
-                            EVENT_WORKER_STALE,
-                            {
-                                "task_id": tid,
-                                "title": t.get("title", "?")[:80],
-                                "age_minutes": claim_age_min,
-                                "repo": t.get("repo", "?"),
-                            },
+                    # Auto-fix silently: kill any lingering worker process
+                    # FIRST so it can't keep working on a task that's about
+                    # to be unclaimed (the old code unclaimed but left the
+                    # worker running → duplicate work when the dispatcher
+                    # re-claimed the task). No webhook alert — the user
+                    # explicitly does not want to be notified about stale
+                    # workers; the fix is automatic.
+                    if worker_alive:
+                        print(
+                            f"[scheduler:stale] Killing stale worker for "
+                            f"{tid[:20]} (age={claim_age_min:.0f}m)"
                         )
+                        _kill_worker(tid)
 
                     # Unclaim via bulk-retry to also reset fail_count
                     result = await _api_post(
@@ -518,8 +516,6 @@ async def stale_watcher(interval: int):
                     )
                     if result and result.get("retried", 0) > 0:
                         unclaimed += 1
-                        # Remove from dedup so re-claimed tasks can alert again
-                        _stale_alerted_tasks.pop(tid, None)
 
             if unclaimed > 0:
                 print(f"[scheduler:stale] Released {unclaimed} stale tasks")
