@@ -90,7 +90,7 @@ class TestDismissReason:
             "title": "Split 2 large source file(s) in sample-repo-n",
             "description": "Recommend splitting",
             "fail_reason": (
-                "/home/user/sample-repo-n/server/proxy/src/admin_handlers.rs "
+                "/home/test/sample-repo-n/server/proxy/src/admin_handlers.rs "
                 "only has one top-level item — nothing to extract"
             ),
         }
@@ -117,9 +117,9 @@ class TestDismissReason:
             "title": "Split 5 large source file(s) in spacetimedb-kanban (5/5)",
             "description": (
                 "Found 689 large source file(s) ≥300 lines. Recommend splitting:\n"
-                "  - /home/user/spacetimedb-kanban/server/.venv/lib/python3.11/"
+                "  - /home/test/spacetimedb-kanban/server/.venv/lib/python3.11/"
                 "site-packages/idna/uts46data.py (16896 lines)\n"
-                "  - /home/user/spacetimedb-kanban/server/.venv/lib/python3.11/"
+                "  - /home/test/spacetimedb-kanban/server/.venv/lib/python3.11/"
                 "site-packages/mypy/checker.py (10012 lines)"
             ),
             "fail_reason": "",
