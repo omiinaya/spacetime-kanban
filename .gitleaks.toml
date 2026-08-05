@@ -1,0 +1,15 @@
+# Gitleaks configuration for spacetime-kanban.
+#
+# The ONLY findings this allowlist covers are intentional documentation
+# placeholders in API.md (example API-key IDs and the X-API-Key header value
+# shown in curl examples). No real credentials are ever committed here.
+[allowlist]
+description = "Intentional API.md documentation placeholders (example values only)"
+paths = [
+    "API.md",
+]
+regexes = [
+    "YOUR_API_KEY",
+    "apikey-example-01",
+    "sha256\\$",
+]
