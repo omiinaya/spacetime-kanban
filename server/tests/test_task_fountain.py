@@ -327,18 +327,19 @@ def test_fetch_board_state_none_when_any_repo_fails(mock_urlopen):
     the run must abort rather than create with an incomplete dedup set."""
     import _task_fountain as m
 
-    calls = 0
+    with patch.object(m, "REPOS", TEST_REPOS[:2]):
+        calls = 0
 
-    def side_effect(url, *args, **kwargs):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            return _make_mock_urlopen_response([{"title": "From First Repo"}])
-        return None  # second repo query fails (timeout/HTTP error)
+        def side_effect(url, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return _make_mock_urlopen_response([{"title": "From First Repo"}])
+            return None  # second repo query fails (timeout/HTTP error)
 
-    mock_urlopen.side_effect = side_effect
+        mock_urlopen.side_effect = side_effect
 
-    result = m.fetch_board_state()
+        result = m.fetch_board_state()
 
     assert result is None
 
@@ -661,13 +662,14 @@ def test_run_skips_health_scanner_when_board_healthy():
     import _task_fountain as m
 
     # 9 repos × 1 available task = 9 >= 3 → board healthy
-    healthy_repos = [[{"title": f"Task {i}", "status": "available"}] for i in range(len(m.REPOS))]
+    healthy_repos = [[{"title": f"Task {i}", "status": "available"}] for i in range(len(TEST_REPOS))]
     mock_urlopen = MagicMock(side_effect=[_make_mock_urlopen_response(r) for r in healthy_repos])
 
     with ExitStack() as stack:
+        stack.enter_context(patch.object(m, "REPOS", list(TEST_REPOS)))
         stack.enter_context(patch("_task_fountain.urllib.request.urlopen", mock_urlopen))
         stack.enter_context(
-            patch("_task_fountain.os.path.isdir", side_effect=[True] * len(m.REPOS))
+            patch("_task_fountain.os.path.isdir", side_effect=[True] * len(TEST_REPOS))
         )
         mock_post = stack.enter_context(patch.object(m, "api_post"))
         stack.enter_context(patch("_task_fountain.SCANNERS", [m.scan_board_health]))
