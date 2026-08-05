@@ -1,5 +1,5 @@
 """
-Authentication dependency for spacetimedb-kanban.
+Authentication dependency for spacetime-kanban.
 
 Extracted from shared.py to keep concerns separated.
 """

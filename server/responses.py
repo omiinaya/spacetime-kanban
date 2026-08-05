@@ -1,5 +1,5 @@
 """
-Response formatting helpers for spacetimedb-kanban.
+Response formatting helpers for spacetime-kanban.
 
 Converts STDB row dicts into Pydantic models.
 Uses deferred imports to avoid circular dependencies with shared.py.

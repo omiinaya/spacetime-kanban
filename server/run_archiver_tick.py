@@ -9,6 +9,7 @@ Usage: python3 run_archiver_tick.py
 """
 
 import asyncio
+import contextlib
 from unittest.mock import patch
 
 import scheduler
@@ -26,11 +27,11 @@ async def fake_sleep(interval: float):
 
 
 async def main():
-    with patch.object(scheduler.asyncio, "sleep", new=fake_sleep):
-        try:
-            await scheduler.task_archiver(1)
-        except asyncio.CancelledError:
-            pass
+    with (
+        patch.object(scheduler.asyncio, "sleep", new=fake_sleep),
+        contextlib.suppress(asyncio.CancelledError),
+    ):
+        await scheduler.task_archiver(1)
     print("archiver tick done")
 
 

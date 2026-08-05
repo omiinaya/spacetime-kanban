@@ -1140,7 +1140,7 @@ async def self_improver(interval: int):
                 if stale:
                     print(f"[scheduler:improver] {len(stale)} task(s) in_progress >30min")
                     # Tag the ORIGINAL task's repo and dedupe — the old code
-                    # always filed "[Stale]" tasks under spacetimedb-kanban
+                    # always filed "[Stale]" tasks under spacetime-kanban
                     # (wrong repo) and re-created a new task every run for
                     # the same stuck task.
                     existing_refs = set()
@@ -1164,7 +1164,7 @@ async def self_improver(interval: int):
                                 f"without heartbeat for >30min"
                             ),
                             priority=2,
-                            repo=t.get("repo") or "spacetimedb-kanban",
+                            repo=t.get("repo") or "spacetime-kanban",
                         )
 
             # Check cycling tasks (high fail_count)
@@ -1255,7 +1255,7 @@ def _save_improver_status(data: dict) -> None:
 
 
 async def _create_improvement_task(
-    title: str, description: str, priority: int = 3, repo: str = "spacetimedb-kanban"
+    title: str, description: str, priority: int = 3, repo: str = "spacetime-kanban"
 ):
     """Create an improvement task on the kanban board."""
     result = await _api_post(

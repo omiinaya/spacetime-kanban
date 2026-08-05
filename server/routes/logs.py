@@ -1,4 +1,4 @@
-"""Log endpoints for spacetimedb-kanban."""
+"""Log endpoints for spacetime-kanban."""
 
 from fastapi import APIRouter
 

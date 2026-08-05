@@ -57,12 +57,12 @@ async def test_webhook(webhook_id: str):
         raise HTTPException(404, "Webhook not found")
     test_task = {
         "id": "test_ping",
-        "title": "🔔 Test notification from spacetimedb-kanban",
+        "title": "🔔 Test notification from spacetime-kanban",
         "description": "This is a test event to verify your webhook configuration.",
         "priority": 0,
         "status": "available",
         "assigned_to": None,
-        "repo": "spacetimedb-kanban",
+        "repo": "spacetime-kanban",
         "branch": None,
         "roadmap_item": "Integration Testing",
         "created_by": "webhook-test",

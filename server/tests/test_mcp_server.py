@@ -1000,7 +1000,7 @@ class TestToolRegistration:
         assert app is not None
 
     def test_app_name(self):
-        assert app.name == "spacetimedb-kanban"
+        assert app.name == "spacetime-kanban"
 
     def test_all_tools_registered(self):
         """Verify tool functions are registered via add_tool()."""

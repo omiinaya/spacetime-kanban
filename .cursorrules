@@ -1,4 +1,4 @@
-You are an AI coding assistant working on SpacetimedbKanban.
+You are an AI coding assistant working on SpacetimeKanban.
 
 ## Stack
 FastAPI (Python) + React 19 + shadcn + SpacetimeDB

@@ -1,4 +1,4 @@
-"""End-to-end HTTP integration tests for spacetimedb-kanban.
+"""End-to-end HTTP integration tests for spacetime-kanban.
 
 These tests hit the REAL server at http://localhost:8727 and require a
 running backend + SpacetimeDB instance with the kanban module published.

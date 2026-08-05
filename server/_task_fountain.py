@@ -48,12 +48,10 @@ MIN_AVAILABLE_TASKS = 3
 # Repos the fountain scans. Override with KANBAN_REPOS (comma-separated
 # repo names) to target your own projects. Default: this repo itself only —
 # no assumptions about sibling projects on the host.
-_DEFAULT_REPOS = ["spacetimedb-kanban"]
-REPOS = [
-    r.strip()
-    for r in os.environ.get("KANBAN_REPOS", "").split(",")
-    if r.strip()
-] or list(_DEFAULT_REPOS)
+_DEFAULT_REPOS = ["spacetime-kanban"]
+REPOS = [r.strip() for r in os.environ.get("KANBAN_REPOS", "").split(",") if r.strip()] or list(
+    _DEFAULT_REPOS
+)
 
 HOME = os.path.expanduser("~")
 

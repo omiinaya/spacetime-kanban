@@ -10,7 +10,8 @@ All configuration is via environment variables. The project uses `python-dotenv`
 |---|---|---|
 | `SERVER_PORT` | `8727` | HTTP port for the FastAPI server. |
 | `CORS_ORIGIN` | `http://localhost:4444` | CORS origin for the frontend. Vite dev server runs on `:4444`; production serves the frontend from the backend. |
-| `API_KEY` | *(empty)* | If set, mutation endpoints require this API key via an `X-API-Key` header. Empty means no authentication is required. |
+| `API_KEY` | *(empty)* | If set, mutation endpoints require this API key via an `X-API-Key` header. Empty means no authentication is required (demo mode — not for production). |
+| `KANBAN_REPOS` | `spacetime-kanban` | Comma-separated list of repos the task fountain and seed scripts operate on. Overrides the built-in default of just this repo. |
 
 ---
 
@@ -41,13 +42,14 @@ The scheduler runs background loops for task dispatching, health checks, metrics
 | Variable | Default | Description |
 |---|---|---|
 | `SCHEDULER_ENABLED` | `true` | Master switch for all background scheduler loops. Set to `false` to disable all scheduled jobs. |
-| `DISPATCHER_INTERVAL_SECONDS` | `30` | How often the task dispatcher checks for work to assign. |
+| `DISPATCHER_INTERVAL_SECONDS` | `5` | How often the task dispatcher checks for work to assign. |
 | `STALE_CHECK_INTERVAL_SECONDS` | `120` | How often to check for stuck / stale tasks. |
-| `DEAD_BOARD_INTERVAL_SECONDS` | `900` | Board health check interval. Auto-restarts the board if it is detected as dead. |
+| `DEAD_BOARD_INTERVAL_SECONDS` | `3600` | Board health check interval. Auto-restarts the board if it is detected as dead. |
 | `TEMPLATE_INTERVAL_SECONDS` | `900` | Task template processing interval. |
 | `METRICS_INTERVAL_SECONDS` | `900` | Metrics snapshot collection interval. |
-| `SCANNER_INTERVAL_SECONDS` | `21600` | Repository improvement scanner interval. Set to `0` to disable. |
+| `SCANNER_INTERVAL_SECONDS` | `1800` | Repository improvement scanner interval. Set to `0` to disable. |
 | `IMPROVER_INTERVAL_SECONDS` | `3600` | Self-improvement agent interval. |
+| `REMEDIATOR_INTERVAL_SECONDS` | `3600` | Blocked-task remediation interval (audits + archives stale blocked tasks). |
 
 ---
 
@@ -60,9 +62,9 @@ Subprocess workers for executing tasks.
 | `WORKER_COMMAND` | `python3` | Command used to spawn worker subprocesses. |
 | `WORKER_SCRIPT` | *(empty)* | Path to the worker entry point script. |
 | `WORKER_ARGS` | *(empty)* | Extra arguments passed to the worker command. |
-| `MIN_WORKERS` | `1` | Minimum number of worker subprocesses to keep running. |
-| `MAX_WORKERS` | `3` | Maximum number of worker subprocesses. |
-| `STALE_MINUTES` | `35` | Minutes after which an `in_progress` task is considered stale. |
+| `MIN_WORKERS` | `2` | Minimum number of worker subprocesses to keep running. |
+| `MAX_WORKERS` | `8` | Maximum number of worker subprocesses. |
+| `STALE_MINUTES` | `45` | Minutes after which an `in_progress` task is considered stale. |
 | `MAX_MEMORY_PCT` | `80` | Maximum system memory percentage before worker dispatch is throttled. |
 | `KANBAN_API` | `http://localhost:8727` | Internal API URL used by the MCP server and workers to reach the kanban backend. |
 | `KANBAN_LLM_WORKER` | *(empty)* | Command for launching LLM-driven task workers. |
@@ -98,14 +100,13 @@ When running via `docker-compose`, the following volumes are used:
 
 | Volume | Mount point | Purpose |
 |---|---|---|
-| `spacetimedb_data` | `/var/spacetime` | Persists SpacetimeDB data across restarts. |
-| `kanban_data` | `/app/data` | Persists kanban application data (SQLite, uploads, etc.). |
+| `stdb-data` | `/var/spacetime` | Persists SpacetimeDB data across restarts. |
 
 The `docker-compose.yml` typically exposes:
 
 - **`8727`** — FastAPI server (mapped to host port `8727`).
 - **`3001`** — SpacetimeDB HTTP API (mapped to host port `3001`).
-- **`3000`** — SpacetimeDB WebSocket (mapped to host port `3000`).
+- **`3002`** — SpacetimeDB WebSocket (mapped to host port `3002`).
 
 Example `docker-compose` environment block:
 
@@ -120,19 +121,20 @@ environment:
   - API_KEY=
   - AGENT_ID=hermes
   - SCHEDULER_ENABLED=true
-  - DISPATCHER_INTERVAL_SECONDS=30
+  - DISPATCHER_INTERVAL_SECONDS=5
   - STALE_CHECK_INTERVAL_SECONDS=120
-  - DEAD_BOARD_INTERVAL_SECONDS=900
+  - DEAD_BOARD_INTERVAL_SECONDS=3600
   - TEMPLATE_INTERVAL_SECONDS=900
   - METRICS_INTERVAL_SECONDS=900
-  - SCANNER_INTERVAL_SECONDS=21600
+  - SCANNER_INTERVAL_SECONDS=1800
   - IMPROVER_INTERVAL_SECONDS=3600
+  - REMEDIATOR_INTERVAL_SECONDS=3600
   - WORKER_COMMAND=python3
   - WORKER_SCRIPT=
   - WORKER_ARGS=
-  - MIN_WORKERS=1
-  - MAX_WORKERS=3
-  - STALE_MINUTES=35
+  - MIN_WORKERS=2
+  - MAX_WORKERS=8
+  - STALE_MINUTES=45
   - MAX_MEMORY_PCT=80
   - WEBHOOK_DEFAULT_URL=
   - WEBHOOK_MAX_RETRIES=3

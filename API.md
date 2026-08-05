@@ -1,4 +1,4 @@
-# SpacetimeDB Kanban — REST API Reference
+# spacetime-kanban — REST API Reference
 
 > **Base URL:** `http://<host>:8727/api`
 > **All endpoints return JSON.**
@@ -47,7 +47,7 @@ Most task endpoints return the `TaskOut` object:
   "priority": 0,
   "status": "available",
   "assigned_to": null,
-  "repo": "sample-repo-p",
+  "repo": "my-repo",
   "branch": null,
   "roadmap_item": "Phase 3 — DNS Resilience",
   "created_by": "web-user",
@@ -137,7 +137,7 @@ List tasks with filtering.
 
 **Example:**
 ```bash
-curl 'http://localhost:8727/api/tasks?status=available&repo=sample-repo-p&limit=10'
+curl 'http://localhost:8727/api/tasks?status=available&repo=my-repo&limit=10'
 ```
 
 **Response:** `200` — array of [TaskOut](#1-task-object-schema)
@@ -154,7 +154,7 @@ Create a new task.
   "title": "Add DNS-over-HTTPS fallback",
   "description": "When upstream fails, fall back to DoH",
   "priority": 0,
-  "repo": "sample-repo-p",
+  "repo": "my-repo",
   "roadmap_item": "Phase 3 — DNS Resilience",
   "required_skills": "dns,networking",
   "created_by": "web-user",
@@ -189,7 +189,7 @@ Create a new task.
 ```bash
 curl -X POST http://localhost:8727/api/tasks \
   -H 'Content-Type: application/json' \
-  -d '{"title":"Implement DoH fallback","priority":0,"repo":"sample-repo-p"}'
+  -d '{"title":"Implement DoH fallback","priority":0,"repo":"my-repo"}'
 ```
 
 **Response:** `201` — [TaskOut](#1-task-object-schema)
@@ -727,7 +727,7 @@ Delete ALL tasks from the database.
 
 ---
 
-#### `GET /api/tasks/export?format=json&status=done&repo=sample-repo-p`
+#### `GET /api/tasks/export?format=json&status=done&repo=my-repo`
 Export tasks as JSON or CSV with optional filters.
 
 **Query Parameters:**
@@ -740,7 +740,7 @@ Export tasks as JSON or CSV with optional filters.
 
 **Example:**
 ```bash
-curl 'http://localhost:8727/api/tasks/export?format=csv&repo=sample-repo-p' -o tasks.csv
+curl 'http://localhost:8727/api/tasks/export?format=csv&repo=my-repo' -o tasks.csv
 ```
 
 **Response:** `200` — Array (JSON) or CSV file download.
@@ -898,7 +898,7 @@ curl http://localhost:8727/api/agents
     "id": "claude-vscode",
     "host": "dev-workstation",
     "capabilities": "python,go,terraform",
-    "repo_focus": "sample-repo-p",
+    "repo_focus": "my-repo",
     "current_task_id": "task_1748397912_abc12345",
     "status": "online",
     "last_heartbeat": 1748397912000,
@@ -926,13 +926,13 @@ curl http://localhost:8727/api/agents/health
     "host": "dev-workstation",
     "status": "online",
     "capabilities": "python,go",
-    "repo_focus": "sample-repo-p",
+    "repo_focus": "my-repo",
     "current_task": {
       "id": "task_1748397912_abc12345",
       "title": "Implement DoH fallback",
       "status": "in_progress",
       "priority": 0,
-      "repo": "sample-repo-p"
+      "repo": "my-repo"
     },
     "last_heartbeat": 1748397912000,
     "heartbeat_age_seconds": 30,
@@ -969,7 +969,7 @@ Register (or re-connect) an agent in the swarm.
   "agent_id": "claude-vscode",
   "host": "dev-workstation",
   "capabilities": "python,go,terraform",
-  "repo_focus": "sample-repo-p"
+  "repo_focus": "my-repo"
 }
 ```
 
@@ -1027,7 +1027,7 @@ Update an agent's capabilities and repo focus.
 ```json
 {
   "capabilities": "python,go,rust",
-  "repo_focus": "sample-repo-p"
+  "repo_focus": "my-repo"
 }
 ```
 
@@ -1067,7 +1067,7 @@ curl http://localhost:8727/api/analytics/overview
   "completed_week": 18,
   "total_done": 78,
   "repos": {
-    "sample-repo-p": {
+    "my-repo": {
       "total": 62,
       "done": 35,
       "inProgress": 5,
@@ -1139,7 +1139,7 @@ Average cycle time (time from creation to completion) per repo.
 ```json
 {
   "repos": {
-    "sample-repo-p": {"avg_hours": 8.2, "task_count": 35},
+    "my-repo": {"avg_hours": 8.2, "task_count": 35},
     "spacetime-web": {"avg_hours": 12.1, "task_count": 22}
   }
 }
@@ -1198,7 +1198,7 @@ Cross-project comparison data.
 {
   "projects": [
     {
-      "repo": "sample-repo-p",
+      "repo": "my-repo",
       "total": 62,
       "done": 35,
       "completion_pct": 56.5
@@ -1552,7 +1552,7 @@ curl http://localhost:8727/api/projects
 ```json
 [
   {
-    "id": "sample-repo-p",
+    "id": "my-repo",
     "name": "Spacetime AB",
     "description": "Main project repository",
     "color": "#0ea5e9",
@@ -1642,12 +1642,12 @@ curl 'http://localhost:8727/api/suggest-by-project?limit=5'
 
 ## 9. GitHub Issues
 
-### `GET /api/issues?repo=sample-repo-p`
+### `GET /api/issues?repo=my-repo`
 List all kanban-task ⟷ GitHub-issue links, optionally filtered by repo.
 
 **Example:**
 ```bash
-curl 'http://localhost:8727/api/issues?repo=sample-repo-p'
+curl 'http://localhost:8727/api/issues?repo=my-repo'
 ```
 
 **Response:** `200` — array of link objects:
@@ -1656,10 +1656,10 @@ curl 'http://localhost:8727/api/issues?repo=sample-repo-p'
 [
   {
     "task_id": "task_1748397912_abc12345",
-    "repo": "sample-repo-p",
+    "repo": "my-repo",
     "issue_number": 42,
-    "issue_url": "https://api.github.com/repos/sample-repo-p/issues/42",
-    "html_url": "https://github.com/sample-repo-p/issues/42",
+    "issue_url": "https://api.github.com/repos/my-repo/issues/42",
+    "html_url": "https://github.com/my-repo/issues/42",
     "linked_at": 1748397912
   }
 ]
@@ -1683,7 +1683,7 @@ Link a kanban task to an existing GitHub issue.
 ```json
 {
   "task_id": "task_1748397912_abc12345",
-  "repo": "sample-repo-p",
+  "repo": "my-repo",
   "issue_number": 42
 }
 ```
@@ -1700,7 +1700,7 @@ Link a kanban task to an existing GitHub issue.
 ```bash
 curl -X POST http://localhost:8727/api/issues/link \
   -H 'Content-Type: application/json' \
-  -d '{"task_id":"task_abc","repo":"sample-repo-p","issue_number":42}'
+  -d '{"task_id":"task_abc","repo":"my-repo","issue_number":42}'
 ```
 
 **Response:** `200` — `{"status": "linked", ...}`
@@ -1734,7 +1734,7 @@ Create a GitHub issue from a kanban task and auto-link them.
 ```json
 {
   "task_id": "task_1748397912_abc12345",
-  "repo": "sample-repo-p",
+  "repo": "my-repo",
   "labels": "bug,automation",
   "assignee": "someuser"
 }
@@ -1767,6 +1767,11 @@ GitHub webhook receiver — listens for issue events and syncs status back to ka
 
 ## 10. API Keys
 
+> **Auth:** All API-key endpoints require authentication **when `API_KEY` is set** (send via `X-API-Key` header).
+> With `API_KEY` unset (demo mode) they are open, like the rest of the API. `GET /api/api-keys` is
+> always gated on the same check because it exposes key metadata (names, scopes, `created_by`).
+> Keys are stored as **SHA-256 hashes** only — never plaintext.
+
 ### `GET /api/api-keys`
 List all API keys.
 
@@ -1783,7 +1788,7 @@ curl http://localhost:8727/api/api-keys
     "id": "apikey-example-01",
     "key_hash": "sha256$...",
     "name": "CI Pipeline",
-    "repo_scope": "sample-repo-p",
+    "repo_scope": "my-repo",
     "permissions": "read",
     "created_by": "web-user",
     "created_at": 1748397912000,
@@ -1804,7 +1809,7 @@ Create a new API key.
 {
   "key_hash": "sha256$...",
   "name": "CI Pipeline",
-  "repo_scope": "sample-repo-p",
+  "repo_scope": "my-repo",
   "permissions": "read",
   "created_by": "web-user"
 }
@@ -1849,7 +1854,7 @@ List all task templates (recurring task definitions with cron schedules).
     "title": "Weekly Security Scan",
     "description": "Run vulnerability scan on all repos",
     "priority": 1,
-    "repo": "sample-repo-p",
+    "repo": "my-repo",
     "roadmap_item": "Security",
     "required_skills": "security",
     "cron_schedule": "0 8 * * 1",
@@ -1873,7 +1878,7 @@ Create a new task template.
   "title": "Weekly Security Scan",
   "description": "Run vulnerability scan on all repos",
   "priority": 1,
-  "repo": "sample-repo-p",
+  "repo": "my-repo",
   "roadmap_item": "Security",
   "required_skills": "security",
   "cron_schedule": "0 8 * * 1",
@@ -2186,7 +2191,7 @@ Parse ROADMAP.md content and bulk-create tasks from unchecked checklist items.
 ```json
 {
   "content": "## Phase 1 — Foundation\n- [ ] Set up CI pipeline\n- [ ] Configure monitoring\n- [x] Deploy initial version\n\n## Phase 2 — Features\n- [ ] Add user auth\n",
-  "repo": "sample-repo-p",
+  "repo": "my-repo",
   "created_by": "roadmap-import"
 }
 ```
@@ -2212,7 +2217,7 @@ curl -X POST http://localhost:8727/api/roadmap/import \
 {
   "status": "imported",
   "task_count": 2,
-  "repo": "sample-repo-p",
+  "repo": "my-repo",
   "phases_found": ["Phase 1 — Foundation"]
 }
 ```

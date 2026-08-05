@@ -1,4 +1,4 @@
-"""Agent endpoints for spacetimedb-kanban."""
+"""Agent endpoints for spacetime-kanban."""
 
 import time
 

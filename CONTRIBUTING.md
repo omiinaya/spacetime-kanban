@@ -1,4 +1,4 @@
-# Contributing to spacetimedb-kanban
+# Contributing to spacetime-kanban
 
 Thank you for your interest! This is an atomic multi-agent kanban board built on SpacetimeDB — a shared task coordination system for AI coding agents.
 
@@ -14,8 +14,8 @@ Thank you for your interest! This is an atomic multi-agent kanban board built on
 ### Development Setup
 
 ```bash
-git clone https://github.com/omiinaya/spacetimedb-kanban.git
-cd spacetimedb-kanban
+git clone https://github.com/omiinaya/spacetime-kanban.git
+cd spacetime-kanban
 
 # ── Backend ──
 cd server
@@ -33,7 +33,7 @@ npm run dev                 # Vite dev server on :4444 (hot-reload)
 # ── SpacetimeDB (Docker) ──
 cd ..                      # project root
 docker compose up -d spacetime   # start STDB only
-spacetime publish spacetimedb-kanban -y  # publish WASM module from server/
+make publish-stdb          # build + publish WASM module to local STDB
 ```
 
 For full Docker setup (STDB + backend):
@@ -44,7 +44,7 @@ docker compose up -d        # starts both services
 ## Project Structure
 
 ```
-spacetimedb-kanban/
+spacetime-kanban/
 ├── server/               # Python FastAPI backend
 │   ├── main.py           # App entry point, static file serving
 │   ├── config.py         # Pydantic settings (all env vars)
@@ -53,13 +53,12 @@ spacetimedb-kanban/
 │   ├── workers/          # Worker subprocess management
 │   ├── mcp_server.py     # MCP stdio server (36 tools)
 │   ├── issue_sync.py     # GitHub issue sync logic
-│   ├── sessions/         # Session management
 │   ├── scanners/         # Repo improvement scanners
-│   └── tests/            # Test suite (449 tests)
+│   └── tests/            # Test suite (1,600 tests)
 ├── web/                  # React + Vite + shadcn frontend
 │   ├── src/pages/        # Page components (14 pages)
 │   ├── src/components/   # Shared UI components (skeletons, columns, etc.)
-│   └── src/__tests__/    # Vitest test suite (188 tests)
+│   └── src/__tests__/    # Vitest test suite (194 tests)
 ├── docker-compose.yml    # STDB + backend orchestration
 ├── Dockerfile            # Multi-stage build (frontend + backend)
 └── bin/                  # CLI tools
@@ -91,7 +90,7 @@ python main.py                                   # :8727
 ```bash
 cd web
 npm run dev            # Vite dev :4444 (hot-reload, proxy to :8727)
-npm run test           # Vitest (188 tests)
+npm run test           # Vitest (194 tests)
 npx tsc --noEmit       # Type check
 npm run build          # Production build -> dist/
 ```
@@ -102,7 +101,7 @@ npm run build          # Production build -> dist/
 cd server/spacetimedb
 cargo check
 cargo clippy -- -D warnings
-spacetime publish spacetimedb-kanban -y   # publish module
+make publish-stdb      # build + publish module to local STDB
 ```
 
 ### Quality Gates (run before pushing)

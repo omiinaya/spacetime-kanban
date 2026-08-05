@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="spacetimedb-kanban",
+    title="spacetime-kanban",
     version="0.1.0",
     lifespan=lifespan,
     docs_url="/docs",

@@ -3,7 +3,7 @@ version: "3.9"
 services:
   spacetime:
     image: spacetimedb/spacetimedb:latest
-    container_name: spacetimedb-kanban-db
+    container_name: spacetime-kanban-db
     ports:
       - "3001:3001"  # HTTP API
       - "3002:3002"  # WebSocket (STDB subscriptions)
@@ -18,7 +18,7 @@ services:
 
   backend:
     build: .
-    container_name: spacetimedb-kanban-backend
+    container_name: spacetime-kanban-backend
     ports:
       - "8727:8727"  # FastAPI server
     environment:

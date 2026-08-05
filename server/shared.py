@@ -1,5 +1,5 @@
 """
-Shared service helpers, Pydantic models, and auth for spacetimedb-kanban.
+Shared service helpers, Pydantic models, and auth for spacetime-kanban.
 
 Originally extracted from main.py. Imported by both main.py and routes/*.py.
 """

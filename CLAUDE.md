@@ -4,11 +4,11 @@
 
 This project uses a **shared kanban board** at `localhost:8727` to coordinate agents working on the same roadmap. Before starting any work, **always check the kanban first**.
 
-The `kanban` CLI tool handles all interactions. Install it from the `spacetimedb-kanban` repo:
+The `kanban` CLI tool handles all interactions. Install it from the `spacetime-kanban` repo:
 
 ```bash
-git clone https://github.com/omiinaya/spacetimedb-kanban.git
-cd spacetimedb-kanban
+git clone https://github.com/omiinaya/spacetime-kanban.git
+cd spacetime-kanban
 bash install.sh
 ```
 
@@ -45,7 +45,7 @@ Validate with: `kanban check-branch`
 
 ## Stale Task Watchdog
 
-The server-side scheduler releases tasks stuck `in_progress` for >35 minutes without a heartbeat. If working on something long-running, send a heartbeat:
+The server-side scheduler releases tasks stuck `in_progress` for >45 minutes (default `STALE_MINUTES`) without a heartbeat. If working on something long-running, send a heartbeat:
 
 ```bash
 curl -s -X POST http://localhost:8727/api/agents/claude-vscode/heartbeat \
@@ -57,7 +57,7 @@ On server restart, `_recover_stale_tasks()` immediately unclaims any `in_progres
 
 ## Full Reference
 
-See `SETUP.md` in the `spacetimedb-kanban` repo for installation, configuration, and hook setup.
+See `SETUP.md` in the `spacetime-kanban` repo for installation, configuration, and hook setup.
 
 ## Agent Identity
 

@@ -1,4 +1,4 @@
-"""Analytics endpoints for spacetimedb-kanban."""
+"""Analytics endpoints for spacetime-kanban."""
 
 import time
 from datetime import UTC, datetime

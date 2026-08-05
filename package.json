@@ -1,5 +1,5 @@
 {
-  "name": "spacetimedb-kanban",
+  "name": "spacetime-kanban",
   "private": true,
   "version": "0.1.0",
   "workspaces": [

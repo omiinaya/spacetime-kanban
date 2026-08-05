@@ -521,7 +521,7 @@ async def kanban_remove_checklist_item(task_id: str, item_id: str) -> str:
 
 # ── Build Tool Registration ──────────────────────────────────────────────
 
-app = FastMCP("spacetimedb-kanban")
+app = FastMCP("spacetime-kanban")
 
 # Register all tools
 for fn in [

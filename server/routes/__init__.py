@@ -1,4 +1,4 @@
-"""Route modules for spacetimedb-kanban API endpoints.
+"""Route modules for spacetime-kanban API endpoints.
 
 Each module exposes a FastAPI APIRouter named `router`.
 Import in main.py as:

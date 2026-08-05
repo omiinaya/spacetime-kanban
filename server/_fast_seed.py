@@ -15,12 +15,10 @@ import urllib.request
 API = os.environ.get("KANBAN_API", "http://localhost:8727")
 # Repos to scan — override with KANBAN_REPOS (comma-separated). Default:
 # this repo itself only; no assumptions about sibling projects on the host.
-_DEFAULT_REPOS = ["spacetimedb-kanban"]
-REPOS = [
-    r.strip()
-    for r in os.environ.get("KANBAN_REPOS", "").split(",")
-    if r.strip()
-] or list(_DEFAULT_REPOS)
+_DEFAULT_REPOS = ["spacetime-kanban"]
+REPOS = [r.strip() for r in os.environ.get("KANBAN_REPOS", "").split(",") if r.strip()] or list(
+    _DEFAULT_REPOS
+)
 HOME = os.path.expanduser("~")
 
 

@@ -8,8 +8,8 @@ async function switchToCardView(page: Page) {
 test.describe('Board Page', () => {
   test('board page loads with correct page title', async ({ page }) => {
     await page.goto('/')
-    // HTML <title> is "spacetimedb-kanban"
-    await expect(page).toHaveTitle('spacetimedb-kanban')
+    // HTML <title> is "spacetime-kanban"
+    await expect(page).toHaveTitle('spacetime-kanban')
     await expect(page.locator('h1')).toContainText('Board')
   })
 

@@ -1,4 +1,4 @@
-"""Task endpoints for spacetimedb-kanban."""
+"""Task endpoints for spacetime-kanban."""
 
 import asyncio
 import contextlib

@@ -1,4 +1,4 @@
-# spacetimedb-kanban Roadmap
+# spacetime-kanban Roadmap
 
 ## Phase 1 — Core Foundation ✅
 - [x] SpacetimeDB module: `tasks` table + atomic claim reducers
@@ -322,7 +322,7 @@
 | **Frontend BoardPage decomposition** | BoardPage was 679 lines | BoardPage now 520 lines, keyboard shortcuts + column reorder extracted to custom hooks |
 | **Frontend WebSocket URL hardcoded** | `ws://localhost:3001` hardcoded in useRealtimeTasks | Configurable via `VITE_STDB_WS_URL` env var |
 | **Frontend duplicate constants** | PRIORITY_LABELS, STATUS_COLORS defined locally in ListView | Imported from shared `constants.ts` |
-| **Frontend version drift** | `"spacetimedb-kanban v0.1"` hardcoded in App.tsx | Dynamic from `import.meta.env.VITE_APP_VERSION` |
+| **Frontend version drift** | `"spacetime-kanban v0.1"` hardcoded in App.tsx | Dynamic from `import.meta.env.VITE_APP_VERSION` |
 | **Frontend Calendar empty state** | Empty grid shown when no tasks have due dates | Descriptive empty state with calendar icon and guidance |
 | **Ruff fix + format** | 158 errors (E501, E741, F401, F841, W293, F541) | 123 remaining (mostly E501 in scanner/worker files — acceptable for utility modules) |
 | **Test count** | 83 tests | 138 tests (+55 new tests) |

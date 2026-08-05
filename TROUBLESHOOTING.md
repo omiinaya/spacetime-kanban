@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Common issues and fixes for SpacetimeDB Kanban.
+Common issues and fixes for spacetime-kanban.
 
 ---
 

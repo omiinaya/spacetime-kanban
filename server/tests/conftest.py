@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for spacetimedb-kanban server tests.
+"""Shared pytest fixtures for spacetime-kanban server tests.
 
 These fixtures mock the SpacetimeDB backend so tests can run without
 a running STDB instance.  The ASGITransport-based client avoids needing

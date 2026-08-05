@@ -1,4 +1,4 @@
-"""GitHub issue and webhook endpoints for spacetimedb-kanban."""
+"""GitHub issue and webhook endpoints for spacetime-kanban."""
 
 import asyncio
 import contextlib

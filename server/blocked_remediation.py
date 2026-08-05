@@ -9,7 +9,7 @@ Why this exists (verified 2026-07-31):
      per-chunk tasks that workers blocked with "No indexable fields found —
      all foreign keys already indexed".
   2. The self_improver's stale-task watcher created NEW "[Stale]" tasks
-     under the wrong repo (spacetimedb-kanban) instead of tagging the
+     under the wrong repo (spacetime-kanban) instead of tagging the
      original task's repo.
   3. The hourly archiver silently no-oped: its 15s HTTP timeout was shorter
      than the board query (30s+ under load), so the fetch returned None and

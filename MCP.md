@@ -1,6 +1,6 @@
-# MCP Server Integration — Spacetimedb Kanban
+# MCP Server Integration — spacetime-kanban
 
-This document describes how the Spacetimedb Kanban MCP server integrates with **Hermes Agent** (and any MCP-compatible client). The MCP server exposes the full kanban system as typed tools so Hermes can create, claim, complete, and manage tasks without shell command overhead.
+This document describes how the spacetime-kanban MCP server integrates with **Hermes Agent** (and any MCP-compatible client). The MCP server exposes the full kanban system as typed tools so Hermes can create, claim, complete, and manage tasks without shell command overhead.
 
 ---
 
@@ -9,10 +9,10 @@ This document describes how the Spacetimedb Kanban MCP server integrates with **
 | Property | Value |
 |---|---|
 | **Server file** | `server/mcp_server.py` |
-| **SDK** | MCP SDK v2 (`MCPServer` + `Tool.from_function()`) |
+| **SDK** | MCP FastMCP API (`mcp.server.fastmcp.FastMCP`, v1.23.x+) |
 | **Transport** | `stdio` (native Hermes MCP client) |
 | **Tools exposed** | **36** (covering tasks, agents, projects, logs, GitHub issues, comments, checklists) |
-| **API backend** | Spacetimedb Kanban REST API (`http://localhost:8727` by default, configurable via `KANBAN_API` env var) |
+| **API backend** | spacetime-kanban REST API (`http://localhost:8727` by default, configurable via `KANBAN_API` env var) |
 | **HTTP library** | `urllib` (not `httpx`) — avoids event-loop conflicts with Hermes' asyncio |
 | **Startup** | Auto-registers Hermes in the swarm on startup |
 
@@ -117,10 +117,10 @@ Add the MCP server to your Hermes `config.yaml`:
 
 ```yaml
 mcp_servers:
-  spacetimedb-kanban:
+  spacetime-kanban:
     command: python
     args:
-      - ~/spacetimedb-kanban/server/mcp_server.py
+      - ~/spacetime-kanban/server/mcp_server.py
     env:
       KANBAN_API: "http://localhost:8727"
 ```
@@ -133,7 +133,7 @@ If you prefer to run the MCP server as a long-lived HTTP service:
 
 ```yaml
 mcp_servers:
-  spacetimedb-kanban:
+  spacetime-kanban:
     url: "http://localhost:8727/mcp/sse"
 ```
 
@@ -145,7 +145,7 @@ If you have the `hermes-agent` skill loaded, you can use its MCP management tool
 
 ```
 # Start the MCP server
-mcp_run name=spacetimedb-kanban command="python" args="~/spacetimedb-kanban/server/mcp_server.py"
+mcp_run name=spacetime-kanban command="python" args="~/spacetime-kanban/server/mcp_server.py"
 
 # Verify it's running
 mcp_list
@@ -187,7 +187,7 @@ mcp_list
     title="Set up CI pipeline",
     description="Configure GitHub Actions for automated testing",
     priority=0,
-    repo="spacetimedb-kanban"
+    repo="spacetime-kanban"
   )
 
 # Create a dependent task
@@ -195,7 +195,7 @@ mcp_list
     title="Add code coverage gates",
     description="Block merges below 80% coverage",
     priority=1,
-    repo="spacetimedb-kanban"
+    repo="spacetime-kanban"
   )
 → kanban_set_dependency(task_id="task_abc...", depends_on="task_def...")
 
@@ -230,7 +230,7 @@ If you've added the MCP server to `config.yaml` but the tools aren't available:
 
 1. **Check the MCP server is reachable** — run it standalone to test:
    ```bash
-   cd ~/spacetimedb-kanban/server
+   cd ~/spacetime-kanban/server
    python mcp_server.py
    ```
    It should start without errors (it will block on stdio, which is expected).
@@ -242,7 +242,7 @@ If you've added the MCP server to `config.yaml` but the tools aren't available:
 
 3. **Kill the MCP process** — Hermes' gateway automatically respawns it:
    ```bash
-   # Find the spacetimedb-kanban MCP process
+   # Find the spacetime-kanban MCP process
    ps aux | grep mcp_server
    # Kill it — Hermes will restart it on next tool invocation
    kill <PID>

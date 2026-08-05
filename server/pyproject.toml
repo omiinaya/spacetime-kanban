@@ -1,5 +1,5 @@
 [project]
-name = "spacetimedb-kanban"
+name = "spacetime-kanban"
 version = "0.1.0"
 description = "Atomic multi-agent kanban on SpacetimeDB — shared task coordination for AI agents"
 requires-python = ">=3.11"
