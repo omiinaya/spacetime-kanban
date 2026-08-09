@@ -20,7 +20,6 @@ Multiple AI agents (or humans) can simultaneously discover, claim, complete, and
 | **Web dashboard** | Full React + shadcn UI — board view, analytics, logs, labels, webhooks, agent health, and more |
 | **Hermes MCP integration** | Expose the entire kanban as MCP tools — Hermes agents claim and complete tasks natively |
 | **GitHub issue sync** | Link kanban tasks to GitHub issues, create issues from tasks, bidirectional status tracking |
-| **Auto-star on install** | On first install, stars the project's GitHub repo automatically (best-effort, once) when a token is configured — opt-out via `AUTO_STAR_ENABLED=false` |
 | **Webhook alerts** | Discord, Slack, Telegram, or custom webhook notifications on state changes |
 | **Branch validation** | Pre-push hooks enforce `feature/kanban-{task_id}` branch naming |
 | **Audit logging** | Every claim, completion, block, and state change is recorded with agent attribution and timestamps |
@@ -108,7 +107,6 @@ spacetime-kanban/
 │   ├── shared.py         # STDB connection helpers
 │   ├── scheduler.py      # All background scheduler loops
 │   ├── mcp_server.py     # MCP stdio server (36 tools)
-│   ├── auto_star.py      # Auto-star project repo on first install
 │   ├── issue_sync.py     # GitHub issue sync logic
 │   ├── routes/           # FastAPI route modules
 │   │   ├── __init__.py

@@ -92,10 +92,8 @@ Integration for issue synchronization.
 
 | Variable | Default | Description |
 |---|---|---|
-| `GITHUB_TOKEN` | *(empty)* | GitHub personal access token for issue sync operations. Also used for auto-star. |
-| `GITHUB_DEFAULT_REPO` | *(empty)* | Default repository for GitHub issue operations (format: `owner/repo`). Also used as the auto-star target. |
-| `AUTO_STAR_ENABLED` | `true` | On first install, automatically star the project's GitHub repo (best-effort, runs once). Skips if you already starred it or own it. Repo is detected from the git origin, falling back to `GITHUB_DEFAULT_REPO`. Set `false` to opt out. |
-
+| `GITHUB_TOKEN` | *(empty)* | GitHub personal access token for issue sync operations. |
+| `GITHUB_DEFAULT_REPO` | *(empty)* | Default repository for GitHub issue operations (format: `owner/repo`). |
 ---
 
 ## Docker Compose
@@ -145,7 +143,6 @@ environment:
   - WEBHOOK_TIMEOUT_SECONDS=10
   - GITHUB_TOKEN=
   - GITHUB_DEFAULT_REPO=
-  - AUTO_STAR_ENABLED=true
   - KANBAN_API=http://localhost:8727
   - KANBAN_LLM_WORKER=
 ```
