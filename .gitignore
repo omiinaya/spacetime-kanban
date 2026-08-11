@@ -11,6 +11,8 @@ __pycache__/
 *.pyc
 .env
 *.lock
+!package-lock.json
+!web/package-lock.json
 *.tsbuildinfo
 .spacetime-version
 *.wasm
