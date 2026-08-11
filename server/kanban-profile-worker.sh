@@ -37,12 +37,14 @@ esac
 
 # Build the task prompt: title + description + explicit guardrails.
 DESC=$(echo "$TASK_JSON" | python3 -c "import sys,json;print((json.load(sys.stdin).get('description') or ''))" 2>/dev/null || echo "")
-PROMPT="You are a kanban worker (agent: ${AGENT_ID}). Complete this task:
-TITLE: ${TITLE}
-DESCRIPTION: ${DESC}
-Rules: verify against the live system read-only first; never mutate without
-explicit task instruction; if blocked, say WORKER_BLOCKED with the reason.
-When done, reply WORKER_DONE: <one-line summary>."
+PROMPT="You are a kanban worker, agent ${AGENT_ID}. Complete this task. TITLE: ${TITLE}. DESCRIPTION: ${DESC}. Rules: verify against the live system read-only first; never mutate without explicit task instruction; if blocked say WORKER_BLOCKED with the reason. When done reply WORKER_DONE with a one-line summary."
 
 # Run under the chosen profile with vault secrets injected.
-exec "${VAULT_EXEC}" -- "${HERMES_BIN}" -p "${PROFILE}" chat -q "${PROMPT}"
+# vault-exec runs script FILES cleanly but mangles inline strings (bws run
+# passes argv through a shell). So: write the prompt to a temp file, then run
+# the inner executor script through vault-exec with file args only.
+PROMPT_FILE="$(mktemp /tmp/kanban-prompt.XXXXXX)"
+printf '%s' "$PROMPT" > "$PROMPT_FILE"
+trap 'rm -f "$PROMPT_FILE"' EXIT
+EXEC_SCRIPT="$(dirname "$0")/kanban-worker-exec.sh"
+exec "${VAULT_EXEC}" -- "${EXEC_SCRIPT}" "${PROFILE}" "${PROMPT_FILE}"
