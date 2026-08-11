@@ -41,7 +41,10 @@ RUN pip install --no-cache-dir -r server/requirements.txt
 
 # Copy application code
 COPY server/ server/
-COPY .env.example ./.env.example
+# .env.example is gitignored/dockerignored — create a placeholder so the
+# build never depends on an ignored file (config comes from env at runtime).
+COPY server/.env.example server/.env.example
+RUN cp server/.env.example ./.env.example 2>/dev/null || true
 
 # Copy built frontend from stage 1
 COPY --from=frontend-builder /app/web/dist/ web/dist/
