@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  spacetime:
+    image: clockworklabs/spacetime:v2.7.1
+    container_name: kanban-production-stdb
+    command: ["start", "--listen-addr=0.0.0.0:3001"]
+    ports:
+      - "3011:3001"  # HTTP API (production, isolated)
+      - "3012:3002"  # WebSocket
+    volumes:
+      - kanban-production-stdb-data:/var/spacetime
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    build: .
+    container_name: kanban-production-backend
+    ports:
+      - "8722:8727"  # FastAPI server (production port)
+    volumes:
+      - /usr/local/bin/spacetime:/usr/local/bin/spacetime:ro
+    environment:
+      - STDB_HOST=spacetime
+      - STDB_PORT=3001
+      - STDB_DB=c2006cb9c3e3e33a2628826f37d6c3ce31177fa8dbc2fa7fdb51c9d3398b87c4
+      - SERVER_PORT=8727
+      - CORS_ORIGIN=*
+      - AUTO_STAR_ENABLED=false
+      - KANBAN_STDB_RETRIES=60
+      - API_KEY=${KANBAN_PROD_API_KEY:?set KANBAN_PROD_API_KEY}
+      - DISPATCHER_INTERVAL_SECONDS=5
+      - STALE_CHECK_INTERVAL_SECONDS=120
+      - MIN_WORKERS=1
+    env_file:
+      - .env.production
+    depends_on:
+      spacetime:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  kanban-production-stdb-data:

@@ -1,0 +1,44 @@
+=== testing ===
+version: "3.9"
+
+services:
+  spacetime:
+    image: clockworklabs/spacetime:v2.7.1
+    container_name: kanban-testing-stdb
+    command: ["start", "--listen-addr=0.0.0.0:3001"]
+    ports:
+      - "3003:3001"  # HTTP API (remapped for isolation)
+      - "3004:3002"  # WebSocket
+    volumes:
+      - kanban-testing-stdb-data:/var/spacetime
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    build: .
+    container_name: kanban-testing-backend
+    ports:
+      - "8721:8727"  # FastAPI server (testing port)
+    volumes:
+      - /usr/local/bin/spacetime:/usr/local/bin/spacetime:ro
+    environment:
+      - STDB_HOST=spacetime
+      - STDB_PORT=3001
+      - STDB_DB=c200d4a18129188e2a6cc5f6f4c31b2e312eeabd9235753d0a7cb09f4fb9891d
+      - SERVER_PORT=8727
+      - CORS_ORIGIN=*
+      - AUTO_STAR_ENABLED=false
+      - WORKER_COMMAND=bash
+      - WORKER_ARGS=server/kanban-profile-worker.sh
+      - KANBAN_STDB_RETRIES=60
+    depends_on:
+      spacetime:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  kanban-testing-stdb-data:
