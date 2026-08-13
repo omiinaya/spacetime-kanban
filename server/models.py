@@ -72,6 +72,7 @@ class TaskUpdate(BaseModel):
 
 class ClaimRequest(BaseModel):
     agent_id: str
+    did_token: str = ""  # Optional hermes-id token; when present, the claim is bound to the VERIFIED DID
 
 
 class PermanentBlockRequest(BaseModel):

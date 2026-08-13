@@ -38,7 +38,9 @@ RUN curl -fsSL "https://github.com/spacetimedb/spacetimedb/releases/download/v${
 
 # Install Python dependencies
 COPY server/requirements.txt server/
-RUN pip install --no-cache-dir -r server/requirements.txt
+COPY server/packages/ server/packages/
+RUN pip install --no-cache-dir -r server/requirements.txt \
+    && pip install --no-cache-dir server/packages/hermes_id-*.whl
 
 # Copy application code
 COPY server/ server/

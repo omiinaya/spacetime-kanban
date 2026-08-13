@@ -531,11 +531,22 @@ async def delete_task(task_id: str):
 @router.post("/api/tasks/{task_id}/claim", dependencies=[Depends(verify_auth)])
 @_invalidate_on_success
 async def claim_task(task_id: str, body: ClaimRequest):
-    await _call("claim_task", [task_id, body.agent_id])
+    # Optional hermes-id DID verification: when a token is presented, the claim
+    # is bound to the VERIFIED DID (offline Ed25519 + aud + expiry check).
+    # No token → backward-compatible path using the self-declared agent_id.
+    verified_did = None
+    if body.did_token:
+        from did_auth import verify_did_token
+
+        payload = verify_did_token(body.did_token)
+        if payload:
+            verified_did = payload.get("did")
+    assignee = verified_did or body.agent_id
+    await _call("claim_task", [task_id, assignee])
     rows = await _sql_param("SELECT * FROM tasks WHERE id = '{task_id}'", task_id=task_id)
     if rows:
         asyncio.create_task(_notify("claimed", rows[0]))
-    return {"status": "claimed", "task_id": task_id, "assigned_to": body.agent_id}
+    return {"status": "claimed", "task_id": task_id, "assigned_to": assignee, "did": verified_did}
 
 
 async def _sync_to_github(task_id: str, event: str, notes: str = ""):
