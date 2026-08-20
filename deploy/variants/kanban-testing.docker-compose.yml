@@ -1,4 +1,3 @@
-=== testing ===
 version: "3.9"
 
 services:
@@ -6,9 +5,9 @@ services:
     image: clockworklabs/spacetime:v2.7.1
     container_name: kanban-testing-stdb
     command: ["start", "--listen-addr=0.0.0.0:3001"]
-    ports:
-      - "3003:3001"  # HTTP API (remapped for isolation)
-      - "3004:3002"  # WebSocket
+    # STDB is NOT published to the host/LAN. The backend reaches it over the
+    # internal compose network (STDB_HOST=spacetime). Publishing 3001/3002
+    # exposed raw SQL + reducers with no auth (board takeover). SEC-2026-08.
     volumes:
       - kanban-testing-stdb-data:/var/spacetime
     healthcheck:

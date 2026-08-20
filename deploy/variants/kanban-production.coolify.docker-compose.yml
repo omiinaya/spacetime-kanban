@@ -4,9 +4,9 @@ services:
   spacetime:
     image: clockworklabs/spacetime:v2.7.1
     command: ["start", "--listen-addr=0.0.0.0:3001"]
-    ports:
-      - "3011:3001"  # HTTP API (production, isolated)
-      - "3012:3002"  # WebSocket
+    # STDB is NOT published to the host/LAN. The backend reaches it over the
+    # internal compose network (STDB_HOST=spacetime). Publishing 3001/3002
+    # exposed raw SQL + reducers with no auth (board takeover). SEC-2026-08.
     volumes:
       - kanban-production-stdb-data:/home/spacetime/.local/share/spacetime
     healthcheck:

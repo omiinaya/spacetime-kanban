@@ -5,8 +5,8 @@ services:
     image: clockworklabs/spacetime:v2.7.1
     container_name: spacetime-kanban-db
     ports:
-      - "3001:3001"  # HTTP API
-      - "3002:3002"  # WebSocket (STDB subscriptions)
+      - "127.0.0.1:3001:3001"  # HTTP API (loopback only — no LAN exposure)
+      - "127.0.0.1:3002:3002"  # WebSocket (loopback only — no LAN exposure)
     volumes:
       - stdb-data:/var/spacetime
     healthcheck:
